@@ -18,6 +18,12 @@ let package = Package(
                 .product(name: "SwiftTerm", package: "SwiftTerm")
             ],
             path: "Sources/kiwiMango",
+            // .metal files aren't auto-detected by SwiftPM's default resource
+            // scan — declaring them explicitly triggers the Metal compiler and
+            // generates this target's own `Bundle.module` accessor (Fala 9).
+            resources: [
+                .process("Shaders")
+            ],
             // Swift 6 strict concurrency floods errors from GRDB internals — pragmatic v5 mode
             swiftSettings: [
                 .swiftLanguageMode(.v5)

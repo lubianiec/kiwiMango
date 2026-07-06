@@ -1,5 +1,12 @@
 import SwiftUI
 
+// MARK: - Live shaders (Fala 9)
+
+/// `.bundle(.module)`, not `.default` — the SPM executable target packaged by
+/// the Makefile doesn't put `default.metallib` in `Bundle.main`, only in the
+/// generated `kiwiMango_kiwiMango.bundle` resource bundle (see PLAN.md F9.0).
+let kiwiShaders = ShaderLibrary.bundle(.module)
+
 // MARK: - Color(hex:)
 
 extension Color {
