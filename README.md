@@ -26,8 +26,8 @@ Natywny klient [Ollama](https://ollama.com) dla macOS — bez Electrona, bez prz
 - Historia w SQLite (GRDB) — wszystko na dysku, nic nie wycieka
 
 ### 🤖 Agenci
-- Sesje **Claude Code** (`ollama launch claude`) we wbudowanym emulatorze terminala (SwiftTerm)
-- Wybór dowolnego modelu z Ollamy — lokalnego lub cloud — i katalogu roboczego
+- Sesje **Claude Code, Hermes Agent lub Codex** (`ollama launch`) we wbudowanym emulatorze terminala (SwiftTerm)
+- Wybór agenta, dowolnego modelu z Ollamy — lokalnego lub cloud — i katalogu roboczego
 - Wiele agentów równolegle; przełączanie czat ↔ agent nie ubija sesji
 - Czyste zamykanie — zero procesów-zombie po wyjściu z appki
 
