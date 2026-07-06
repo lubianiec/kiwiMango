@@ -21,6 +21,12 @@ struct RootView: View {
     @State private var toastMessage: String?
     @State private var bootDone = false
 
+    /// Lab state lives here, not in the views — Arena/Room must survive
+    /// navigating away and back (selection switches to a conversation, then
+    /// back to `.arena`/`.room`), which would otherwise reset `@State`.
+    @State private var arenaState = ArenaState()
+    @State private var roomState = RoomState()
+
     private let db = DatabaseManager.shared
 
     var body: some View {
@@ -41,7 +47,7 @@ struct RootView: View {
             switch newValue {
             case .conversation(let id):
                 Task { await chatState.selectConversation(id) }
-            case .agent, nil:
+            case .agent, .arena, .room, nil:
                 break
             }
         }
@@ -118,6 +124,10 @@ struct RootView: View {
             } else {
                 ChatView()
             }
+        case .arena:
+            ArenaView(arena: arenaState)
+        case .room:
+            RoomView(room: roomState)
         case .conversation, nil:
             ChatView()
         }
@@ -205,6 +215,13 @@ struct RootView: View {
                     .padding(.bottom, 8)
                 Spacer(minLength: 8)
             }
+
+            sectionHeader("LAB")
+            labSection
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            Spacer(minLength: 8)
+
             sectionHeader("MODELE")
             modelsSection
                 .padding(.horizontal, 12)
@@ -431,6 +448,26 @@ struct RootView: View {
                 showingNewAgentPopover = false
             }
         }
+    }
+
+    // MARK: - Lab (Arena / Room, F8)
+
+    private var labSection: some View {
+        VStack(spacing: 0) {
+            labButton(title: "[⚔ ARENA]", isActive: selection == .arena) { selection = .arena }
+            labButton(title: "[🤖 POKÓJ]", isActive: selection == .room) { selection = .room }
+        }
+    }
+
+    private func labButton(title: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(KiwiMangoFont.mono(11, weight: isActive ? .bold : .regular))
+                .foregroundStyle(isActive ? Color.kiwiMangoPurple : Color.kiwiMangoTextPrimary.opacity(0.6))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 4)
+        }
+        .buttonStyle(.plain)
     }
 
     private var agentsSection: some View {

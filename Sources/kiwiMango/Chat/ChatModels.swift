@@ -10,6 +10,10 @@ import Observation
 enum SidebarSelection: Hashable {
     case conversation(Int64)
     case agent(UUID)
+    /// Model Arena / Agent Room (F8) — single shared instance each, so there's
+    /// nothing to key by id; the view's state lives in `RootView` instead.
+    case arena
+    case room
 }
 
 // MARK: - ChatMessage

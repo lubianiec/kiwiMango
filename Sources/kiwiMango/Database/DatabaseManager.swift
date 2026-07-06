@@ -153,6 +153,40 @@ extension Snippet: FetchableRecord, MutablePersistableRecord {
     }
 }
 
+// MARK: - ArenaVote
+
+/// A single vote cast in the Arena (F8.1) — which model won a given prompt.
+/// Votes are the only thing Arena persists; the rounds themselves are ephemeral.
+struct ArenaVote: Identifiable, Hashable, Codable {
+    var id: Int64
+    var model: String
+    var prompt: String
+    var votedAt: Date
+}
+
+extension ArenaVote: FetchableRecord, MutablePersistableRecord {
+    static let databaseTableName = "arenaVote"
+
+    fileprivate init(pendingModel model: String, prompt: String, now: Date) {
+        self.id = 0
+        self.model = model
+        self.prompt = prompt
+        self.votedAt = now
+    }
+
+    /// See `Conversation.encode(to:)` — same id=0 placeholder pattern.
+    func encode(to container: inout PersistenceContainer) {
+        if id != 0 { container["id"] = id }
+        container["model"] = model
+        container["prompt"] = prompt
+        container["votedAt"] = votedAt
+    }
+
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
 // MARK: - DatabaseManager
 
 /// Owns the GRDB queue + migrations. One instance for the app's lifetime.
@@ -297,6 +331,15 @@ final class DatabaseManager: Sendable {
             for (index, seed) in seeds.enumerated() {
                 var snippet = Snippet(pendingTrigger: seed.0, content: seed.1, position: index)
                 try snippet.insert(db)
+            }
+        }
+
+        migrator.registerMigration("addArenaVote") { db in
+            try db.create(table: "arenaVote") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("model", .text).notNull()
+                t.column("prompt", .text).notNull()
+                t.column("votedAt", .datetime).notNull()
             }
         }
 
@@ -512,6 +555,26 @@ final class DatabaseManager: Sendable {
     func deleteSnippet(_ id: Int64) throws {
         _ = try dbQueue.write { db in
             try Snippet.deleteOne(db, key: id)
+        }
+    }
+
+    // MARK: - Arena votes
+
+    func addArenaVote(model: String, prompt: String) throws {
+        try dbQueue.write { db in
+            var vote = ArenaVote(pendingModel: model, prompt: prompt, now: Date())
+            try vote.insert(db)
+        }
+    }
+
+    /// Vote counts per model across all rounds ever played, highest first.
+    func fetchArenaRanking() throws -> [(model: String, votes: Int)] {
+        try dbQueue.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: "SELECT model, COUNT(*) AS votes FROM arenaVote GROUP BY model ORDER BY votes DESC"
+            )
+            return rows.map { (model: $0["model"], votes: $0["votes"]) }
         }
     }
 }
