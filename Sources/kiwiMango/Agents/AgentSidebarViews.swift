@@ -104,18 +104,30 @@ struct AgentRow: View {
 /// installed Ollama models (same source as the sidebar MODELE section),
 /// pick a working directory, spawn.
 struct NewAgentPopover: View {
-    let onSpawn: (OllamaService.ModelInfo, URL) -> Void
+    let onSpawn: (AgentKind, OllamaService.ModelInfo, URL) -> Void
 
     @Environment(ChatState.self) private var chatState
     @AppStorage("agentLastWorkDir") private var lastWorkDirPath = ""
+    @AppStorage("agentLastKind") private var lastKindRaw = AgentKind.claude.rawValue
     @State private var workDirPath = ""
+
+    private var selectedKind: AgentKind {
+        AgentKind(rawValue: lastKindRaw) ?? .claude
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("NOWY AGENT — WYBIERZ MODEL")
+            Text("NOWY AGENT")
                 .font(KiwiMangoFont.mono(11, weight: .semibold))
                 .tracking(1)
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
+
+            kindPicker
+
+            Text("MODEL")
+                .font(KiwiMangoFont.mono(9, weight: .semibold))
+                .tracking(1)
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
 
             modelList
 
@@ -152,6 +164,33 @@ struct NewAgentPopover: View {
 
     private var displayWorkDir: String {
         workDirPath.isEmpty ? "~/Kazik" : workDirPath
+    }
+
+    private var kindPicker: some View {
+        HStack(spacing: 6) {
+            ForEach(AgentKind.allCases) { kind in
+                Button {
+                    lastKindRaw = kind.rawValue
+                } label: {
+                    Text(kind.displayName)
+                        .font(KiwiMangoFont.mono(10, weight: .bold))
+                        .foregroundStyle(
+                            selectedKind == kind
+                                ? Color.kiwiMangoAccent
+                                : Color.kiwiMangoTextPrimary.opacity(0.5)
+                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .neonBorder(
+                            selectedKind == kind ? Color.kiwiMangoAccent : Color.white.opacity(0.25),
+                            cornerRadius: 2,
+                            active: selectedKind == kind
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     @ViewBuilder
@@ -192,7 +231,7 @@ struct NewAgentPopover: View {
         Button {
             let url = URL(fileURLWithPath: displayWorkDir)
             lastWorkDirPath = displayWorkDir
-            onSpawn(model, url)
+            onSpawn(selectedKind, model, url)
         } label: {
             Text(model.name)
                 .font(KiwiMangoFont.mono(11, weight: .medium))
@@ -245,7 +284,7 @@ struct AgentDetailView: View {
 
     private var header: some View {
         HStack {
-            Text("Agent")
+            Text("Agent: \(session.kind.displayName)")
                 .font(KiwiMangoFont.mono(13, weight: .bold))
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
 

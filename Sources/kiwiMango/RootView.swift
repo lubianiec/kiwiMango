@@ -419,8 +419,8 @@ struct RootView: View {
         .buttonStyle(.plain)
         .help("Nowy agent Claude Code (⌘T)")
         .popover(isPresented: $showingNewAgentPopover, arrowEdge: .trailing) {
-            NewAgentPopover { model, workDir in
-                let session = agentManager.spawn(model: model.name, isCloud: model.isCloud, workDir: workDir)
+            NewAgentPopover { kind, model, workDir in
+                let session = agentManager.spawn(kind: kind, model: model.name, isCloud: model.isCloud, workDir: workDir)
                 selection = .agent(session.id)
                 showingNewAgentPopover = false
             }

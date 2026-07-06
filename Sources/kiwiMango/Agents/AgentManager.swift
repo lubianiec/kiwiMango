@@ -3,6 +3,39 @@ import Foundation
 import Observation
 import SwiftTerm
 
+// MARK: - AgentKind
+
+/// Which coding agent to run in the PTY. All of them ship as `ollama launch`
+/// integrations, so the spawn command differs only by the integration name —
+/// `--model` is a launcher-level flag, identical for every kind.
+enum AgentKind: String, CaseIterable, Identifiable {
+    case claude
+    case hermes
+    case codex
+
+    var id: String { rawValue }
+
+    /// Argument for `ollama launch <integration>`.
+    var integration: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .claude: "CLAUDE CODE"
+        case .hermes: "HERMES"
+        case .codex: "CODEX"
+        }
+    }
+
+    /// Short label for the narrow sidebar row.
+    var shortName: String {
+        switch self {
+        case .claude: "CLAUDE"
+        case .hermes: "HERMES"
+        case .codex: "CODEX"
+        }
+    }
+}
+
 // MARK: - AgentSession
 
 /// One running (or finished) Claude Code TUI session, hosted in a PTY.
@@ -11,6 +44,7 @@ import SwiftTerm
 @MainActor
 final class AgentSession: Identifiable {
     let id = UUID()
+    let kind: AgentKind
     let model: String
     let isCloud: Bool
     let workDir: URL
@@ -22,14 +56,15 @@ final class AgentSession: Identifiable {
     /// tylko zaśmieca wąski sidebar.
     var shortModel: String { model.split(separator: "/").last.map(String.init) ?? model }
 
-    var title: String { "\(shortModel) · \(workDir.lastPathComponent)" }
+    var title: String { "\(kind.shortName) · \(workDir.lastPathComponent)" }
 
     enum Status {
         case running
         case finished
     }
 
-    init(model: String, isCloud: Bool, workDir: URL, terminal: LocalProcessTerminalView) {
+    init(kind: AgentKind, model: String, isCloud: Bool, workDir: URL, terminal: LocalProcessTerminalView) {
+        self.kind = kind
         self.model = model
         self.isCloud = isCloud
         self.workDir = workDir
@@ -59,12 +94,12 @@ final class AgentManager: NSObject {
     private lazy var terminationRelay = TerminationRelay(manager: self)
 
     @discardableResult
-    func spawn(model: String, isCloud: Bool, workDir: URL) -> AgentSession {
+    func spawn(kind: AgentKind, model: String, isCloud: Bool, workDir: URL) -> AgentSession {
         let terminal = LocalProcessTerminalView(frame: .zero)
         terminal.applyKiwiMangoTheme()
         terminal.processDelegate = terminationRelay
 
-        let session = AgentSession(model: model, isCloud: isCloud, workDir: workDir, terminal: terminal)
+        let session = AgentSession(kind: kind, model: model, isCloud: isCloud, workDir: workDir, terminal: terminal)
         sessions.append(session)
 
         // Login shell (`-l`) re-reads .zshrc/.zprofile so `ollama` (installed via
@@ -75,7 +110,7 @@ final class AgentManager: NSObject {
 
         let escapedDir = workDir.path.replacingOccurrences(of: "'", with: "'\\''")
         let escapedModel = model.replacingOccurrences(of: "'", with: "'\\''")
-        let command = "cd '\(escapedDir)' && ollama launch claude --model '\(escapedModel)'"
+        let command = "cd '\(escapedDir)' && ollama launch \(kind.integration) --model '\(escapedModel)'"
 
         terminal.startProcess(
             executable: "/bin/zsh",
