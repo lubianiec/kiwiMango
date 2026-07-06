@@ -16,6 +16,10 @@ final class SpeechRecognizer {
     private(set) var isRecording = false
     private(set) var authorizationDenied = false
 
+    /// Fired on every partial result — used by `VoiceLoopController` to reset
+    /// its silence timer without touching the composer dictation behavior.
+    @ObservationIgnored var onPartialResult: (() -> Void)?
+
     @ObservationIgnored private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "pl_PL"))
     @ObservationIgnored private let audioEngine = AVAudioEngine()
     @ObservationIgnored private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -60,6 +64,7 @@ final class SpeechRecognizer {
             Task { @MainActor in
                 if let result {
                     self.transcript = result.bestTranscription.formattedString
+                    self.onPartialResult?()
                 }
                 if error != nil || result?.isFinal == true {
                     self.stopEngine()

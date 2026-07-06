@@ -18,6 +18,8 @@ struct ChatView: View {
     @State private var composerCursorVisible = false
     @State private var sendButtonHovered = false
     @AppStorage("ttsEnabled") private var ttsEnabled = false
+    @State private var voiceLoop: VoiceLoopController?
+    @State private var voiceListenPulse = false
     @FocusState private var composerFocused: Bool
 
     private static let bottomAnchor = "transcript-bottom"
@@ -33,11 +35,25 @@ struct ChatView: View {
         }
         .kiwiMangoNoirBackground()
         .task { await chatState.loadModels() }
-        .onAppear { composerFocused = true }
+        .onAppear {
+            composerFocused = true
+            if voiceLoop == nil {
+                voiceLoop = VoiceLoopController(chatState: chatState)
+            }
+        }
+        .onChange(of: chatState.currentConversationID) {
+            voiceLoop?.stop()
+        }
         .onDrop(of: [.fileURL, .image], isTargeted: $isDropTargeted) { providers in
             handleDrop(providers)
         }
         .overlay { dropTargetOverlay }
+        .background {
+            Button("") { voiceLoop?.stop() }
+                .keyboardShortcut(.escape, modifiers: [])
+                .disabled(!(voiceLoop?.isActive ?? false))
+                .hidden()
+        }
         .sheet(isPresented: $showingPersonaEditor) {
             PersonaEditorView()
         }
@@ -289,23 +305,81 @@ struct ChatView: View {
 
     private var composerArea: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if !filteredSnippets.isEmpty && !snippetPopoverDismissed {
-                snippetPopover
+            if let voiceLoop, voiceLoop.isActive {
+                voiceLoopBar(voiceLoop)
                     .padding(.horizontal, 16)
                     .padding(.top, 6)
-            }
-            if !chatState.attachedImages.isEmpty {
-                attachmentsRow
+                    .padding(.bottom, 10)
+            } else {
+                if !filteredSnippets.isEmpty && !snippetPopoverDismissed {
+                    snippetPopover
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+                }
+                if !chatState.attachedImages.isEmpty {
+                    attachmentsRow
+                        .padding(.horizontal, 16)
+                }
+                composer
                     .padding(.horizontal, 16)
+                    .padding(.top, 6)
+                    .padding(.bottom, 10)
             }
-            composer
-                .padding(.horizontal, 16)
-                .padding(.top, 6)
-                .padding(.bottom, 10)
             StatusBarView(selectedModel: chatState.selectedModel)
         }
         .background(Color.clear)
         .onChange(of: chatState.draft) { snippetPopoverDismissed = false }
+    }
+
+    // MARK: - Voice loop (F7.2)
+
+    private func voiceLoopBar(_ loop: VoiceLoopController) -> some View {
+        HStack {
+            Text(voiceStateLabel(loop.state))
+                .font(KiwiMangoFont.mono(13, weight: .bold))
+                .foregroundStyle(voiceStateColor(loop.state))
+                .opacity(loop.state == .listening ? (voiceListenPulse ? 1 : 0.4) : 1)
+                .animation(
+                    loop.state == .listening
+                        ? .easeInOut(duration: 0.7).repeatForever(autoreverses: true)
+                        : .default,
+                    value: voiceListenPulse
+                )
+                .onAppear { voiceListenPulse = true }
+
+            Spacer()
+
+            Button {
+                loop.stop()
+            } label: {
+                Text("[■ STOP]")
+                    .font(KiwiMangoFont.mono(12, weight: .bold))
+                    .foregroundStyle(Color.kiwiMangoDanger)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.kiwiMangoComposerBg)
+        .neonBorder(Color.kiwiMangoPurple, cornerRadius: 4, active: true)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    private func voiceStateLabel(_ state: VoiceLoopController.State) -> String {
+        switch state {
+        case .idle: return ""
+        case .listening: return "● SŁUCHAM…"
+        case .thinking: return "◐ MYŚLĘ…"
+        case .speaking: return "▶ MÓWIĘ…"
+        }
+    }
+
+    private func voiceStateColor(_ state: VoiceLoopController.State) -> Color {
+        switch state {
+        case .listening: return Color.kiwiMangoAccent
+        case .speaking: return Color.kiwiMangoPurple
+        default: return Color.kiwiMangoTextPrimary.opacity(0.7)
+        }
     }
 
     // MARK: - Snippet popover
@@ -367,6 +441,7 @@ struct ChatView: View {
 
             micButton
             ttsToggleButton
+            voiceLoopButton
 
             Text(">>")
                 .font(KiwiMangoFont.mono(12.5, weight: .bold))
@@ -519,6 +594,21 @@ struct ChatView: View {
         .buttonStyle(.plain)
         .foregroundStyle(ttsEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.5))
         .help(ttsEnabled ? "Wyłącz czytanie odpowiedzi" : "Czytaj odpowiedzi na głos")
+    }
+
+    private var voiceLoopButton: some View {
+        Button {
+            voiceLoop?.start()
+        } label: {
+            Text("[ROZMOWA]")
+                .font(KiwiMangoFont.mono(10.5, weight: .bold))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.7))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .neonBorder(Color.kiwiMangoPurple, cornerRadius: 3)
+        }
+        .buttonStyle(.plain)
+        .help("Tryb rozmowy głosowej — mówisz, kiwiMango odpowiada głosem")
     }
 
     private func toggleDictation() {
