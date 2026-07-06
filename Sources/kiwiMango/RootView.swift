@@ -218,7 +218,6 @@ struct RootView: View {
 
             sectionHeader("LAB")
             labSection
-                .padding(.horizontal, 12)
                 .padding(.bottom, 8)
             Spacer(minLength: 8)
 
@@ -454,20 +453,24 @@ struct RootView: View {
 
     private var labSection: some View {
         VStack(spacing: 0) {
-            labButton(title: "[⚔ ARENA]", isActive: selection == .arena) { selection = .arena }
-            labButton(title: "[🤖 POKÓJ]", isActive: selection == .room) { selection = .room }
-        }
-    }
+            LabRow(
+                icon: "bolt.fill",
+                title: "ARENA",
+                subtitle: "Wyścig modeli cloud",
+                isActive: selection == .arena
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { selection = .arena }
 
-    private func labButton(title: String, isActive: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(KiwiMangoFont.mono(11, weight: isActive ? .bold : .regular))
-                .foregroundStyle(isActive ? Color.kiwiMangoPurple : Color.kiwiMangoTextPrimary.opacity(0.6))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 4)
+            LabRow(
+                icon: "person.2.fill",
+                title: "POKÓJ",
+                subtitle: "Debata dwóch AI",
+                isActive: selection == .room
+            )
+            .contentShape(Rectangle())
+            .onTapGesture { selection = .room }
         }
-        .buttonStyle(.plain)
     }
 
     private var agentsSection: some View {
@@ -484,6 +487,59 @@ struct RootView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - LabRow
+
+/// Same visual weight as `ConversationRow`/`AgentRow` — left accent bar +
+/// icon + title/subtitle — so Arena/Pokój read as first-class sidebar entries
+/// instead of a faint inline label.
+private struct LabRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let isActive: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(isActive ? Color.kiwiMangoPurple : Color.clear)
+                .frame(width: 2)
+                .shadow(color: isActive ? Color.kiwiMangoPurple.opacity(0.6) : .clear, radius: 4)
+
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(isActive ? Color.kiwiMangoPurple : Color.kiwiMangoTextPrimary.opacity(0.5))
+                    .frame(width: 14)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(KiwiMangoFont.mono(12, weight: isActive ? .bold : .medium))
+                        .foregroundStyle(
+                            isActive ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.8)
+                        )
+                    Text(subtitle)
+                        .font(KiwiMangoFont.mono(10))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
+                }
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 8)
+            .padding(.vertical, 7)
+
+            Spacer(minLength: 0)
+        }
+        .background(
+            isActive
+                ? AnyShapeStyle(LinearGradient(
+                    colors: [Color.kiwiMangoPurple.opacity(0.30), Color.clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ))
+                : AnyShapeStyle(Color.clear)
+        )
     }
 }
 
