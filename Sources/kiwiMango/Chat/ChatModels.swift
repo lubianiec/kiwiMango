@@ -249,9 +249,9 @@ final class ChatState {
               let markdown = try? conversationMarkdown(conversation) else { return nil }
         do {
             let inbox = try Self.obsidianInbox()
-            let fileName = "kiwiMango-\(Self.slug(from: conversation.title))"
-                + "-\(Self.fileDateFormatter.string(from: Date())).md"
-            let url = inbox.appendingPathComponent(fileName)
+            // Zasada vaulta: nazwa pliku = treściwy tytuł, bez dat i prefiksów —
+            // Paweł szuka po nazwie; data/źródło siedzą we frontmatterze.
+            let url = Self.uniqueURL(in: inbox, base: Self.slug(from: conversation.title))
             try markdown.write(to: url, atomically: true, encoding: .utf8)
             return url
         } catch {
@@ -267,8 +267,7 @@ final class ChatState {
             let inbox = try Self.obsidianInbox()
             let now = Date()
             let iso = ISO8601DateFormatter().string(from: now)
-            let stamp = Self.obsidianTimestampFormatter.string(from: now)
-            let slug = Self.slug(from: String(content.prefix(30)))
+            let slug = Self.slug(from: String(content.prefix(60)))
             let markdown = """
             ---
             source: kiwiMango
@@ -279,7 +278,7 @@ final class ChatState {
             \(content)
 
             """
-            let url = inbox.appendingPathComponent("kiwiMango-\(stamp)-\(slug).md")
+            let url = Self.uniqueURL(in: inbox, base: slug)
             try markdown.write(to: url, atomically: true, encoding: .utf8)
             return url
         } catch {
@@ -327,6 +326,18 @@ final class ChatState {
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
+
+    /// First free `<base>.md` / `<base>-2.md` / … in the directory — title-first
+    /// filenames have no timestamp, so collisions get a numeric suffix instead.
+    private static func uniqueURL(in dir: URL, base: String) -> URL {
+        var url = dir.appendingPathComponent("\(base).md")
+        var counter = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = dir.appendingPathComponent("\(base)-\(counter).md")
+            counter += 1
+        }
+        return url
+    }
 
     /// ASCII-only, hyphenated slug for filenames (Polish diacritics folded away).
     private static func slug(from title: String) -> String {
