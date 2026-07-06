@@ -107,6 +107,12 @@ final class ChatState {
 
     // MARK: Private
 
+    /// Reads assistant replies aloud when "ttsEnabled" is on (composer toggle)
+    /// and backs the per-message "przeczytaj" hover action regardless of the
+    /// toggle. See `Chat/SpeechSynthesizer.swift`.
+    let speechSynthesizer = SpeechSynthesizer()
+    @ObservationIgnored private lazy var speechFeeder = StreamingSpeechFeeder(synth: speechSynthesizer)
+
     @ObservationIgnored private var streamTask: Task<Void, Never>?
 
     /// Models whose `/api/tags` capabilities include "thinking" → send `think:false`.
@@ -520,6 +526,9 @@ final class ChatState {
     private func runStream(
         history: [OllamaService.ChatPayloadMessage], conversationId: Int64
     ) async {
+        speechSynthesizer.stopAll()
+        speechFeeder.reset()
+
         let assistantMessage = ChatMessage(role: .assistant, content: "")
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
@@ -539,11 +548,16 @@ final class ChatState {
                     switch delta {
                     case .content(let text):
                         appendDelta(text, to: assistantID)
+                        feedSpeechIfEnabled(assistantID)
                     case .stats(let stats):
                         applyStats(stats, to: assistantID)
                     }
                 }
-                if Task.isCancelled { markCancelled(assistantID) }
+                if Task.isCancelled {
+                    markCancelled(assistantID)
+                } else {
+                    feedSpeechIfEnabled(assistantID, isFinal: true)
+                }
             } catch is CancellationError {
                 markCancelled(assistantID)
             } catch let urlError as URLError where urlError.code == .cancelled {
@@ -560,9 +574,18 @@ final class ChatState {
         await streamTask?.value
     }
 
+    /// Feeds the just-appended content to the streaming TTS feeder, sentence
+    /// by sentence — only when the composer's "czytaj odpowiedzi" toggle is on.
+    private func feedSpeechIfEnabled(_ id: UUID, isFinal: Bool = false) {
+        guard UserDefaults.standard.bool(forKey: "ttsEnabled") else { return }
+        guard let message = messages.first(where: { $0.id == id }) else { return }
+        speechFeeder.consume(fullContent: message.content, isFinal: isFinal)
+    }
+
     /// Cancels the in-progress streaming response (partial content is kept).
     func cancel() {
         streamTask?.cancel()
+        speechSynthesizer.stopAll()
     }
 
     /// Cancels the in-progress stream and waits for its cleanup/persist to
@@ -571,6 +594,19 @@ final class ChatState {
     private func cancelAndWait() async {
         streamTask?.cancel()
         await streamTask?.value
+        speechSynthesizer.stopAll()
+    }
+
+    /// Reads an arbitrary chunk of text aloud (the "przeczytaj" hover action),
+    /// independent of the streaming "ttsEnabled" toggle. Whole fenced code
+    /// blocks are replaced with a single spoken placeholder.
+    func readMessageAloud(_ content: String) {
+        let parts = content.components(separatedBy: "```")
+        var spoken = ""
+        for (index, part) in parts.enumerated() {
+            spoken += index.isMultiple(of: 2) ? part : " ...blok kodu... "
+        }
+        speechSynthesizer.speak(StreamingSpeechFeeder.stripMarkdown(spoken))
     }
 
     /// Fetches the model list (GET /api/tags) and caches thinking capabilities.

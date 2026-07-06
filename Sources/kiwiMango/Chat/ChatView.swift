@@ -17,6 +17,7 @@ struct ChatView: View {
     @State private var snippetPopoverDismissed = false
     @State private var composerCursorVisible = false
     @State private var sendButtonHovered = false
+    @AppStorage("ttsEnabled") private var ttsEnabled = false
     @FocusState private var composerFocused: Bool
 
     private static let bottomAnchor = "transcript-bottom"
@@ -365,6 +366,7 @@ struct ChatView: View {
             .help("Załącz obraz")
 
             micButton
+            ttsToggleButton
 
             Text(">>")
                 .font(KiwiMangoFont.mono(12.5, weight: .bold))
@@ -500,6 +502,23 @@ struct ChatView: View {
         } message: {
             Text("Włącz w Ustawieniach systemowych → Prywatność i bezpieczeństwo → Mikrofon / Rozpoznawanie mowy.")
         }
+    }
+
+    private var ttsToggleButton: some View {
+        Button {
+            ttsEnabled.toggle()
+            if !ttsEnabled {
+                chatState.speechSynthesizer.stopAll()
+            }
+        } label: {
+            Image(systemName: ttsEnabled ? "speaker.wave.2.fill" : "speaker.slash")
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(ttsEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.5))
+        .help(ttsEnabled ? "Wyłącz czytanie odpowiedzi" : "Czytaj odpowiedzi na głos")
     }
 
     private func toggleDictation() {
@@ -670,6 +689,11 @@ private struct MessageBubble: View {
             }
 
             if !isUser {
+                Button(action: readAloud) {
+                    Label("przeczytaj", systemImage: "speaker.wave.2")
+                }
+                .buttonStyle(HoverActionButtonStyle())
+
                 Button(action: sendToObsidian) {
                     Label("→ Obsidian", systemImage: "square.and.arrow.up")
                 }
@@ -690,6 +714,10 @@ private struct MessageBubble: View {
         if chatState.sendMessageToObsidian(content: message.content) != nil {
             onToast("Zapisano w Obsidian ✓")
         }
+    }
+
+    private func readAloud() {
+        chatState.readMessageAloud(message.content)
     }
 }
 
