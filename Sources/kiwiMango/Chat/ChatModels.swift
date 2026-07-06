@@ -67,6 +67,10 @@ final class ChatState {
     var availableModels: [OllamaService.ModelInfo] = []
     var isStreaming: Bool = false
 
+    /// Last tok/s readings from completed responses (max 40, FIFO) — backs the
+    /// status bar sparkline. Streaming deltas never touch this, only finished stats.
+    var tokRateHistory: [Double] = []
+
     /// All saved conversations, newest-updated first — backs the sidebar list.
     var conversations: [Conversation] = []
 
@@ -611,6 +615,11 @@ final class ChatState {
         guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
         let tokPerSec = String(format: "%.1f", stats.tokensPerSecond)
         messages[index].statsLine = "\(stats.evalCount) tok • \(tokPerSec) tok/s"
+
+        tokRateHistory.append(stats.tokensPerSecond)
+        if tokRateHistory.count > 40 {
+            tokRateHistory.removeFirst(tokRateHistory.count - 40)
+        }
     }
 
     private func markCancelled(_ id: UUID) {
