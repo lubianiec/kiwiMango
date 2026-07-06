@@ -151,99 +151,108 @@ struct RootView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 14)
 
-            sectionHeader("ROZMOWY")
-            SidebarActionButton(title: "+ NOWA_ROZMOWA", color: .kiwiMangoAccent) {
-                Task {
-                    await chatState.startNewConversation()
-                    selection = nil
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
-            searchField
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(filteredConversations) { conversation in
-                        ConversationRow(
-                            conversation: conversation,
-                            isActive: selection == .conversation(conversation.id),
-                            onDelete: { chatState.deleteConversation(conversation.id) }
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selection = .conversation(conversation.id)
+                VStack(spacing: 0) {
+                    // Four destinations, one style, stacked — nothing else competes for
+                    // attention at the top of the sidebar.
+                    SidebarActionButton(title: "+ NOWA_ROZMOWA", color: .kiwiMangoAccent) {
+                        Task {
+                            await chatState.startNewConversation()
+                            selection = nil
                         }
-                        .contextMenu {
-                            Button("Zmień nazwę") {
-                                renameText = conversation.title
-                                renameTarget = conversation
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+
+                    SidebarActionButton(title: "+ NOWY_AGENT", color: .kiwiMangoAccent) {
+                        showingNewAgentPopover = true
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+                    .popover(isPresented: $showingNewAgentPopover, arrowEdge: .trailing) {
+                        NewAgentPopover { kind, model, workDir in
+                            let session = agentManager.spawn(kind: kind, model: model.name, isCloud: model.isCloud, workDir: workDir)
+                            selection = .agent(session.id)
+                            showingNewAgentPopover = false
+                        }
+                    }
+
+                    SidebarActionButton(title: "ARENA", color: .kiwiMangoAccent, isActive: selection == .arena) {
+                        selection = .arena
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+
+                    SidebarActionButton(title: "POKÓJ", color: .kiwiMangoAccent, isActive: selection == .room) {
+                        selection = .room
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 14)
+
+                    // Histories live below the buttons, unlabeled — a thin
+                    // divider is enough to tell conversations from agents.
+                    searchField
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
+
+                    LazyVStack(spacing: 0) {
+                        ForEach(filteredConversations) { conversation in
+                            ConversationRow(
+                                conversation: conversation,
+                                isActive: selection == .conversation(conversation.id),
+                                onDelete: { chatState.deleteConversation(conversation.id) }
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selection = .conversation(conversation.id)
                             }
-                            Button("Eksportuj do Markdown") {
-                                if let url = chatState.exportConversation(conversation.id) {
-                                    withAnimation {
-                                        toastMessage = "Zapisano: \(url.lastPathComponent)"
+                            .contextMenu {
+                                Button("Zmień nazwę") {
+                                    renameText = conversation.title
+                                    renameTarget = conversation
+                                }
+                                Button("Eksportuj do Markdown") {
+                                    if let url = chatState.exportConversation(conversation.id) {
+                                        withAnimation {
+                                            toastMessage = "Zapisano: \(url.lastPathComponent)"
+                                        }
                                     }
                                 }
-                            }
-                            Button("Wyślij rozmowę do Obsidiana") {
-                                if chatState.sendConversationToObsidian(conversation.id) != nil {
-                                    withAnimation {
-                                        toastMessage = "Zapisano w Obsidian ✓"
+                                Button("Wyślij rozmowę do Obsidiana") {
+                                    if chatState.sendConversationToObsidian(conversation.id) != nil {
+                                        withAnimation {
+                                            toastMessage = "Zapisano w Obsidian ✓"
+                                        }
                                     }
                                 }
-                            }
-                            Button("Duplikuj") {
-                                chatState.duplicateConversation(conversation.id)
-                            }
-                            Divider()
-                            Button("Usuń", role: .destructive) {
-                                chatState.deleteConversation(conversation.id)
+                                Button("Duplikuj") {
+                                    chatState.duplicateConversation(conversation.id)
+                                }
+                                Divider()
+                                Button("Usuń", role: .destructive) {
+                                    chatState.deleteConversation(conversation.id)
+                                }
                             }
                         }
                     }
+
+                    if !agentManager.sessions.isEmpty {
+                        Divider()
+                            .overlay(Color.kiwiMangoPurple.opacity(0.15))
+                            .padding(.vertical, 8)
+                        agentsSection
+                    }
+
+                    Divider()
+                        .overlay(Color.kiwiMangoPurple.opacity(0.15))
+                        .padding(.vertical, 8)
+
+                    sectionHeader("MODELE")
+                    modelsSection
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 10)
                 }
             }
-
-            Spacer(minLength: 8)
-
-            sectionHeader("AGENCI")
-            SidebarActionButton(title: "+ NOWY_AGENT", color: .kiwiMangoPurple) {
-                showingNewAgentPopover = true
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
-            .popover(isPresented: $showingNewAgentPopover, arrowEdge: .trailing) {
-                NewAgentPopover { kind, model, workDir in
-                    let session = agentManager.spawn(kind: kind, model: model.name, isCloud: model.isCloud, workDir: workDir)
-                    selection = .agent(session.id)
-                    showingNewAgentPopover = false
-                }
-            }
-            if !agentManager.sessions.isEmpty {
-                agentsSection
-            }
-            Spacer(minLength: 8)
-
-            sectionHeader("LAB")
-            SidebarActionButton(title: "🏆 ARENA", color: .kiwiMangoPurple, isActive: selection == .arena) {
-                selection = .arena
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 6)
-            SidebarActionButton(title: "🤖 POKÓJ", color: .kiwiMangoPurple, isActive: selection == .room) {
-                selection = .room
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
-            Spacer(minLength: 8)
-
-            sectionHeader("MODELE")
-            modelsSection
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
 
             Divider().overlay(Color.kiwiMangoPurple.opacity(0.2))
 
@@ -327,13 +336,13 @@ struct RootView: View {
             let cloud = chatState.availableModels.filter(\.isCloud)
 
             if !local.isEmpty {
-                modelSubsectionHeader("💻 LOKALNE")
+                modelSubsectionHeader("LOKALNE")
                 ForEach(local, id: \.name) { model in
                     modelRow(model)
                 }
             }
             if !cloud.isEmpty {
-                modelSubsectionHeader("☁️ CLOUD")
+                modelSubsectionHeader("CLOUD")
                 ForEach(cloud, id: \.name) { model in
                     modelRow(model)
                 }
