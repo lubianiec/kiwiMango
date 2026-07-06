@@ -74,19 +74,45 @@ enum KiwiMangoFont {
 // MARK: - Noir backdrop
 
 extension View {
-    /// Neon Noir: zamiast płaskiej czerni radialny gradient — chłodna fioletowa
-    /// poświata od lewego górnego rogu, gasnąca w zinc-950. Nakładać na
-    /// NAJBARDZIEJ zewnętrzny kontener widoku; wewnętrzne tła muszą być .clear,
-    /// żeby gradient prześwitywał.
+    /// Neon Noir, now alive (F9.1): instead of a static gradient, a Metal shader
+    /// glow in the same top-left spot that breathes faster while a model streams
+    /// and settles to a calm static frame at idle. Nakładać na NAJBARDZIEJ
+    /// zewnętrzny kontener widoku; wewnętrzne tła muszą być .clear, żeby
+    /// prześwitywało.
     func kiwiMangoNoirBackground() -> some View {
-        background(
-            RadialGradient(
-                colors: [Color(hex: "161122"), Color(hex: "09090B")],
-                center: UnitPoint(x: 0.25, y: 0.0),
-                startRadius: 0,
-                endRadius: 1000
-            )
-        )
+        background(BreathingBackdrop())
+    }
+}
+
+/// Drives `breathingGlow` — a `TimelineView` that only ticks (30fps cap) while
+/// a reply is streaming AND the window is active; idle renders one static
+/// frame and costs nothing (PLAN.md F9 iron rule #1).
+private struct BreathingBackdrop: View {
+    @Environment(ChatState.self) private var chatState
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var intensity: CGFloat = 0.35
+
+    private var isPaused: Bool {
+        !chatState.isStreaming || scenePhase != .active
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: isPaused)) { timeline in
+                // Faster model → faster pulse, capped so it never turns into a strobe.
+                let speed = 1.2 + min(chatState.liveTokRate / 40.0, 2.0)
+                let t = timeline.date.timeIntervalSinceReferenceDate * speed
+                Rectangle()
+                    .fill(Color(hex: "09090B"))
+                    .colorEffect(kiwiShaders.breathingGlow(.float2(proxy.size), .float(t), .float(intensity)))
+            }
+        }
+        .ignoresSafeArea()
+        .onChange(of: chatState.isStreaming) { _, isStreaming in
+            withAnimation(.easeInOut(duration: 0.8)) {
+                intensity = isStreaming ? 1.0 : 0.35
+            }
+        }
     }
 }
 

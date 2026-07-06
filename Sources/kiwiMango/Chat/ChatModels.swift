@@ -75,6 +75,11 @@ final class ChatState {
     /// status bar sparkline. Streaming deltas never touch this, only finished stats.
     var tokRateHistory: [Double] = []
 
+    /// Rough tok/s estimate *while streaming* (chars-since-last-sample / ~4 per
+    /// token, resampled every ~0.5s) — drives `BreathingBackdrop`'s pulse speed.
+    /// Not exact (no real tokenizer), just needs to feel faster for faster models.
+    var liveTokRate: Double = 0
+
     /// All saved conversations, newest-updated first — backs the sidebar list.
     var conversations: [Conversation] = []
 
@@ -118,6 +123,10 @@ final class ChatState {
     @ObservationIgnored private lazy var speechFeeder = StreamingSpeechFeeder(synth: speechSynthesizer)
 
     @ObservationIgnored private var streamTask: Task<Void, Never>?
+
+    /// Bookkeeping for `liveTokRate` — resets at the start of every `runStream`.
+    @ObservationIgnored private var charsSinceRateSample = 0
+    @ObservationIgnored private var lastRateSampleAt = Date()
 
     /// Models whose `/api/tags` capabilities include "thinking" → send `think:false`.
     @ObservationIgnored private var thinkingModels: Set<String> = []
@@ -537,6 +546,9 @@ final class ChatState {
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
         isStreaming = true
+        liveTokRate = 0
+        charsSinceRateSample = 0
+        lastRateSampleAt = Date()
 
         let service = self.service
         let persona = activePersona
@@ -570,6 +582,7 @@ final class ChatState {
                 showError(error, on: assistantID, host: service.displayHost)
             }
             isStreaming = false
+            liveTokRate = 0
             streamTask = nil
             if let final = messages.first(where: { $0.id == assistantID }) {
                 persist(final, conversationId: conversationId)
@@ -649,6 +662,14 @@ final class ChatState {
     private func appendDelta(_ delta: String, to id: UUID) {
         guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
         messages[index].content += delta
+
+        charsSinceRateSample += delta.count
+        let elapsed = Date().timeIntervalSince(lastRateSampleAt)
+        if elapsed >= 0.5 {
+            liveTokRate = (Double(charsSinceRateSample) / 4.0) / elapsed
+            charsSinceRateSample = 0
+            lastRateSampleAt = Date()
+        }
     }
 
     private func applyStats(_ stats: OllamaService.ChatStats, to id: UUID) {
