@@ -753,6 +753,11 @@ private struct MessageBubble: View {
                     hoverActions
                 }
             }
+            .materializeIn(isActive: chatState.lastAnimatedMessageID == message.id) {
+                if chatState.lastAnimatedMessageID == message.id {
+                    chatState.lastAnimatedMessageID = nil
+                }
+            }
 
             if !isUser { Spacer(minLength: 48) }
         }

@@ -131,6 +131,48 @@ extension View {
     }
 }
 
+// MARK: - Materialize-in (F9.3)
+
+/// One-shot "teleport" for a freshly appended chat bubble — a horizontal wave
+/// distortion that settles over 0.35s. `isActive` must be `false` for loaded
+/// history / scroll-recycled rows (see `ChatState.lastAnimatedMessageID`);
+/// when inactive this renders as a plain, undistorted, fully-opaque view.
+private struct MaterializeIn: ViewModifier {
+    let isActive: Bool
+    var onFinished: () -> Void = {}
+
+    @State private var progress: CGFloat = 0
+    @State private var size: CGSize = .zero
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.onAppear { size = proxy.size }
+                }
+            )
+            .distortionEffect(
+                kiwiShaders.materialize(.float2(size), .float(progress)),
+                maxSampleOffset: CGSize(width: 40, height: 0)
+            )
+            .opacity(0.15 + 0.85 * progress)
+            .onAppear {
+                guard isActive else {
+                    progress = 1
+                    return
+                }
+                withAnimation(.easeOut(duration: 0.35)) { progress = 1 }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onFinished() }
+            }
+    }
+}
+
+extension View {
+    func materializeIn(isActive: Bool, onFinished: @escaping () -> Void = {}) -> some View {
+        modifier(MaterializeIn(isActive: isActive, onFinished: onFinished))
+    }
+}
+
 // MARK: - Neon effects
 
 extension View {

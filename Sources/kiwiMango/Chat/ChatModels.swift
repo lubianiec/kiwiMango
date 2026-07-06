@@ -80,6 +80,13 @@ final class ChatState {
     /// Not exact (no real tokenizer), just needs to feel faster for faster models.
     var liveTokRate: Double = 0
 
+    /// Id of a message that was just freshly appended (new user turn or a fresh
+    /// assistant placeholder) — `MessageBubble` animates its "materialize in"
+    /// ONLY for this id, then clears it. Loaded history and scroll-recycled
+    /// rows (LazyVStack) must never replay the animation, hence the one-shot flag
+    /// instead of e.g. "animate whenever this view appears".
+    var lastAnimatedMessageID: UUID?
+
     /// All saved conversations, newest-updated first — backs the sidebar list.
     var conversations: [Conversation] = []
 
@@ -211,6 +218,7 @@ final class ChatState {
         await cancelAndWait()
         currentConversationID = nil
         messages = []
+        lastAnimatedMessageID = nil
     }
 
     /// Loads a previously saved conversation's messages into the transcript.
@@ -219,6 +227,7 @@ final class ChatState {
         guard id != currentConversationID else { return }
         await cancelAndWait()
         currentConversationID = id
+        lastAnimatedMessageID = nil
         do {
             let stored = try db.fetchMessagesWithImages(conversationId: id)
             messages = stored.map { message, images in
@@ -480,6 +489,7 @@ final class ChatState {
         let images = attachedImages.map(\.data)
         let userMessage = ChatMessage(role: .user, content: text, images: images)
         messages.append(userMessage)
+        lastAnimatedMessageID = userMessage.id
         draft = ""
         attachedImages = []
 
@@ -545,6 +555,7 @@ final class ChatState {
         let assistantMessage = ChatMessage(role: .assistant, content: "")
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
+        lastAnimatedMessageID = assistantID
         isStreaming = true
         liveTokRate = 0
         charsSinceRateSample = 0
