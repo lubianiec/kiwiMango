@@ -2,10 +2,17 @@ import SwiftUI
 
 // MARK: - Live shaders (Fala 9)
 
-/// `.bundle(.module)`, not `.default` — the SPM executable target packaged by
-/// the Makefile doesn't put `default.metallib` in `Bundle.main`, only in the
-/// generated `kiwiMango_kiwiMango.bundle` resource bundle (see PLAN.md F9.0).
-let kiwiShaders = ShaderLibrary.bundle(.module)
+/// `swift build` (what the Makefile drives) doesn't reliably compile `.metal`
+/// into SwiftPM's own `default.metallib` the way Xcode does — verified
+/// empirically (see PLAN.md F9.0). `MetalCompilerPlugin` compiles our shaders
+/// into `debug.metallib` instead, which `ShaderLibrary.bundle(.module)` can't
+/// find (it only ever looks for `default.metallib`) — load it by URL instead.
+let kiwiShaders: ShaderLibrary = {
+    guard let url = Bundle.module.url(forResource: "debug", withExtension: "metallib") else {
+        fatalError("[KiwiMango] debug.metallib not found in Bundle.module — check MetalCompilerPlugin output")
+    }
+    return ShaderLibrary(url: url)
+}()
 
 // MARK: - Color(hex:)
 

@@ -1,5 +1,5 @@
 {
-  "originHash" : "facedc74a4b8c0f5f2f8d6d616019c51a957e29d78d2e19d288953df1231380e",
+  "originHash" : "b4348214c44855010a8eeb22a200223a8787fb1371f6078867cb4ecf335b0f7f",
   "pins" : [
     {
       "identity" : "grdb.swift",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "b83108d10f42680d78f23fe4d4d80fc88dab3212",
         "version" : "7.11.1"
+      }
+    },
+    {
+      "identity" : "metalcompilerplugin",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/schwa/MetalCompilerPlugin",
+      "state" : {
+        "revision" : "9c11db3648fa4e4f02bd4918c4b7db3472a73c64",
+        "version" : "0.1.6"
       }
     },
     {
