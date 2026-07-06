@@ -28,7 +28,7 @@ struct ArenaView: View {
 
     private var header: some View {
         HStack {
-            Text("⚔ ARENA MODELI")
+            Text("🏆 ARENA MODELI")
                 .font(KiwiMangoFont.mono(13, weight: .bold))
                 .foregroundStyle(Color.kiwiMangoAccent)
             Spacer()

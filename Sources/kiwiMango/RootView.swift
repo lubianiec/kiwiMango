@@ -151,18 +151,18 @@ struct RootView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 14)
 
-            sectionHeader("CZATY")
-            newConversationButton
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-            newAgentButton
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+            sectionHeader("ROZMOWY")
+            SidebarActionButton(title: "+ NOWA_ROZMOWA", color: .kiwiMangoAccent) {
+                Task {
+                    await chatState.startNewConversation()
+                    selection = nil
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
             searchField
                 .padding(.horizontal, 12)
-                .padding(.bottom, 14)
-
-            sectionHeader("ROZMOWY")
+                .padding(.bottom, 8)
 
             ScrollView {
                 LazyVStack(spacing: 0) {
@@ -209,16 +209,35 @@ struct RootView: View {
 
             Spacer(minLength: 8)
 
-            if !agentManager.sessions.isEmpty {
-                sectionHeader("AGENCI")
-                agentsSection
-                    .padding(.bottom, 8)
-                Spacer(minLength: 8)
+            sectionHeader("AGENCI")
+            SidebarActionButton(title: "+ NOWY_AGENT", color: .kiwiMangoPurple) {
+                showingNewAgentPopover = true
             }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+            .popover(isPresented: $showingNewAgentPopover, arrowEdge: .trailing) {
+                NewAgentPopover { kind, model, workDir in
+                    let session = agentManager.spawn(kind: kind, model: model.name, isCloud: model.isCloud, workDir: workDir)
+                    selection = .agent(session.id)
+                    showingNewAgentPopover = false
+                }
+            }
+            if !agentManager.sessions.isEmpty {
+                agentsSection
+            }
+            Spacer(minLength: 8)
 
             sectionHeader("LAB")
-            labSection
-                .padding(.bottom, 8)
+            SidebarActionButton(title: "🏆 ARENA", color: .kiwiMangoPurple, isActive: selection == .arena) {
+                selection = .arena
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6)
+            SidebarActionButton(title: "🤖 POKÓJ", color: .kiwiMangoPurple, isActive: selection == .room) {
+                selection = .room
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
             Spacer(minLength: 8)
 
             sectionHeader("MODELE")
@@ -228,8 +247,10 @@ struct RootView: View {
 
             Divider().overlay(Color.kiwiMangoPurple.opacity(0.2))
 
-            modelsButton
-                .padding(12)
+            SidebarActionButton(title: "MODELE_OLLAMA", color: .kiwiMangoAccent) {
+                showingModelManager = true
+            }
+            .padding(12)
         }
         .frame(maxHeight: .infinity)
         .background(Color.kiwiMangoChrome)
@@ -342,24 +363,6 @@ struct RootView: View {
         .help(model.name)
     }
 
-    private var newConversationButton: some View {
-        Button {
-            Task {
-                await chatState.startNewConversation()
-                selection = nil
-            }
-        } label: {
-            Text("+ NOWA_ROZMOWA")
-                .font(KiwiMangoFont.mono(11.5, weight: .bold))
-                .foregroundStyle(Color.kiwiMangoAccentText)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(Color.kiwiMangoAccent, in: RoundedRectangle(cornerRadius: 2))
-        }
-        .buttonStyle(.plain)
-        .help("Nowa rozmowa")
-    }
-
     private var searchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
@@ -411,67 +414,7 @@ struct RootView: View {
             .padding(.bottom, 6)
     }
 
-    private var modelsButton: some View {
-        Button {
-            showingModelManager = true
-        } label: {
-            Text("[ MODELE_OLLAMA ]")
-                .font(KiwiMangoFont.mono(11, weight: .regular))
-                .tracking(0.4)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
-        .help("Zarządzaj pobranymi modelami")
-    }
-
     // MARK: - Agents
-
-    private var newAgentButton: some View {
-        Button {
-            showingNewAgentPopover = true
-        } label: {
-            Text("+ NOWY_AGENT")
-                .font(KiwiMangoFont.mono(11.5, weight: .bold))
-                .foregroundStyle(Color.kiwiMangoTextPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
-                .neonBorder(Color.kiwiMangoPurple, cornerRadius: 2)
-        }
-        .buttonStyle(.plain)
-        .help("Nowy agent Claude Code (⌘T)")
-        .popover(isPresented: $showingNewAgentPopover, arrowEdge: .trailing) {
-            NewAgentPopover { kind, model, workDir in
-                let session = agentManager.spawn(kind: kind, model: model.name, isCloud: model.isCloud, workDir: workDir)
-                selection = .agent(session.id)
-                showingNewAgentPopover = false
-            }
-        }
-    }
-
-    // MARK: - Lab (Arena / Room, F8)
-
-    private var labSection: some View {
-        VStack(spacing: 0) {
-            LabRow(
-                icon: "bolt.fill",
-                title: "ARENA",
-                subtitle: "Wyścig modeli cloud",
-                isActive: selection == .arena
-            )
-            .contentShape(Rectangle())
-            .onTapGesture { selection = .arena }
-
-            LabRow(
-                icon: "person.2.fill",
-                title: "POKÓJ",
-                subtitle: "Debata dwóch AI",
-                isActive: selection == .room
-            )
-            .contentShape(Rectangle())
-            .onTapGesture { selection = .room }
-        }
-    }
 
     private var agentsSection: some View {
         VStack(spacing: 0) {
@@ -490,56 +433,34 @@ struct RootView: View {
     }
 }
 
-// MARK: - LabRow
+// MARK: - SidebarActionButton
 
-/// Same visual weight as `ConversationRow`/`AgentRow` — left accent bar +
-/// icon + title/subtitle — so Arena/Pokój read as first-class sidebar entries
-/// instead of a faint inline label.
-private struct LabRow: View {
-    let icon: String
+/// The ONE button style for every sidebar action that goes somewhere —
+/// new conversation, new agent, Arena, Room, model manager. Same shape,
+/// same font, same padding everywhere; only the accent color and the
+/// (optional) active fill differ. History entries (`ConversationRow`,
+/// `AgentRow`) are a different, deliberately distinct style — this one is
+/// never used for a list of past items, only for "go here" actions.
+private struct SidebarActionButton: View {
     let title: String
-    let subtitle: String
-    let isActive: Bool
+    var color: Color = .kiwiMangoAccent
+    var isActive: Bool = false
+    let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
-            Rectangle()
-                .fill(isActive ? Color.kiwiMangoPurple : Color.clear)
-                .frame(width: 2)
-                .shadow(color: isActive ? Color.kiwiMangoPurple.opacity(0.6) : .clear, radius: 4)
-
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(isActive ? Color.kiwiMangoPurple : Color.kiwiMangoTextPrimary.opacity(0.5))
-                    .frame(width: 14)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(KiwiMangoFont.mono(12, weight: isActive ? .bold : .medium))
-                        .foregroundStyle(
-                            isActive ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.8)
-                        )
-                    Text(subtitle)
-                        .font(KiwiMangoFont.mono(10))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
-                }
-            }
-            .padding(.leading, 12)
-            .padding(.trailing, 8)
-            .padding(.vertical, 7)
-
-            Spacer(minLength: 0)
+        Button(action: action) {
+            Text(title)
+                .font(KiwiMangoFont.mono(11.5, weight: .bold))
+                .foregroundStyle(isActive ? Color.kiwiMangoAccentText : color)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(
+                    isActive ? color : Color.white.opacity(0.03),
+                    in: RoundedRectangle(cornerRadius: 3)
+                )
         }
-        .background(
-            isActive
-                ? AnyShapeStyle(LinearGradient(
-                    colors: [Color.kiwiMangoPurple.opacity(0.30), Color.clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                ))
-                : AnyShapeStyle(Color.clear)
-        )
+        .buttonStyle(.plain)
+        .neonBorder(color, cornerRadius: 3, active: isActive)
     }
 }
 
