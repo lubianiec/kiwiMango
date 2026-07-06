@@ -285,6 +285,7 @@ struct RootView: View {
                     )
                 )
                 .neonGlow(Color.kiwiMangoAccent, intensity: 0.4)
+                .realBloom(strength: 1.4, radius: 3)
             Text("kiwiMango")
                 .font(KiwiMangoFont.mono(11, weight: .medium))
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))

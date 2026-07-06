@@ -55,6 +55,7 @@ struct StatusBarView: View {
                 Text("Ollama")
                 Text("●")
                     .foregroundStyle(monitor.isOnline ? Color.kiwiMangoAccent : Color.kiwiMangoDanger)
+                    .realBloom(strength: 1.6, radius: 2)
                 Text(monitor.isOnline ? "online" : "offline")
             }
 

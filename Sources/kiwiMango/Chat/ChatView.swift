@@ -446,6 +446,7 @@ struct ChatView: View {
             Text(">>")
                 .font(KiwiMangoFont.mono(12.5, weight: .bold))
                 .foregroundStyle(Color.kiwiMangoAccent.opacity(0.7))
+                .realBloom(strength: 1.2, radius: 2)
 
             ZStack(alignment: .leading) {
                 if state.draft.isEmpty {

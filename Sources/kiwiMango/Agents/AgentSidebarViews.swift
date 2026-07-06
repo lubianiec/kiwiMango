@@ -87,6 +87,7 @@ struct AgentRow: View {
             .foregroundStyle(session.status == .running ? Color.kiwiMangoAccent : Color.gray)
             .symbolEffect(.pulse, isActive: session.status == .running)
             .opacity(session.status == .running ? 1 : 0.5)
+            .realBloom(strength: 1.6, radius: 2)
     }
 
     private var elapsed: String {

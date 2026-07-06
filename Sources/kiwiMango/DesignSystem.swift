@@ -116,6 +116,21 @@ private struct BreathingBackdrop: View {
     }
 }
 
+// MARK: - Real bloom (F9.2)
+
+extension View {
+    /// A real sampled bloom, not a shadow trick — use ONLY on small, non-scrolling
+    /// elements (logo, status dots, composer prefix). `layerEffect` re-samples a
+    /// blurred version of the layer every frame it's asked to; on a `LazyVStack`
+    /// row that means bloom-on-scroll jank, so never put this in the transcript.
+    func realBloom(strength: CGFloat = 1.2, radius: CGFloat = 3) -> some View {
+        layerEffect(
+            kiwiShaders.neonBloom(.float(strength), .float(radius)),
+            maxSampleOffset: CGSize(width: radius * 2, height: radius * 2)
+        )
+    }
+}
+
 // MARK: - Neon effects
 
 extension View {
