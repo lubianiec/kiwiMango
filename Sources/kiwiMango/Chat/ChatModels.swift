@@ -406,6 +406,24 @@ final class ChatState {
         return formatter
     }()
 
+    /// "wtorek, 7 lipca 2026" — full Polish date with weekday, for grounding
+    /// the model against stale dates inside web search results.
+    private static let webDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, d MMMM yyyy"
+        formatter.locale = Locale(identifier: "pl_PL")
+        return formatter
+    }()
+
+    /// One line stating today and tomorrow explicitly. Search results are often
+    /// scraped pages with old forecasts — without this the model happily quotes
+    /// "tomorrow, June 15" from a stale page in July.
+    private static func webDateContext() -> String {
+        let today = webDateFormatter.string(from: Date())
+        let tomorrow = webDateFormatter.string(from: Date().addingTimeInterval(86_400))
+        return "DZIŚ jest \(today), JUTRO to \(tomorrow)."
+    }
+
     private static let fileDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -589,6 +607,7 @@ final class ChatState {
                 [1] \(result.title ?? foundURL) — \(foundURL)
                 \(result.content)
 
+                \(Self.webDateContext()) Daty w treści strony mogą być nieaktualne.
                 Odpowiadaj na podstawie powyższej treści. Jeśli nie wystarcza — powiedz to wprost.
                 """
             } else {
@@ -600,7 +619,15 @@ final class ChatState {
                     combined += "[\(index + 1)] \(result.title) — \(result.url)\n\(result.content)\n"
                 }
                 combined = String(combined.prefix(6000))
-                combined += "\nOdpowiadaj na podstawie powyższych wyników. Cytuj źródła numerami [1][2] z URL-ami. Jeśli wyniki nie wystarczają — powiedz to wprost."
+                combined += """
+
+                \(Self.webDateContext()) Treści stron bywają NIEAKTUALNE — wszystkie względne \
+                określenia (dziś/jutro/wczoraj) odnoś WYŁĄCZNIE do powyższych dat, a daty \
+                znalezione w treści wyników traktuj podejrzliwie: jeśli dane dotyczą innej \
+                daty niż pytanie, powiedz to wprost zamiast je cytować.
+                Odpowiadaj na podstawie powyższych wyników. Cytuj źródła numerami [1][2] \
+                z URL-ami. Jeśli wyniki nie wystarczają — powiedz to wprost.
+                """
                 block = combined
             }
 
@@ -623,9 +650,8 @@ final class ChatState {
     /// complaint) — then nothing is injected. On model failure falls back to
     /// the raw text so a broken query generator never disables web search.
     private func generateSearchQuery(from userText: String) async -> String? {
-        let today = Self.exportDateFormatter.string(from: Date())
         let prompt = """
-        Dziś jest \(today). Zamień poniższą wiadomość użytkownika na JEDNO krótkie \
+        \(Self.webDateContext()) Zamień poniższą wiadomość użytkownika na JEDNO krótkie \
         zapytanie do wyszukiwarki internetowej (max 10 słów, bez cudzysłowów, bez \
         komentarza). Słowa "dziś"/"jutro"/"wczoraj" zamień na konkretne daty. \
         Jeśli wiadomość nie wymaga szukania w internecie (komentarz, pretensja, \
