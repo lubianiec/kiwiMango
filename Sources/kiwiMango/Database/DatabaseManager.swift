@@ -187,6 +187,53 @@ extension ArenaVote: FetchableRecord, MutablePersistableRecord {
     }
 }
 
+// MARK: - AgentSessionRecord (Fala 13)
+
+/// A finished agent terminal session, archived to survive app restart.
+/// `transcript` already comes in pre-truncated (max 2000 lines — see
+/// `AgentManager.dumpTranscript`), so SQLite just stores a plain TEXT blob.
+struct AgentSessionRecord: Identifiable, Hashable, Codable {
+    var id: Int64
+    var kind: String
+    var model: String
+    var isCloud: Bool
+    var workDir: String
+    var startedAt: Date
+    var endedAt: Date
+    var transcript: String
+}
+
+extension AgentSessionRecord: FetchableRecord, MutablePersistableRecord {
+    static let databaseTableName = "agentSession"
+
+    init(pendingKind kind: String, model: String, isCloud: Bool, workDir: String, startedAt: Date, endedAt: Date, transcript: String) {
+        self.id = 0
+        self.kind = kind
+        self.model = model
+        self.isCloud = isCloud
+        self.workDir = workDir
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.transcript = transcript
+    }
+
+    /// See `Conversation.encode(to:)` — same id=0 placeholder pattern.
+    func encode(to container: inout PersistenceContainer) {
+        if id != 0 { container["id"] = id }
+        container["kind"] = kind
+        container["model"] = model
+        container["isCloud"] = isCloud
+        container["workDir"] = workDir
+        container["startedAt"] = startedAt
+        container["endedAt"] = endedAt
+        container["transcript"] = transcript
+    }
+
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
 // MARK: - DatabaseManager
 
 /// Owns the GRDB queue + migrations. One instance for the app's lifetime.
@@ -340,6 +387,19 @@ final class DatabaseManager: Sendable {
                 t.column("model", .text).notNull()
                 t.column("prompt", .text).notNull()
                 t.column("votedAt", .datetime).notNull()
+            }
+        }
+
+        migrator.registerMigration("addAgentSession") { db in
+            try db.create(table: "agentSession") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("kind", .text).notNull()
+                t.column("model", .text).notNull()
+                t.column("isCloud", .boolean).notNull()
+                t.column("workDir", .text).notNull()
+                t.column("startedAt", .datetime).notNull()
+                t.column("endedAt", .datetime).notNull()
+                t.column("transcript", .text).notNull()
             }
         }
 
@@ -575,6 +635,37 @@ final class DatabaseManager: Sendable {
                 sql: "SELECT model, COUNT(*) AS votes FROM arenaVote GROUP BY model ORDER BY votes DESC"
             )
             return rows.map { (model: $0["model"], votes: $0["votes"]) }
+        }
+    }
+
+    // MARK: - Agent session history (Fala 13)
+
+    @discardableResult
+    func saveAgentSession(
+        kind: String, model: String, isCloud: Bool, workDir: String, startedAt: Date, endedAt: Date, transcript: String
+    ) throws -> AgentSessionRecord {
+        try dbQueue.write { db in
+            var record = AgentSessionRecord(
+                pendingKind: kind, model: model, isCloud: isCloud, workDir: workDir,
+                startedAt: startedAt, endedAt: endedAt, transcript: transcript
+            )
+            try record.insert(db)
+            return record
+        }
+    }
+
+    func fetchAgentSessions(limit: Int = 15) throws -> [AgentSessionRecord] {
+        try dbQueue.read { db in
+            try AgentSessionRecord
+                .order(Column("endedAt").desc)
+                .limit(limit)
+                .fetchAll(db)
+        }
+    }
+
+    func deleteAgentSession(_ id: Int64) throws {
+        _ = try dbQueue.write { db in
+            try AgentSessionRecord.deleteOne(db, key: id)
         }
     }
 }
