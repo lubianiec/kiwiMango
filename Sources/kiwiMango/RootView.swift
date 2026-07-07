@@ -237,15 +237,11 @@ struct RootView: View {
                     }
 
                     if !agentManager.sessions.isEmpty {
-                        Divider()
-                            .overlay(Color.kiwiMangoPurple.opacity(0.15))
-                            .padding(.vertical, 8)
+                        Spacer(minLength: 0).frame(height: 16)
                         agentsSection
                     }
 
-                    Divider()
-                        .overlay(Color.kiwiMangoPurple.opacity(0.15))
-                        .padding(.vertical, 8)
+                    Spacer(minLength: 0).frame(height: 16)
 
                     sectionHeader("MODELE")
                     modelsSection
@@ -254,7 +250,7 @@ struct RootView: View {
                 }
             }
 
-            Divider().overlay(Color.kiwiMangoPurple.opacity(0.2))
+            Divider().overlay(Color.white.opacity(0.08))
 
             SidebarActionButton(title: "MODELE_OLLAMA", color: .kiwiMangoAccent) {
                 showingModelManager = true
