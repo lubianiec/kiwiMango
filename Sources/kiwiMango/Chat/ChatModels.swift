@@ -71,6 +71,11 @@ final class ChatState {
     var availableModels: [OllamaService.ModelInfo] = []
     var isStreaming: Bool = false
 
+    /// F15.3: the model manager sheet is now opened only from the model picker
+    /// in the chat header — RootView still owns the `.sheet`, it just reads
+    /// this flag instead of its own `@State` (the picker lives in ChatView).
+    var showingModelManager: Bool = false
+
     /// Last tok/s readings from completed responses (max 40, FIFO) — backs the
     /// status bar sparkline. Streaming deltas never touch this, only finished stats.
     var tokRateHistory: [Double] = []

@@ -10,7 +10,6 @@ struct RootView: View {
     @Environment(AgentManager.self) private var agentManager
     @State private var selection: SidebarSelection?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var showingModelManager = false
     @State private var showingNewAgentPopover = false
     @State private var searchText = ""
     @State private var searchResultIDs: Set<Int64> = []
@@ -40,7 +39,10 @@ struct RootView: View {
                     }
                 }
         }
-        .sheet(isPresented: $showingModelManager) {
+        .sheet(isPresented: Binding(
+            get: { chatState.showingModelManager },
+            set: { chatState.showingModelManager = $0 }
+        )) {
             ModelManagerView()
         }
         .onChange(of: selection) { _, newValue in

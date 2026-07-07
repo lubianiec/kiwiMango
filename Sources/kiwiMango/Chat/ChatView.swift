@@ -286,6 +286,11 @@ struct ChatView: View {
                 }
             }
             .pickerStyle(.inline)
+
+            Divider()
+            Button("ZARZĄDZAJ MODELAMI…") {
+                chatState.showingModelManager = true
+            }
         } label: {
             HStack(spacing: 4) {
                 Text("⊕ \(displayName(for: chatState.selectedModel))")
