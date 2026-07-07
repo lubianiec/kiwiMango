@@ -431,6 +431,15 @@ final class DatabaseManager: Sendable {
             }
         }
 
+        migrator.registerMigration("addObsidianColumns") { db in
+            // Fala 12: which vault file a conversation lives in (assigned once,
+            // stable across renames) and its auto-classified category.
+            try db.alter(table: "conversation") { t in
+                t.add(column: "obsidianFile", .text)
+                t.add(column: "category", .text)
+            }
+        }
+
         migrator.registerMigration("addSavedPrompt") { db in
             try db.create(table: "savedPrompt") { t in
                 t.autoIncrementedPrimaryKey("id")
@@ -778,6 +787,32 @@ final class DatabaseManager: Sendable {
     func deleteSavedPrompt(_ id: Int64) throws {
         _ = try dbQueue.write { db in
             try SavedPrompt.deleteOne(db, key: id)
+        }
+    }
+
+    // MARK: - Obsidian metadata (Fala 12)
+
+    /// `(obsidianFile, category)` for a conversation — read via raw SQL rather
+    /// than through the `Conversation` record, so the Fala-12 columns don't
+    /// need to be threaded through every other call site that decodes one.
+    func fetchConversationObsidianMeta(_ id: Int64) throws -> (file: String?, category: String?) {
+        try dbQueue.read { db in
+            guard let row = try Row.fetchOne(
+                db, sql: "SELECT obsidianFile, category FROM conversation WHERE id = ?", arguments: [id]
+            ) else { return (nil, nil) }
+            return (row["obsidianFile"], row["category"])
+        }
+    }
+
+    func setConversationObsidianFile(_ id: Int64, file: String) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE conversation SET obsidianFile = ? WHERE id = ?", arguments: [file, id])
+        }
+    }
+
+    func setConversationCategory(_ id: Int64, category: String) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE conversation SET category = ? WHERE id = ?", arguments: [category, id])
         }
     }
 }
