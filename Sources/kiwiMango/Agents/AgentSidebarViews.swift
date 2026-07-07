@@ -67,7 +67,7 @@ struct AgentRow: View {
                     startPoint: .leading,
                     endPoint: .trailing
                 ))
-                : AnyShapeStyle(Color.clear)
+                : AnyShapeStyle(isHovered ? Color.white.opacity(0.04) : Color.clear)
         )
         .onHover { isHovered = $0 }
         .onReceive(ticker) { now = $0 }

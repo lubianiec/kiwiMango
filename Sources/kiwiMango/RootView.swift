@@ -21,6 +21,12 @@ struct RootView: View {
     @State private var toastMessage: String?
     @State private var bootDone = false
 
+    /// Sidebar's trailing edge glow (F9.6) — pulses only while a reply is
+    /// streaming. Explicitly animated back to the static value on stream end
+    /// rather than just changing the target, or the `repeatForever` keeps
+    /// animating forever underneath despite no visible change.
+    @State private var edgeGlowOpacity: CGFloat = 0.45
+
     /// Lab state lives here, not in the views — Arena/Room must survive
     /// navigating away and back (selection switches to a conversation, then
     /// back to `.arena`/`.room`), which would otherwise reset `@State`.
@@ -265,12 +271,23 @@ struct RootView: View {
         .background(Color.kiwiMangoChrome)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(Color.kiwiMangoPurple.opacity(0.45))
+                .fill(Color.kiwiMangoPurple.opacity(edgeGlowOpacity))
                 .frame(width: 1)
-                .shadow(color: Color.kiwiMangoPurple.opacity(0.5), radius: 5)
+                .shadow(color: Color.kiwiMangoPurple.opacity(edgeGlowOpacity), radius: 5)
         }
         .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 340)
         .toolbar(removing: .sidebarToggle)
+        .onChange(of: chatState.isStreaming) { _, isStreaming in
+            if isStreaming {
+                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                    edgeGlowOpacity = 0.9
+                }
+            } else {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    edgeGlowOpacity = 0.45
+                }
+            }
+        }
     }
 
     private var logoHeader: some View {
@@ -359,18 +376,9 @@ struct RootView: View {
     }
 
     private func modelRow(_ model: OllamaService.ModelInfo) -> some View {
-        let isSelected = chatState.selectedModel == model.name
-        return Button {
+        ModelRow(model: model, isSelected: chatState.selectedModel == model.name) {
             chatState.selectedModel = model.name
-        } label: {
-            Text(model.name)
-                .font(KiwiMangoFont.mono(10.5, weight: isSelected ? .bold : .regular))
-                .foregroundStyle(isSelected ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.6))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .buttonStyle(.plain)
-        .help(model.name)
     }
 
     private var searchField: some View {
@@ -474,6 +482,38 @@ private struct SidebarActionButton: View {
     }
 }
 
+// MARK: - ModelRow
+
+/// One row in the MODELE list — same cheap hover treatment as `ConversationRow`/
+/// `AgentRow` (a flat tint, no shadow/layerEffect), no selection accent needed.
+private struct ModelRow: View {
+    let model: OllamaService.ModelInfo
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(model.name)
+                .font(KiwiMangoFont.mono(10.5, weight: isSelected ? .bold : .regular))
+                .foregroundStyle(
+                    isSelected
+                        ? Color.kiwiMangoAccent
+                        : Color.kiwiMangoTextPrimary.opacity(isHovered ? 1 : 0.6)
+                )
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 2)
+                .padding(.horizontal, 4)
+                .background(isHovered ? Color.white.opacity(0.04) : Color.clear)
+        }
+        .buttonStyle(.plain)
+        .help(model.name)
+        .onHover { isHovered = $0 }
+    }
+}
+
 // MARK: - ConversationRow
 
 private struct ConversationRow: View {
@@ -531,7 +571,7 @@ private struct ConversationRow: View {
                     startPoint: .leading,
                     endPoint: .trailing
                 ))
-                : AnyShapeStyle(Color.clear)
+                : AnyShapeStyle(isHovered ? Color.white.opacity(0.04) : Color.clear)
         )
         .onHover { isHovered = $0 }
     }
