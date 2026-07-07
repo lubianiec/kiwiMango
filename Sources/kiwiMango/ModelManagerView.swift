@@ -18,17 +18,46 @@ struct ModelManagerView: View {
     @State private var deleteError: String?
     @State private var successMessage: String?
 
+    // MARK: F10.1 — pull
+    @State private var pullText = ""
+    @State private var pullTask: Task<Void, Never>?
+    @State private var pullStatus = ""
+    @State private var pullCompleted: Int64 = 0
+    @State private var pullTotal: Int64 = 0
+    @State private var pullError: String?
+    @State private var pendingLargePull: String?
+    @State private var warnedLargePull = false
+
+    // MARK: F10.2 — GGUF import
+    @State private var importLog: [String] = []
+    @State private var isImporting = false
+    @State private var showingImportNamePrompt = false
+    @State private var importFileURL: URL?
+    @State private var importName = ""
+
     private let service = OllamaService()
 
     var body: some View {
         VStack(spacing: 0) {
             titleBar
             header
+            pullSection
             content
         }
-        .frame(minWidth: 460, minHeight: 420)
+        .frame(minWidth: 460, minHeight: 480)
         .background(Color.kiwiMangoSurface)
         .task { await reload() }
+        .alert("Nazwa modelu", isPresented: $showingImportNamePrompt) {
+            TextField("nazwa", text: $importName)
+            Button("Importuj") {
+                if let url = importFileURL {
+                    runGGUFImport(fileURL: url, name: importName)
+                }
+            }
+            Button("Anuluj", role: .cancel) { importFileURL = nil }
+        } message: {
+            Text("Małe litery, cyfry, myślniki.")
+        }
         .confirmationDialog(
             confirmationTitle,
             isPresented: confirmationBinding,
@@ -126,6 +155,237 @@ struct ModelManagerView: View {
 
     private var totalSize: Int64 {
         models.filter { !$0.isCloud }.reduce(0) { $0 + $1.size }
+    }
+
+    // MARK: - F10.1/F10.2 — Pull + import section
+
+    private var pullSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("POBIERZ MODEL")
+                .font(KiwiMangoFont.mono(10, weight: .semibold))
+                .tracking(1)
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
+
+            HStack(spacing: 8) {
+                TextField("", text: $pullText, prompt: Text("hf.co/TheBloke/model:Q4_K_M albo nazwa z ollama.com").foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4)))
+                    .textFieldStyle(.plain)
+                    .font(KiwiMangoFont.mono(11.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(Color.kiwiMangoComposerBg)
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
+                    .disabled(pullTask != nil)
+
+                if pullTask != nil {
+                    Button("[✕]") { cancelPull() }
+                        .buttonStyle(.plain)
+                        .font(KiwiMangoFont.mono(11, weight: .bold))
+                        .foregroundStyle(Color.kiwiMangoDanger)
+                } else {
+                    Button("[POBIERZ]") { startPull(pullText) }
+                        .buttonStyle(.plain)
+                        .font(KiwiMangoFont.mono(11, weight: .bold))
+                        .foregroundStyle(Color.kiwiMangoAccent)
+                        .disabled(pullText.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+
+                Button("[IMPORT .GGUF]") { pickGGUFFile() }
+                    .buttonStyle(.plain)
+                    .font(KiwiMangoFont.mono(11, weight: .bold))
+                    .foregroundStyle(Color.kiwiMangoPurple)
+                    .disabled(pullTask != nil || isImporting)
+            }
+
+            if pullTask != nil {
+                pullProgressView
+            }
+            if let pullError {
+                Text(pullError)
+                    .font(KiwiMangoFont.mono(10.5))
+                    .foregroundStyle(Color.kiwiMangoDanger)
+            }
+            if isImporting || !importLog.isEmpty {
+                importLogView
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+        .alert("Model może nie zmieścić się w 16 GB RAM", isPresented: largePullConfirmBinding) {
+            Button("Pobierz mimo to") { pendingLargePull = nil }
+            Button("Anuluj", role: .cancel) {
+                pendingLargePull = nil
+                cancelPull()
+            }
+        } message: {
+            Text("Rozmiar tego modelu przekracza ~6 GB — pobrać mimo to?")
+        }
+    }
+
+    private var largePullConfirmBinding: Binding<Bool> {
+        Binding(get: { pendingLargePull != nil }, set: { if !$0 { pendingLargePull = nil } })
+    }
+
+    private var pullProgressView: some View {
+        let fraction = pullTotal > 0 ? Double(pullCompleted) / Double(pullTotal) : 0
+        return VStack(alignment: .leading, spacing: 4) {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.08))
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.kiwiMangoAccent)
+                        .frame(width: proxy.size.width * fraction)
+                }
+            }
+            .frame(height: 6)
+            .neonBorder(Color.kiwiMangoAccent, cornerRadius: 3)
+
+            HStack {
+                Text(pullStatus)
+                Spacer()
+                if pullTotal > 0 {
+                    Text("\(Self.formattedSize(pullCompleted)) / \(Self.formattedSize(pullTotal)) — \(Int(fraction * 100))%")
+                }
+            }
+            .font(KiwiMangoFont.mono(10))
+            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
+        }
+    }
+
+    private var importLogView: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(Array(importLog.suffix(6).enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(KiwiMangoFont.mono(9.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    // MARK: - F10.1 actions
+
+    private func startPull(_ rawName: String) {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        pullError = nil
+        pullStatus = "startuję…"
+        pullCompleted = 0
+        pullTotal = 0
+        // :cloud manifests are metadata-only — no disk-size warning needed.
+        warnedLargePull = name.hasSuffix(":cloud")
+        pullTask = Task {
+            do {
+                for try await progress in service.pull(model: name) {
+                    pullStatus = progress.status
+                    pullCompleted = progress.completed
+                    pullTotal = progress.total
+                    // F10.1 pitfall (a): warn as soon as the manifest tells us the
+                    // real size — Ollama reports `total` on the first "downloading"
+                    // line, well before most bytes move, so this still lands early.
+                    if !warnedLargePull, progress.total > 6_000_000_000 {
+                        warnedLargePull = true
+                        pendingLargePull = name
+                    }
+                }
+                pullText = ""
+                await reload()
+                withAnimation { successMessage = "Model gotowy ✓" }
+            } catch is CancellationError {
+                // Cancelled by the user — Ollama resumes the partial blob on the next pull.
+            } catch {
+                pullError = error.localizedDescription
+            }
+            pullTask = nil
+        }
+    }
+
+    private func cancelPull() {
+        pullTask?.cancel()
+        pullTask = nil
+    }
+
+    // MARK: - F10.2 actions
+
+    private func pickGGUFFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.init(filenameExtension: "gguf")].compactMap { $0 }
+        panel.message = "Wybierz plik .gguf do zaimportowania"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importFileURL = url
+        importName = url.deletingPathExtension().lastPathComponent.lowercased()
+        showingImportNamePrompt = true
+    }
+
+    private func runGGUFImport(fileURL: URL, name: String) {
+        let validName = name.lowercased().filter { $0.isLowercase || $0.isNumber || $0 == "-" }
+        guard !validName.isEmpty else {
+            importLog.append("✗ Nazwa modelu: tylko małe litery/cyfry/myślniki")
+            return
+        }
+        isImporting = true
+        importLog = ["startuję import „\(validName)”…"]
+
+        Task.detached {
+            let modelfile = "FROM \(fileURL.path)\n"
+            let modelfileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("kiwiMango-Modelfile-\(UUID().uuidString)")
+            do {
+                try modelfile.write(to: modelfileURL, atomically: true, encoding: .utf8)
+            } catch {
+                await MainActor.run {
+                    importLog.append("✗ Nie udało się zapisać Modelfile: \(error.localizedDescription)")
+                    isImporting = false
+                }
+                return
+            }
+
+            let escapedName = validName.replacingOccurrences(of: "'", with: "'\\''")
+            let escapedModelfile = modelfileURL.path.replacingOccurrences(of: "'", with: "'\\''")
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-l", "-c", "ollama create '\(escapedName)' -f '\(escapedModelfile)'"]
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            do {
+                try process.run()
+            } catch {
+                await MainActor.run {
+                    importLog.append("✗ Nie udało się uruchomić ollama create: \(error.localizedDescription)")
+                    isImporting = false
+                }
+                return
+            }
+
+            let handle = pipe.fileHandleForReading
+            while true {
+                let data = handle.availableData
+                if data.isEmpty { break }
+                if let text = String(data: data, encoding: .utf8) {
+                    let lines = text.split(separator: "\n").map(String.init)
+                    await MainActor.run { importLog.append(contentsOf: lines) }
+                }
+            }
+            process.waitUntilExit()
+            try? FileManager.default.removeItem(at: modelfileURL)
+
+            await MainActor.run {
+                isImporting = false
+                if process.terminationStatus == 0 {
+                    importLog.append("✓ Model „\(validName)” gotowy")
+                    Task { await reload() }
+                    withAnimation { successMessage = "Model gotowy ✓" }
+                } else {
+                    importLog.append("✗ ollama create zakończyło się kodem \(process.terminationStatus)")
+                }
+            }
+        }
     }
 
     // MARK: - Content

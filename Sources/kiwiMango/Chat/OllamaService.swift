@@ -172,6 +172,61 @@ struct OllamaService: Sendable {
         }
     }
 
+    // MARK: - Pull (Fala 10)
+
+    /// One line of `/api/pull`'s NDJSON progress stream.
+    struct PullProgress: Sendable {
+        let status: String
+        let completed: Int64
+        let total: Int64
+    }
+
+    /// `POST /api/pull` — works for both `ollama.com` registry names and
+    /// `hf.co/{author}/{repo}:{quant}` HuggingFace references; same endpoint,
+    /// same NDJSON shape either way. Cancelling the consuming task cancels the
+    /// request — Ollama resumes a half-finished blob on the next pull attempt.
+    func pull(model: String) -> AsyncThrowingStream<PullProgress, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    var request = URLRequest(url: try endpoint("/api/pull"))
+                    request.httpMethod = "POST"
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    request.timeoutInterval = 600
+                    request.httpBody = try JSONEncoder().encode(PullRequest(model: model, stream: true))
+
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+                    if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                        var body = ""
+                        for try await line in bytes.lines {
+                            body += line
+                            if body.count > 500 { break }
+                        }
+                        throw OllamaError.http(http.statusCode, Self.decodeErrorBody(body) ?? body)
+                    }
+
+                    for try await line in bytes.lines {
+                        guard !line.isEmpty else { continue }
+                        guard let chunk = try? JSONDecoder().decode(PullChunk.self, from: Data(line.utf8)) else { continue }
+                        if let error = chunk.error {
+                            throw OllamaError.server(error)
+                        }
+                        continuation.yield(PullProgress(
+                            status: chunk.status ?? "",
+                            completed: chunk.completed ?? 0,
+                            total: chunk.total ?? 0
+                        ))
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     // MARK: - Models
 
     /// `GET /api/tags` → model names (contract API).
@@ -307,6 +362,18 @@ struct OllamaService: Sendable {
 
     private struct DeleteRequest: Encodable {
         let model: String
+    }
+
+    private struct PullRequest: Encodable {
+        let model: String
+        let stream: Bool
+    }
+
+    private struct PullChunk: Decodable {
+        let status: String?
+        let completed: Int64?
+        let total: Int64?
+        let error: String?
     }
 
     private struct ErrorBody: Decodable {
