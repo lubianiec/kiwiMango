@@ -287,6 +287,13 @@ struct ChatView: View {
                         }
                     }
                 }
+                if chatState.claudeAvailable {
+                    Section("🤖 ANTHROPIC") {
+                        ForEach(ClaudeCodeService.ClaudeModel.allCases, id: \.self) { model in
+                            Text(claudeDisplayName(model)).tag("claude:\(model.rawValue)")
+                        }
+                    }
+                }
             }
             .pickerStyle(.inline)
 
@@ -312,14 +319,19 @@ struct ChatView: View {
         .help("Model Ollama")
     }
 
+    /// Fala 17: `claude:*` ids are Anthropic subscription models, not Ollama —
+    /// always treated as "[Cloud]" but never routed through the Ollama picker lists.
     private var selectedModelIsCloud: Bool {
-        chatState.availableModels.first { $0.name == chatState.selectedModel }?.isCloud
+        if ClaudeCodeService.parseModelID(chatState.selectedModel) != nil { return true }
+        return chatState.availableModels.first { $0.name == chatState.selectedModel }?.isCloud
             ?? isKnownCloud(chatState.selectedModel)
     }
 
     /// Always contains the persisted selection, even when /api/tags is unreachable.
+    /// Excludes `claude:*` ids — those live in their own ANTHROPIC section.
     private var pickerModels: [String] {
         var models = chatState.availableModels.map(\.name)
+        if ClaudeCodeService.parseModelID(chatState.selectedModel) != nil { return models }
         if models.isEmpty { return [chatState.selectedModel] }
         if !models.contains(chatState.selectedModel) {
             models.insert(chatState.selectedModel, at: 0)
@@ -341,7 +353,14 @@ struct ChatView: View {
         name.hasSuffix(":cloud")
     }
 
+    private func claudeDisplayName(_ model: ClaudeCodeService.ClaudeModel) -> String {
+        model.displayName
+    }
+
     private func displayName(for model: String, cloudBadge: Bool = false) -> String {
+        if let claudeModel = ClaudeCodeService.parseModelID(model) {
+            return claudeModel.displayName
+        }
         let base = model.split(separator: "/").last.map(String.init) ?? model
         guard cloudBadge, isKnownCloud(model) else { return base }
         return "☁️ " + base
@@ -364,6 +383,12 @@ struct ChatView: View {
                 }
                 if !chatState.attachedImages.isEmpty {
                     attachmentsRow
+                        .padding(.horizontal, 16)
+                }
+                if claudeImageBlock {
+                    Text("⚠️ Obrazy nie działają z Claude w tej wersji — przełącz na model Ollama z vision")
+                        .font(KiwiMangoFont.mono(10))
+                        .foregroundStyle(Color.kiwiMangoDanger)
                         .padding(.horizontal, 16)
                 }
                 if chatState.isSearchingWeb {
@@ -604,8 +629,15 @@ struct ChatView: View {
 
     // MARK: - Actions
 
+    /// Fala 17: images don't go to Claude in v1 (vision stays on Ollama) —
+    /// block sending rather than silently dropping the attachment.
+    private var claudeImageBlock: Bool {
+        isClaudeModelSelected && !chatState.attachedImages.isEmpty
+    }
+
     private var canSend: Bool {
-        !chatState.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard !claudeImageBlock else { return false }
+        return !chatState.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !chatState.attachedImages.isEmpty
     }
 
@@ -657,6 +689,13 @@ struct ChatView: View {
         .help(ttsEnabled ? "Wyłącz czytanie odpowiedzi" : "Czytaj odpowiedzi na głos")
     }
 
+    /// Fala 17: Claude has its own tools + fresher knowledge — the Ollama-side
+    /// web search plumbing (F14) doesn't apply, so the toggle is disabled
+    /// rather than silently ignored.
+    private var isClaudeModelSelected: Bool {
+        ClaudeCodeService.parseModelID(chatState.selectedModel) != nil
+    }
+
     private var webSearchToggleButton: some View {
         Button {
             // F14.2 pt. 2: no key yet → open the manager instead of silently
@@ -674,8 +713,17 @@ struct ChatView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(webSearchEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
-        .help(webSearchEnabled ? "Wyłącz internet" : "Model korzysta z internetu")
+        .disabled(isClaudeModelSelected)
+        .foregroundStyle(
+            isClaudeModelSelected
+                ? Color.kiwiMangoTextPrimary.opacity(0.3)
+                : (webSearchEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
+        )
+        .help(
+            isClaudeModelSelected
+                ? "Claude ma świeżą wiedzę i własne narzędzia"
+                : (webSearchEnabled ? "Wyłącz internet" : "Model korzysta z internetu")
+        )
     }
 
     private var voiceLoopButton: some View {

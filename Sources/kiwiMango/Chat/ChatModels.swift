@@ -732,9 +732,21 @@ final class ChatState {
     /// Appends an assistant placeholder, streams deltas into it, and persists the
     /// final result. Shared by `send()` (new user turn) and `regenerateLast()`
     /// (same history, fresh reply).
+    ///
+    /// Fala 17: `claude:*` model ids route to `ClaudeCodeService` instead of
+    /// `OllamaService` — everything else (bubble append, persist, Obsidian
+    /// sync) is shared via the same assistant-placeholder pattern.
     private func runStream(
         history: [OllamaService.ChatPayloadMessage], conversationId: Int64
     ) async {
+        let persona = activePersona
+        let model = persona?.model ?? selectedModel
+
+        if let claudeModel = ClaudeCodeService.parseModelID(model) {
+            await runClaudeStream(claudeModel: claudeModel, history: history, conversationId: conversationId)
+            return
+        }
+
         speechSynthesizer.stopAll()
         speechFeeder.reset()
 
@@ -748,8 +760,6 @@ final class ChatState {
         lastRateSampleAt = Date()
 
         let service = self.service
-        let persona = activePersona
-        let model = persona?.model ?? selectedModel
         let think: Bool? = thinkingModels.contains(model) ? false : nil
         let temperature = persona?.temperature
 
@@ -793,6 +803,96 @@ final class ChatState {
             }
         }
         await streamTask?.value
+    }
+
+    /// Fala 17: `claude -p` takes a single prompt string + `--resume <id>` for
+    /// continuity — NOT the full message array `OllamaService` uses. Only the
+    /// last user turn from `history` is sent as the prompt; the CLI's own
+    /// session (looked up/persisted via `claudeSessionID`) carries the rest
+    /// of the context. TTS/speechFeeder is intentionally skipped — Claude
+    /// replies are typically longer/code-heavy and the feeder is tuned for
+    /// Ollama's sentence-by-sentence cadence.
+    private func runClaudeStream(
+        claudeModel: ClaudeCodeService.ClaudeModel,
+        history: [OllamaService.ChatPayloadMessage],
+        conversationId: Int64
+    ) async {
+        let prompt = history.last { $0.role == "user" }?.content ?? ""
+
+        let assistantMessage = ChatMessage(role: .assistant, content: "")
+        let assistantID = assistantMessage.id
+        messages.append(assistantMessage)
+        lastAnimatedMessageID = assistantID
+        isStreaming = true
+        liveTokRate = 0
+
+        let resumeSessionID = conversationId != -1
+            ? try? db.fetchConversationClaudeSessionID(conversationId)
+            : nil
+        let service = ClaudeCodeService()
+        let startedAt = Date()
+
+        streamTask = Task {
+            var succeeded = false
+            do {
+                for try await delta in service.streamMessage(
+                    prompt: prompt, model: claudeModel, resumeSessionID: resumeSessionID ?? nil
+                ) {
+                    switch delta {
+                    case .content(let text):
+                        appendDelta(text, to: assistantID)
+                    case .result(let info):
+                        if let sessionID = info.sessionID, conversationId != -1 {
+                            try? db.setConversationClaudeSessionID(conversationId, sessionID: sessionID)
+                        }
+                        if !info.isError {
+                            applyClaudeStats(startedAt: startedAt, to: assistantID)
+                        }
+                    }
+                }
+                if Task.isCancelled {
+                    markCancelled(assistantID)
+                } else {
+                    succeeded = true
+                }
+            } catch is CancellationError {
+                markCancelled(assistantID)
+            } catch {
+                showClaudeError(error, on: assistantID)
+            }
+            isStreaming = false
+            liveTokRate = 0
+            streamTask = nil
+            if let final = messages.first(where: { $0.id == assistantID }) {
+                persist(final, conversationId: conversationId)
+            }
+            if succeeded, let title = conversations.first(where: { $0.id == conversationId })?.title {
+                ObsidianSyncService.syncConversation(conversationId: conversationId, title: title, model: "claude:\(claudeModel.rawValue)")
+            }
+        }
+        await streamTask?.value
+    }
+
+    /// Claude has no `eval_count`/tok-s equivalent to Ollama's — show elapsed
+    /// wall-clock time only, never a fabricated tok/s number (F17.2 pt. 3).
+    private func applyClaudeStats(startedAt: Date, to id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        let seconds = Date().timeIntervalSince(startedAt)
+        messages[index].statsLine = String(format: "%.1f s", seconds)
+    }
+
+    /// Fala 17: same "readable Polish message, not raw JSON" bar as `showError`.
+    /// `ClaudeCodeService.ClaudeCodeError` already has Polish `errorDescription`
+    /// for the rate-limit/not-logged-in/binary-missing cases from F17.1.
+    private func showClaudeError(_ error: Error, on id: UUID) {
+        let text = "⚠️ \(error.localizedDescription)"
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        if messages[index].content.isEmpty {
+            messages[index].content = text
+        } else {
+            messages[index].content += "\n\n" + text
+        }
+        glitchTrigger += 1
     }
 
     /// Feeds the just-appended content to the streaming TTS feeder, sentence

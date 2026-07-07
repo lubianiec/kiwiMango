@@ -139,10 +139,25 @@ struct ClaudeCodeService: Sendable {
     // MARK: - Streaming
 
     /// Model alias → `--model` flag value.
-    enum ClaudeModel: String, Sendable {
+    enum ClaudeModel: String, CaseIterable, Sendable {
         case sonnet
         case opus
         case haiku
+
+        var displayName: String {
+            switch self {
+            case .sonnet: "Sonnet"
+            case .opus: "Opus"
+            case .haiku: "Haiku"
+            }
+        }
+    }
+
+    /// Parses the picker's `"claude:sonnet"` id into a `ClaudeModel`, or `nil`
+    /// if `id` doesn't have the `claude:` prefix or the suffix isn't a known model.
+    static func parseModelID(_ id: String) -> ClaudeModel? {
+        guard id.hasPrefix("claude:") else { return nil }
+        return ClaudeModel(rawValue: String(id.dropFirst("claude:".count)))
     }
 
     /// Streams a single prompt through `claude -p`, optionally resuming a
