@@ -21,12 +21,6 @@ struct RootView: View {
     @State private var toastMessage: String?
     @State private var bootDone = false
 
-    /// Sidebar's trailing edge glow (F9.6) — pulses only while a reply is
-    /// streaming. Explicitly animated back to the static value on stream end
-    /// rather than just changing the target, or the `repeatForever` keeps
-    /// animating forever underneath despite no visible change.
-    @State private var edgeGlowOpacity: CGFloat = 0.45
-
     /// Lab state lives here, not in the views — Arena/Room must survive
     /// navigating away and back (selection switches to a conversation, then
     /// back to `.arena`/`.room`), which would otherwise reset `@State`.
@@ -268,26 +262,12 @@ struct RootView: View {
             .padding(12)
         }
         .frame(maxHeight: .infinity)
-        .background(Color.kiwiMangoChrome)
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(Color.kiwiMangoPurple.opacity(edgeGlowOpacity))
-                .frame(width: 1)
-                .shadow(color: Color.kiwiMangoPurple.opacity(edgeGlowOpacity), radius: 5)
-        }
+        // Same base tone as the chat's own background (`kiwiMangoNoirBackground`)
+        // instead of the lighter `kiwiMangoChrome` — no seam between the two
+        // columns, so the old accent-purple divider line is gone too.
+        .background(Color.kiwiMangoBackground)
         .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 340)
         .toolbar(removing: .sidebarToggle)
-        .onChange(of: chatState.isStreaming) { _, isStreaming in
-            if isStreaming {
-                withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
-                    edgeGlowOpacity = 0.9
-                }
-            } else {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    edgeGlowOpacity = 0.45
-                }
-            }
-        }
     }
 
     private var logoHeader: some View {
@@ -341,10 +321,7 @@ struct RootView: View {
         }
         .frame(width: 32)
         .frame(maxHeight: .infinity)
-        .background(Color.kiwiMangoChrome)
-        .overlay(alignment: .trailing) {
-            Rectangle().fill(Color.kiwiMangoPurple.opacity(0.35)).frame(width: 1)
-        }
+        .background(Color.kiwiMangoBackground)
     }
 
     private var modelsSection: some View {
