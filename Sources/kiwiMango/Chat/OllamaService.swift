@@ -227,6 +227,78 @@ struct OllamaService: Sendable {
         }
     }
 
+    // MARK: - Web search (Fala 14)
+
+    struct WebSearchResult: Decodable, Sendable {
+        let title: String
+        let url: String
+        let content: String
+    }
+
+    struct WebFetchResult: Decodable, Sendable {
+        let title: String?
+        let content: String
+    }
+
+    /// Thrown when the user has web search toggled on but hasn't pasted a key
+    /// yet — a distinct case so callers can show the Polish guidance message
+    /// instead of a generic network error.
+    struct MissingWebSearchKeyError: LocalizedError {
+        var errorDescription: String? {
+            "Brak klucza — ModelManager → WEB SEARCH"
+        }
+    }
+
+    private var webSearchKey: String? {
+        let key = UserDefaults.standard.string(forKey: "ollamaWebSearchKey") ?? ""
+        return key.isEmpty ? nil : key
+    }
+
+    /// `POST https://ollama.com/api/web_search` — deliberately hits ollama.com
+    /// directly, never the local `host`, both because the key must never reach
+    /// `localhost` and because the local server (0.31.1) doesn't proxy this
+    /// endpoint (verified: 404).
+    func webSearch(query: String, maxResults: Int = 4) async throws -> [WebSearchResult] {
+        guard let key = webSearchKey else { throw MissingWebSearchKeyError() }
+        var request = URLRequest(url: URL(string: "https://ollama.com/api/web_search")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+        request.httpBody = try JSONEncoder().encode(WebSearchRequest(query: query, maxResults: maxResults))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw OllamaError.http(http.statusCode, Self.decodeErrorBody(body) ?? body)
+        }
+        let decoded = try JSONDecoder().decode(WebSearchResponse.self, from: data)
+        // Trim each result's content in the client (F14.1 pitfall c) — keeps the
+        // injected context block bounded regardless of what the API returns.
+        return decoded.results.prefix(maxResults).map {
+            WebSearchResult(title: $0.title, url: $0.url, content: String($0.content.prefix(2000)))
+        }
+    }
+
+    /// `POST https://ollama.com/api/web_fetch` — fetch+summarize a single URL.
+    func webFetch(url: String) async throws -> WebFetchResult {
+        guard let key = webSearchKey else { throw MissingWebSearchKeyError() }
+        var request = URLRequest(url: URL(string: "https://ollama.com/api/web_fetch")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+        request.httpBody = try JSONEncoder().encode(WebFetchRequest(url: url))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw OllamaError.http(http.statusCode, Self.decodeErrorBody(body) ?? body)
+        }
+        let decoded = try JSONDecoder().decode(WebFetchResponse.self, from: data)
+        return WebFetchResult(title: decoded.title, content: String(decoded.content.prefix(2000)))
+    }
+
     // MARK: - Models
 
     /// `GET /api/tags` → model names (contract API).
@@ -378,5 +450,28 @@ struct OllamaService: Sendable {
 
     private struct ErrorBody: Decodable {
         let error: String
+    }
+
+    private struct WebSearchRequest: Encodable {
+        let query: String
+        let maxResults: Int
+
+        enum CodingKeys: String, CodingKey {
+            case query
+            case maxResults = "max_results"
+        }
+    }
+
+    private struct WebSearchResponse: Decodable {
+        let results: [WebSearchResult]
+    }
+
+    private struct WebFetchRequest: Encodable {
+        let url: String
+    }
+
+    private struct WebFetchResponse: Decodable {
+        let title: String?
+        let content: String
     }
 }
