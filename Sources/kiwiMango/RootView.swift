@@ -52,7 +52,7 @@ struct RootView: View {
             switch newValue {
             case .conversation(let id):
                 Task { await chatState.selectConversation(id) }
-            case .agent, .arena, .room, .agentHistory, nil:
+            case .agent, .arena, .room, .agentHistory, .prompts, nil:
                 break
             }
         }
@@ -77,6 +77,9 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .kiwiMangoRequestNewConversation)) { _ in
             selection = nil
             Task { await chatState.startNewConversation() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .kiwiMangoRequestPrompts)) { _ in
+            selection = .prompts
         }
         .alert("Zmień nazwę rozmowy", isPresented: renameBinding) {
             TextField("Nazwa", text: $renameText)
@@ -145,6 +148,11 @@ struct RootView: View {
             } else {
                 ChatView()
             }
+        case .prompts:
+            PromptVaultView { text in
+                chatState.draft = text
+                selection = nil
+            }
         case .conversation, nil:
             ChatView()
         }
@@ -194,6 +202,12 @@ struct RootView: View {
                             showingNewAgentPopover = false
                         }
                     }
+
+                    SecondarySidebarButton(title: "📓 PROMPTY") {
+                        selection = .prompts
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
 
                     HStack(spacing: 6) {
                         LabSidebarButton(title: "ARENA", isActive: selection == .arena) {

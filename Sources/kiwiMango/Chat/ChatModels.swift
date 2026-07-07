@@ -17,6 +17,8 @@ enum SidebarSelection: Hashable {
     /// A past (archived) agent session — Fala 13. Distinct from `.agent(UUID)`,
     /// which is a live/running session keyed by `AgentSession.id`.
     case agentHistory(Int64)
+    /// The prompt vault (Fala 11) — one shared panel, no id to key by.
+    case prompts
 }
 
 // MARK: - ChatMessage

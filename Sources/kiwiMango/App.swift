@@ -33,6 +33,14 @@ struct KiwiMangoApp: App {
                 }
                 .keyboardShortcut("t")
             }
+            // ⌘P normally prints — this app has nothing to print, so it's free
+            // to repurpose for the prompt vault (F11.1).
+            CommandGroup(replacing: .printItem) {
+                Button("Prompty") {
+                    NotificationCenter.default.post(name: .kiwiMangoRequestPrompts, object: nil)
+                }
+                .keyboardShortcut("p")
+            }
         }
 
         Settings {
@@ -51,6 +59,8 @@ extension Notification.Name {
     /// i dopiero wtedy startuje nową rozmowę (samo `startNewConversation`
     /// nie zmienia `selection`, więc przy aktywnym agencie nic nie było widać).
     static let kiwiMangoRequestNewConversation = Notification.Name("kiwiMangoRequestNewConversation")
+    /// Posted by the ⌘P command; `RootView` listens and switches to the prompt vault.
+    static let kiwiMangoRequestPrompts = Notification.Name("kiwiMangoRequestPrompts")
 }
 
 // MARK: - KiwiMangoAppDelegate
