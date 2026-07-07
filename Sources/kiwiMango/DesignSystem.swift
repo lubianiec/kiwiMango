@@ -36,22 +36,22 @@ extension Color {
 // MARK: - KiwiMango palette (v2 — deep cyberpunk terminal)
 
 extension Color {
-    /// Page-level background outside the app chrome (#09090B, zinc-950).
-    static let kiwiMangoBackground = Color(hex: "09090B")
-    /// Title bars, sidebar background (#0E0E11).
-    static let kiwiMangoChrome = Color(hex: "0E0E11")
-    /// Main content surface (#101014).
-    static let kiwiMangoSurface = Color(hex: "101014")
-    /// Composer background (#0A0A0D).
-    static let kiwiMangoComposerBg = Color(hex: "0A0A0D")
-    /// Neon lime accent (#39FF14) — active states, terminal text, primary borders.
-    static let kiwiMangoAccent = Color(hex: "39FF14")
-    /// Text drawn on top of the accent color (#141416).
-    static let kiwiMangoAccentText = Color(hex: "141416")
+    /// Page-level background outside the app chrome (#101218, graphite — v3).
+    static let kiwiMangoBackground = Color(hex: "101218")
+    /// Title bars, sidebar background (#161922, jaśniejsza powierzchnia sidebara).
+    static let kiwiMangoChrome = Color(hex: "161922")
+    /// Main content surface (#1D212C).
+    static let kiwiMangoSurface = Color(hex: "1D212C")
+    /// Composer background (#171B25).
+    static let kiwiMangoComposerBg = Color(hex: "171B25")
+    /// Softened lime accent (#B6FF4D) — active states, terminal text, primary borders.
+    static let kiwiMangoAccent = Color(hex: "B6FF4D")
+    /// Text drawn on top of the accent color (#14180A).
+    static let kiwiMangoAccentText = Color(hex: "14180A")
     /// Neon violet (#BF00FF) — decorations, secondary borders, sidebar highlights.
     static let kiwiMangoPurple = Color(hex: "BF00FF")
-    /// Primary text, faint green-white tint (#E8FFE0).
-    static let kiwiMangoTextPrimary = Color(hex: "E8FFE0")
+    /// Primary text, faint green-white tint (#EDF2E8).
+    static let kiwiMangoTextPrimary = Color(hex: "EDF2E8")
     /// Destructive/coral accent (#ff6a5c).
     static let kiwiMangoDanger = Color(hex: "ff6a5c")
 }
@@ -90,7 +90,7 @@ extension View {
 private struct BreathingBackdrop: View {
     @Environment(ChatState.self) private var chatState
     @Environment(\.scenePhase) private var scenePhase
-    @State private var intensity: CGFloat = 0.35
+    @State private var intensity: CGFloat = 0.45
 
     private var isPaused: Bool {
         !chatState.isStreaming || scenePhase != .active
@@ -103,14 +103,14 @@ private struct BreathingBackdrop: View {
                 let speed = 1.2 + min(chatState.liveTokRate / 40.0, 2.0)
                 let t = timeline.date.timeIntervalSinceReferenceDate * speed
                 Rectangle()
-                    .fill(Color(hex: "09090B"))
+                    .fill(Color(hex: "101218"))
                     .colorEffect(kiwiShaders.breathingGlow(.float2(proxy.size), .float(t), .float(intensity)))
             }
         }
         .ignoresSafeArea()
         .onChange(of: chatState.isStreaming) { _, isStreaming in
             withAnimation(.easeInOut(duration: 0.8)) {
-                intensity = isStreaming ? 1.0 : 0.35
+                intensity = isStreaming ? 1.2 : 0.45
             }
         }
     }

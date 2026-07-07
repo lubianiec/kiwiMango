@@ -34,7 +34,7 @@ struct AgentRow: View {
                         .lineLimit(1)
                     Text(elapsed)
                         .font(KiwiMangoFont.mono(10))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
                 }
             }
             .padding(.leading, 12)
@@ -128,7 +128,7 @@ struct NewAgentPopover: View {
             Text("MODEL")
                 .font(KiwiMangoFont.mono(9, weight: .semibold))
                 .tracking(1)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
 
             modelList
 
@@ -138,7 +138,7 @@ struct NewAgentPopover: View {
                 Text("KATALOG ROBOCZY")
                     .font(KiwiMangoFont.mono(9, weight: .semibold))
                     .tracking(1)
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
                 HStack(spacing: 6) {
                     Text(displayWorkDir)
                         .font(KiwiMangoFont.mono(10.5))
@@ -178,7 +178,7 @@ struct NewAgentPopover: View {
                         .foregroundStyle(
                             selectedKind == kind
                                 ? Color.kiwiMangoAccent
-                                : Color.kiwiMangoTextPrimary.opacity(0.5)
+                                : Color.kiwiMangoTextPrimary.opacity(0.72)
                         )
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 6)
@@ -225,7 +225,7 @@ struct NewAgentPopover: View {
         Text(title)
             .font(KiwiMangoFont.mono(9, weight: .semibold))
             .tracking(1)
-            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
+            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.63))
     }
 
     private func modelButton(_ model: OllamaService.ModelInfo) -> some View {
@@ -304,7 +304,7 @@ struct AgentDetailView: View {
 
             Text(session.workDir.path)
                 .font(KiwiMangoFont.mono(10))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
                 .lineLimit(1)
                 .truncationMode(.head)
         }

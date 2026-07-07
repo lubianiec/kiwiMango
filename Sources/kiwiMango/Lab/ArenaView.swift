@@ -50,7 +50,7 @@ struct ArenaView: View {
                 Text("WYBIERZ 2–3 MODELE CLOUD")
                     .font(KiwiMangoFont.mono(10, weight: .semibold))
                     .tracking(1)
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
 
                 if cloudModels.isEmpty {
                     Text("Brak modeli cloud — sprawdź połączenie z Ollama.")
@@ -111,7 +111,7 @@ struct ArenaView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-                    .foregroundStyle(isSelected ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.4))
+                    .foregroundStyle(isSelected ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.66))
                 Text(model.name)
                     .font(KiwiMangoFont.mono(11.5))
                     .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
@@ -180,7 +180,7 @@ struct ArenaView: View {
             if let statsLine = column.statsLine {
                 Text(statsLine)
                     .font(KiwiMangoFont.mono(10))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.63))
             }
 
             if !arena.isRunning && column.errorMessage == nil {
@@ -189,7 +189,7 @@ struct ArenaView: View {
                 } label: {
                     Text(column.voted ? "[⭐ ZAGŁOSOWANO]" : "[⭐ WYGRYWA]")
                         .font(KiwiMangoFont.mono(11, weight: .bold))
-                        .foregroundStyle(column.voted ? Color.kiwiMangoTextPrimary.opacity(0.4) : Color.kiwiMangoPurple)
+                        .foregroundStyle(column.voted ? Color.kiwiMangoTextPrimary.opacity(0.66) : Color.kiwiMangoPurple)
                 }
                 .buttonStyle(.plain)
                 .disabled(column.voted)

@@ -181,7 +181,7 @@ struct ModelManagerView: View {
         Text(title)
             .font(KiwiMangoFont.mono(9.5, weight: .semibold))
             .tracking(1.5)
-            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
+            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -196,7 +196,7 @@ struct ModelManagerView: View {
                     .foregroundStyle(Color.kiwiMangoTextPrimary)
                 Text(model.isCloud ? "przez konto ollama.com" : Self.formattedSize(model.size))
                     .font(KiwiMangoFont.mono(11))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.69))
             }
             Spacer()
             if !model.isCloud {

@@ -142,7 +142,7 @@ private struct CodeBlockView: View {
                         .font(.system(size: 10))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
                 .help("Kopiuj kod")
             }
             .padding(.horizontal, 10)

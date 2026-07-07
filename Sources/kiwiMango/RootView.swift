@@ -274,12 +274,12 @@ struct RootView: View {
                 .realBloom(strength: 1.4, radius: 3)
             Text("kiwiMango")
                 .font(KiwiMangoFont.mono(11, weight: .medium))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
             Spacer()
             Button { toggleSidebar() } label: {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
             }
             .buttonStyle(.plain)
             .help("Schowaj panel (⌃⌘S)")
@@ -317,8 +317,8 @@ struct RootView: View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
-            TextField("", text: $searchText, prompt: Text("szukaj rozmów…").foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4)))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
+            TextField("", text: $searchText, prompt: Text("szukaj rozmów…").foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66)))
                 .textFieldStyle(.plain)
                 .font(KiwiMangoFont.mono(11))
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
@@ -329,7 +329,7 @@ struct RootView: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
                 }
                 .buttonStyle(.plain)
             }
@@ -434,7 +434,7 @@ private struct ConversationRow: View {
                     .foregroundStyle(
                         isActive
                             ? Color.kiwiMangoPurple
-                            : Color.kiwiMangoTextPrimary.opacity(0.4)
+                            : Color.kiwiMangoTextPrimary.opacity(0.66)
                     )
             }
             .padding(.leading, 12)

@@ -59,7 +59,7 @@ struct RoomView: View {
                     .foregroundStyle(Color.kiwiMangoTextPrimary)
                 Text("· \(room.topic)")
                     .font(KiwiMangoFont.mono(11))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
                     .lineLimit(1)
                 Spacer()
                 Text("\(room.currentTurnCount)/\(room.turnLimit)")
@@ -108,7 +108,7 @@ struct RoomView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("TEMAT")
                         .font(KiwiMangoFont.mono(9.5, weight: .semibold))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
                     TextField("O czym mają dyskutować?", text: $topicDraft, axis: .vertical)
                         .textFieldStyle(.plain)
                         .font(KiwiMangoFont.mono(12.5))
@@ -122,7 +122,7 @@ struct RoomView: View {
                 HStack {
                     Text("LICZBA TUR")
                         .font(KiwiMangoFont.mono(9.5, weight: .semibold))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
                     Stepper("\(turnLimit)", value: $turnLimit, in: 2...12)
                         .font(KiwiMangoFont.mono(11.5, weight: .bold))
                         .foregroundStyle(Color.kiwiMangoTextPrimary)
@@ -155,7 +155,7 @@ struct RoomView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased())
                 .font(KiwiMangoFont.mono(9.5, weight: .semibold))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
             Menu {
                 ForEach(cloudModels, id: \.name) { model in
                     Button(model.name) { selection.wrappedValue = model.name }
@@ -165,7 +165,7 @@ struct RoomView: View {
                     .font(KiwiMangoFont.mono(11.5))
                     .foregroundStyle(
                         selection.wrappedValue.isEmpty
-                            ? Color.kiwiMangoTextPrimary.opacity(0.4)
+                            ? Color.kiwiMangoTextPrimary.opacity(0.66)
                             : Color.kiwiMangoAccent
                     )
                     .padding(.horizontal, 10)
@@ -181,7 +181,7 @@ struct RoomView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased())
                 .font(KiwiMangoFont.mono(9.5, weight: .semibold))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
             Menu {
                 Button("Brak") { selection.wrappedValue = nil }
                 ForEach(chatState.personas) { persona in
@@ -258,7 +258,7 @@ struct RoomView: View {
             VStack(alignment: isPawel ? .center : (isA ? .leading : .trailing), spacing: 6) {
                 Text(prefixLabel(turn.speaker))
                     .font(KiwiMangoFont.mono(10))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
 
                 HStack(alignment: .bottom, spacing: 0) {
                     MarkdownText(content: turn.text)

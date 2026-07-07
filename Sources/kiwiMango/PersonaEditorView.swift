@@ -73,7 +73,7 @@ struct PersonaEditorView: View {
                     .foregroundStyle(Color.kiwiMangoTextPrimary)
                 Text(persona.systemPrompt.isEmpty ? "brak system promptu" : persona.systemPrompt)
                     .font(KiwiMangoFont.sans(11))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.69))
                     .lineLimit(1)
             }
             Spacer()
@@ -86,7 +86,7 @@ struct PersonaEditorView: View {
             } label: {
                 Image(systemName: "pencil")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
             }
             .buttonStyle(.plain)
             .padding(.leading, 10)

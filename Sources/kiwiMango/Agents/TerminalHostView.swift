@@ -45,12 +45,12 @@ struct TerminalHostView: NSViewRepresentable {
 
 extension LocalProcessTerminalView {
     /// Applies the kiwiMango design system to a freshly created terminal:
-    /// background #09090B, text #E8FFE0, cursor lime #39FF14, mono 12.
+    /// background #101218, text #EDF2E8, cursor lime #B6FF4D, mono 12.
     /// ANSI palette is left untouched — the Claude Code TUI supplies its own colors.
     func applyKiwiMangoTheme() {
-        nativeBackgroundColor = NSColor(hex: "09090B")
-        nativeForegroundColor = NSColor(hex: "E8FFE0")
-        caretColor = NSColor(hex: "39FF14")
+        nativeBackgroundColor = NSColor(hex: "101218")
+        nativeForegroundColor = NSColor(hex: "EDF2E8")
+        caretColor = NSColor(hex: "B6FF4D")
         font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     }
 }

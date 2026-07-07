@@ -99,7 +99,7 @@ struct StatusBarView: View {
     }
 
     private var statusDivider: some View {
-        Text("·").foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.3))
+        Text("·").foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
     }
 }
 

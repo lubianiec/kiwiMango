@@ -119,7 +119,7 @@ struct ChatView: View {
             } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
             }
             .buttonStyle(.plain)
             .help("Wyczyść rozmowę")
@@ -149,10 +149,10 @@ struct ChatView: View {
             } description: {
                 VStack(spacing: 6) {
                     Text("Rozmowa z lokalnym modelem Ollama.\nWpisz wiadomość lub upuść obraz.")
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
                     Text("⌘N nowa rozmowa · ⌘F szukaj · ⇧⏎ nowa linia · przeciągnij obraz aby załączyć")
                         .font(KiwiMangoFont.mono(10.5))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.63))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -474,7 +474,7 @@ struct ChatView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
             .help("Załącz obraz")
 
             micButton
@@ -499,7 +499,7 @@ struct ChatView: View {
                     } else {
                         Text("napisz coś, enter aby wysłać")
                             .font(KiwiMangoFont.mono(12.5))
-                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
+                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
                             .allowsHitTesting(false)
                     }
                 }
@@ -602,7 +602,7 @@ struct ChatView: View {
                 .symbolEffect(.pulse, isActive: speech.isRecording)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(speech.isRecording ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.5))
+        .foregroundStyle(speech.isRecording ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
         .help(speech.isRecording ? "Zatrzymaj dyktowanie" : "Dyktuj wiadomość")
         .onChange(of: speech.transcript) {
             let separator = draftBeforeDictation.isEmpty ? "" : " "
@@ -631,7 +631,7 @@ struct ChatView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(ttsEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.5))
+        .foregroundStyle(ttsEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
         .help(ttsEnabled ? "Wyłącz czytanie odpowiedzi" : "Czytaj odpowiedzi na głos")
     }
 
@@ -737,7 +737,7 @@ private struct MessageBubble: View {
                 if !isUser {
                     Text(modelPrefixLine)
                         .font(KiwiMangoFont.mono(10))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
                 }
                 if !message.images.isEmpty {
                     HStack(spacing: 6) {
@@ -787,7 +787,7 @@ private struct MessageBubble: View {
                 if let statsLine = message.statsLine {
                     Text(statsLine)
                         .font(KiwiMangoFont.mono(10))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.63))
                 }
                 if !message.content.isEmpty {
                     hoverActions
