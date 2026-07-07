@@ -760,6 +760,7 @@ private struct MessageBubble: View {
                                     .stroke(Color.kiwiMangoPurple.opacity(0.65), lineWidth: 1)
                             )
                             .shadow(color: Color.kiwiMangoPurple.opacity(0.3), radius: 8)
+                            .modifier(HoloTilt(isActive: !isStreamingReply))
                     } else {
                         HStack(alignment: .bottom, spacing: 0) {
                             MarkdownText(content: message.content)
@@ -780,6 +781,7 @@ private struct MessageBubble: View {
                                 .stroke(Color.kiwiMangoAccent.opacity(0.45), lineWidth: 1)
                         )
                         .shadow(color: Color.kiwiMangoAccent.opacity(0.18), radius: 8)
+                        .modifier(HoloTilt(isActive: !isStreamingReply))
                     }
                 }
                 if let statsLine = message.statsLine {
@@ -852,6 +854,53 @@ private struct MessageBubble: View {
 
     private func readAloud() {
         chatState.readMessageAloud(message.content)
+    }
+}
+
+// MARK: - HoloTilt (F9.5)
+
+/// Subtle hologram-style tilt following the cursor — max ±7°, only on the
+/// bubble under the mouse. `isActive` is `false` while a reply is still
+/// streaming/growing, so the tilt transform doesn't fight the relayout.
+private struct HoloTilt: ViewModifier {
+    let isActive: Bool
+
+    @State private var hover: CGPoint?
+    @State private var size: CGSize = .zero
+
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGSize.self, of: { $0.size }) { size = $0 }
+            .rotation3DEffect(
+                .degrees(tiltX),
+                axis: (x: 0, y: 1, z: 0),
+                anchor: .center,
+                perspective: 0.3
+            )
+            .rotation3DEffect(
+                .degrees(tiltY),
+                axis: (x: 1, y: 0, z: 0),
+                anchor: .center,
+                perspective: 0.3
+            )
+            .animation(.interactiveSpring(response: 0.25), value: hover)
+            .onContinuousHover { phase in
+                guard isActive else { hover = nil; return }
+                switch phase {
+                case .active(let location): hover = location
+                case .ended: hover = nil
+                }
+            }
+    }
+
+    private var tiltX: Double {
+        guard let hover, size.width > 0 else { return 0 }
+        return (hover.x / size.width - 0.5) * 7
+    }
+
+    private var tiltY: Double {
+        guard let hover, size.height > 0 else { return 0 }
+        return -(hover.y / size.height - 0.5) * 5
     }
 }
 
