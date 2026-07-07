@@ -79,6 +79,14 @@ final class ChatState {
     /// this flag instead of its own `@State` (the picker lives in ChatView).
     var showingModelManager: Bool = false
 
+    /// Fala 14: true while `send()` is waiting on `webSearch`/`webFetch`, before
+    /// the actual chat stream starts — drives the "SZUKAM W SIECI…" indicator.
+    var isSearchingWeb: Bool = false
+
+    /// Set when a web search/fetch fails or times out during `send()` — shown as
+    /// a small warning chip. The reply still streams normally (F14.3 pitfall b).
+    var webSearchWarning: String?
+
     /// Last tok/s readings from completed responses (max 40, FIFO) — backs the
     /// status bar sparkline. Streaming deltas never touch this, only finished stats.
     var tokRateHistory: [Double] = []
@@ -538,7 +546,60 @@ final class ChatState {
         let conversationId = ensureConversation(firstUserText: text)
         persist(userMessage, conversationId: conversationId)
 
-        await runStream(history: buildHistory(), conversationId: conversationId)
+        let history = await buildHistoryWithWebContext(userText: text)
+        await runStream(history: history, conversationId: conversationId)
+    }
+
+    /// Fala 14: when the "[WEB]" toggle is on, runs a search (or fetches a URL
+    /// found in the message) and splices an ephemeral system message with the
+    /// results just before the last user turn. This block is built on the
+    /// already-assembled history array — never written back to the transcript
+    /// or the database (F14.3 pitfall a).
+    private func buildHistoryWithWebContext(userText: String) async -> [OllamaService.ChatPayloadMessage] {
+        var history = buildHistory()
+        webSearchWarning = nil
+
+        guard UserDefaults.standard.bool(forKey: "webSearchEnabled") else { return history }
+
+        isSearchingWeb = true
+        defer { isSearchingWeb = false }
+
+        let urlPattern = #"https?://\S+"#
+        let foundURL = userText.range(of: urlPattern, options: .regularExpression).map { String(userText[$0]) }
+
+        do {
+            let block: String
+            if let foundURL {
+                let result = try await service.webFetch(url: foundURL)
+                block = """
+                [TREŚĆ STRONY — \(Self.exportDateFormatter.string(from: Date()))]
+                [1] \(result.title ?? foundURL) — \(foundURL)
+                \(result.content)
+
+                Odpowiadaj na podstawie powyższej treści. Jeśli nie wystarcza — powiedz to wprost.
+                """
+            } else {
+                let query = String(userText.prefix(400))
+                let results = try await service.webSearch(query: query, maxResults: 4)
+                guard !results.isEmpty else { return history }
+                var combined = "[WYNIKI WYSZUKIWANIA — \(Self.exportDateFormatter.string(from: Date()))]\n"
+                for (index, result) in results.enumerated() {
+                    combined += "[\(index + 1)] \(result.title) — \(result.url)\n\(result.content)\n"
+                }
+                combined = String(combined.prefix(6000))
+                combined += "\nOdpowiadaj na podstawie powyższych wyników. Cytuj źródła numerami [1][2] z URL-ami. Jeśli wyniki nie wystarczają — powiedz to wprost."
+                block = combined
+            }
+
+            if history.last?.role == "user" {
+                history.insert(OllamaService.ChatPayloadMessage(role: "system", content: block), at: history.count - 1)
+            } else {
+                history.append(OllamaService.ChatPayloadMessage(role: "system", content: block))
+            }
+        } catch {
+            webSearchWarning = "web niedostępny, odpowiadam bez sieci"
+        }
+        return history
     }
 
     /// Drops the last assistant reply (transcript + DB) and streams a fresh one

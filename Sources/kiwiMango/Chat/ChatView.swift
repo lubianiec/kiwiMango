@@ -41,6 +41,8 @@ struct ChatView: View {
     @State private var composerCursorVisible = false
     @State private var sendButtonHovered = false
     @AppStorage("ttsEnabled") private var ttsEnabled = false
+    @AppStorage("webSearchEnabled") private var webSearchEnabled = false
+    @AppStorage("ollamaWebSearchKey") private var webSearchKey = ""
     @State private var voiceLoop: VoiceLoopController?
     @State private var voiceListenPulse = false
     @State private var glitchAmount: CGFloat = 0
@@ -363,6 +365,19 @@ struct ChatView: View {
                     attachmentsRow
                         .padding(.horizontal, 16)
                 }
+                if chatState.isSearchingWeb {
+                    Text("SZUKAM W SIECI…")
+                        .font(KiwiMangoFont.mono(10, weight: .semibold))
+                        .tracking(1)
+                        .foregroundStyle(Color.kiwiMangoAccent)
+                        .padding(.horizontal, 16)
+                }
+                if let webSearchWarning = chatState.webSearchWarning {
+                    Text("⚠️ \(webSearchWarning)")
+                        .font(KiwiMangoFont.mono(10))
+                        .foregroundStyle(Color.kiwiMangoDanger)
+                        .padding(.horizontal, 16)
+                }
                 composer
                     .padding(.horizontal, 16)
                     .padding(.top, 6)
@@ -485,6 +500,7 @@ struct ChatView: View {
             micButton
             ttsToggleButton
             voiceLoopButton
+            webSearchToggleButton
 
             Text(">>")
                 .font(KiwiMangoFont.mono(12.5, weight: .bold))
@@ -638,6 +654,27 @@ struct ChatView: View {
         .buttonStyle(.plain)
         .foregroundStyle(ttsEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
         .help(ttsEnabled ? "Wyłącz czytanie odpowiedzi" : "Czytaj odpowiedzi na głos")
+    }
+
+    private var webSearchToggleButton: some View {
+        Button {
+            // F14.2 pt. 2: no key yet → open the manager instead of silently
+            // flipping a toggle that would do nothing.
+            if !webSearchEnabled, webSearchKey.trimmingCharacters(in: .whitespaces).isEmpty {
+                chatState.showingModelManager = true
+                return
+            }
+            webSearchEnabled.toggle()
+        } label: {
+            Text("[WEB]")
+                .font(KiwiMangoFont.mono(11, weight: .bold))
+                .frame(height: 26)
+                .padding(.horizontal, 4)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(webSearchEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
+        .help(webSearchEnabled ? "Wyłącz internet" : "Model korzysta z internetu")
     }
 
     private var voiceLoopButton: some View {
