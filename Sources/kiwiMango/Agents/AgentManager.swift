@@ -198,27 +198,29 @@ final class AgentManager: NSObject {
         )
     }
 
-    /// Reads the terminal's scrollback into a plain string, truncated to the
-    /// last 2000 lines (PLAN.md F13.0). Full-screen TUIs (Claude Code with its
-    /// "fullscreen renderer") switch to the alt buffer, which SwiftTerm never
-    /// gives scrollback to — if the normal buffer comes back too short, we fall
-    /// back to whatever's on the alt buffer's current screen and say so.
+    /// Reads the terminal's transcript, truncated to the last 2000 lines
+    /// (PLAN.md F13.0). Claude Code's TUI switches to the ALT buffer shortly
+    /// after start: the normal buffer keeps only early redraw artifacts (which
+    /// is why archived transcripts ended mid-"Reasoning"), while everything the
+    /// user actually read — including the final answer — lives on the alt
+    /// screen. The old "<5 non-empty lines" fallback never fired because those
+    /// artifacts kept the normal buffer looking populated. The alt buffer is
+    /// now always appended when it has content, whether or not the TUI already
+    /// switched back.
     static func dumpTranscript(of session: AgentSession) -> String {
         let terminal = session.terminal.getTerminal()
         var text = String(data: terminal.getBufferAsData(kind: .normal), encoding: .utf8) ?? ""
-        var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        let trimmedCount = lines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.count
 
-        var header = ""
-        if trimmedCount < 5 {
-            text = String(data: terminal.getBufferAsData(kind: .active), encoding: .utf8) ?? text
-            lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-            header = "> sesja pełnoekranowa — transkrypt może obejmować tylko ostatni ekran\n"
+        let altText = String(data: terminal.getBufferAsData(kind: .alt), encoding: .utf8) ?? ""
+        if !altText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            text += "\n> ── ekran sesji ──\n" + altText
         }
 
+        var header = ""
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         if lines.count > 2000 {
             lines = Array(lines.suffix(2000))
-            header += "> ucięto do ostatnich 2000 linii\n"
+            header = "> ucięto do ostatnich 2000 linii\n"
         }
         return header + lines.joined(separator: "\n")
     }
