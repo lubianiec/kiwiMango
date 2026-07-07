@@ -62,6 +62,7 @@ struct ChatView: View {
         }
         .kiwiMangoNoirBackground()
         .task { await chatState.loadModels() }
+        .task { await chatState.refreshClaudeAvailability() }
         .onAppear {
             composerFocused = true
             if voiceLoop == nil {

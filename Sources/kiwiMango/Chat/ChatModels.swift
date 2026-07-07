@@ -85,6 +85,13 @@ final class ChatState {
     /// the actual chat stream starts — drives the "SZUKAM W SIECI…" indicator.
     var isSearchingWeb: Bool = false
 
+    /// Fala 17: true once `claude` binary is detected on PATH AND a fast
+    /// `claude -p` login check succeeds — cached at startup (`loadModels`/init
+    /// site calls `refreshClaudeAvailability`). Gates the whole ANTHROPIC
+    /// section of the model picker and the "CLAUDE PRO" agent kind: hidden,
+    /// not greyed out, when false (PLAN.md F17.3 requirement).
+    var claudeAvailable: Bool = false
+
     /// Set when a web search/fetch fails or times out during `send()` — shown as
     /// a small warning chip. The reply still streams normally (F14.3 pitfall b).
     var webSearchWarning: String?
@@ -832,6 +839,17 @@ final class ChatState {
         } catch {
             // Offline → keep whatever we had; the picker falls back to selectedModel.
         }
+    }
+
+    /// F17.0: detects `claude` on PATH + a fast login check, caches the
+    /// result in `claudeAvailable`. Called once alongside `loadModels()` —
+    /// both are startup-time capability probes, not per-message checks.
+    func refreshClaudeAvailability() async {
+        guard await ClaudeCodeService.detectBinaryPath() != nil else {
+            claudeAvailable = false
+            return
+        }
+        claudeAvailable = await ClaudeCodeService.checkLoggedIn()
     }
 
     /// Clears the thread (stops streaming first).

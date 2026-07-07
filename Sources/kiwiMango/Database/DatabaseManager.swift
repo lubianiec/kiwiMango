@@ -489,6 +489,16 @@ final class DatabaseManager: Sendable {
             }
         }
 
+        migrator.registerMigration("addClaudeSessionID") { db in
+            // Fala 17: `claude -p --resume <id>` needs the CLI's own session id
+            // (returned on the `result` line) to continue a conversation — this
+            // is unrelated to `conversation.id` and only ever set for Anthropic
+            // model threads.
+            try db.alter(table: "conversation") { t in
+                t.add(column: "claudeSessionID", .text)
+            }
+        }
+
         return migrator
     }
 
@@ -813,6 +823,28 @@ final class DatabaseManager: Sendable {
     func setConversationCategory(_ id: Int64, category: String) throws {
         try dbQueue.write { db in
             try db.execute(sql: "UPDATE conversation SET category = ? WHERE id = ?", arguments: [category, id])
+        }
+    }
+
+    // MARK: - Claude session id (Fala 17)
+
+    /// Raw-SQL accessor, same pattern as the Obsidian metadata above — the
+    /// `claude -p --resume <id>` session id only matters for Anthropic-model
+    /// threads, so it doesn't need to be threaded through `Conversation`.
+    func fetchConversationClaudeSessionID(_ id: Int64) throws -> String? {
+        try dbQueue.read { db in
+            guard let row = try Row.fetchOne(
+                db, sql: "SELECT claudeSessionID FROM conversation WHERE id = ?", arguments: [id]
+            ) else { return nil }
+            return row["claudeSessionID"]
+        }
+    }
+
+    func setConversationClaudeSessionID(_ id: Int64, sessionID: String) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE conversation SET claudeSessionID = ? WHERE id = ?", arguments: [sessionID, id]
+            )
         }
     }
 }
