@@ -253,11 +253,10 @@ struct NewAgentPopover: View {
         workDirPath.isEmpty ? "~/Kazik" : workDirPath
     }
 
-    /// `.claudePro` only shows up once `claude` is confirmed present + logged
-    /// in — hidden entirely rather than greyed out (no point advertising an
-    /// option that can't work yet).
+    /// `.claudePro` shows up once `claude` is installed; it is disabled (not
+    /// hidden) when Anthropic is unavailable, with a tooltip explaining why.
     private var visibleKinds: [AgentKind] {
-        AgentKind.allCases.filter { $0 != .claudePro || chatState.claudeAvailable }
+        AgentKind.allCases.filter { $0 != .claudePro || chatState.claudeAvailability.isInstalled }
     }
 
     private var kindPicker: some View {
@@ -299,29 +298,40 @@ struct NewAgentPopover: View {
     /// Claude Pro doesn't pick from the Ollama model list — just Sonnet/Opus.
     private var claudeProModelList: some View {
         VStack(alignment: .leading, spacing: 4) {
-            claudeProModelButton(id: "claude:sonnet", label: "Sonnet")
-            claudeProModelButton(id: "claude:opus", label: "Opus")
+            let isAvailable = chatState.claudeAvailability.isAvailable
+            claudeProModelButton(id: "claude:sonnet", label: "Sonnet", isAvailable: isAvailable)
+            claudeProModelButton(id: "claude:opus", label: "Opus", isAvailable: isAvailable)
         }
     }
 
-    private func claudeProModelButton(id: String, label: String) -> some View {
+    private func claudeProModelButton(id: String, label: String, isAvailable: Bool) -> some View {
         Button {
+            guard isAvailable else { return }
             let url = URL(fileURLWithPath: displayWorkDir)
             lastWorkDirPath = displayWorkDir
             let model = OllamaService.ModelInfo(name: id, capabilities: [], size: 0, isCloud: true)
             onSpawn(selectedKind, model, url)
         } label: {
-            Text(label)
-                .font(KiwiMangoFont.mono(11, weight: .medium))
-                .foregroundStyle(Color.kiwiMangoAccent)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .neonBorder(Color.kiwiMangoAccent, cornerRadius: 2)
-                .contentShape(Rectangle())
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(KiwiMangoFont.mono(11, weight: .medium))
+                    .foregroundStyle(isAvailable ? Color.kiwiMangoAccent : Color.kiwiMangoAccent.opacity(0.42))
+                Spacer()
+                if !isAvailable {
+                    Text(chatState.claudeAvailability.reason)
+                        .font(KiwiMangoFont.mono(9, weight: .medium))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .neonBorder(isAvailable ? Color.kiwiMangoAccent : Color.white.opacity(0.16), cornerRadius: 2)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(label)
+        .disabled(!isAvailable)
+        .help(isAvailable ? label : chatState.claudeAvailability.reason)
     }
 
     @ViewBuilder

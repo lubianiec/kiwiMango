@@ -85,12 +85,14 @@ final class ChatState {
     /// the actual chat stream starts — drives the "SZUKAM W SIECI…" indicator.
     var isSearchingWeb: Bool = false
 
-    /// Fala 17: true once `claude` binary is detected on PATH AND a fast
-    /// `claude -p` login check succeeds — cached at startup (`loadModels`/init
-    /// site calls `refreshClaudeAvailability`). Gates the whole ANTHROPIC
-    /// section of the model picker and the "CLAUDE PRO" agent kind: hidden,
-    /// not greyed out, when false (PLAN.md F17.3 requirement).
-    var claudeAvailable: Bool = false
+    /// Fala 17: cached availability state for Anthropic models. The section is
+    /// shown whenever `claude` is installed; models are selectable only when
+    /// the state is `.available`. When unavailable the reason (e.g. rate-limit
+    /// reset time) is shown next to the disabled entries.
+    var claudeAvailability: ClaudeCodeService.ClaudeAvailability = .binaryNotFound
+
+    /// Backwards-compatible shorthand used by legacy call sites.
+    var claudeAvailable: Bool { claudeAvailability.isAvailable }
 
     /// Set when a web search/fetch fails or times out during `send()` — shown as
     /// a small warning chip. The reply still streams normally (F14.3 pitfall b).
@@ -941,15 +943,11 @@ final class ChatState {
         }
     }
 
-    /// F17.0: detects `claude` on PATH + a fast login check, caches the
-    /// result in `claudeAvailable`. Called once alongside `loadModels()` —
+    /// F17.0: probes `claude` binary presence and login/limit state, caches the
+    /// result in `claudeAvailability`. Called once alongside `loadModels()` —
     /// both are startup-time capability probes, not per-message checks.
     func refreshClaudeAvailability() async {
-        guard await ClaudeCodeService.detectBinaryPath() != nil else {
-            claudeAvailable = false
-            return
-        }
-        claudeAvailable = await ClaudeCodeService.checkLoggedIn()
+        claudeAvailability = await ClaudeCodeService.checkAvailability()
     }
 
     /// Clears the thread (stops streaming first).

@@ -287,10 +287,31 @@ struct ChatView: View {
                         }
                     }
                 }
-                if chatState.claudeAvailable {
+                if chatState.claudeAvailability.isInstalled {
                     Section("🤖 ANTHROPIC") {
-                        ForEach(ClaudeCodeService.ClaudeModel.allCases, id: \.self) { model in
-                            Text(claudeDisplayName(model)).tag("claude:\(model.rawValue)")
+                        ForEach(ClaudeCodeService.pickerModels, id: \.self) { model in
+                            let id = "claude:\(model.rawValue)"
+                            let isAvailable = chatState.claudeAvailability.isAvailable
+                            let isSelected = chatState.selectedModel == id
+                            Button {
+                                if isAvailable {
+                                    chatState.selectedModel = id
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(isSelected ? "✓ \(claudeDisplayName(model))" : "  \(claudeDisplayName(model))")
+                                        .foregroundStyle(isAvailable ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.42))
+                                    Spacer()
+                                    if !isAvailable {
+                                        Text(chatState.claudeAvailability.reason)
+                                            .font(KiwiMangoFont.mono(10, weight: .medium))
+                                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(!isAvailable)
+                            .help(isAvailable ? claudeDisplayName(model) : chatState.claudeAvailability.reason)
                         }
                     }
                 }

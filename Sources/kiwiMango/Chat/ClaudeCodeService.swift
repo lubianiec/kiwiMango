@@ -60,10 +60,62 @@ struct ClaudeCodeService: Sendable {
 
     // MARK: - Availability detection (F17.0 gate, cached by caller)
 
-    /// PATH-detection pattern mirrors `AgentManager`: a login shell (`-l`)
-    /// re-reads .zshrc/.zprofile so `claude` (installed via npm/Homebrew) is
-    /// found even though this process wasn't spawned from a Terminal window.
+    /// Fine-grained state so the UI can show *why* Anthropic models are
+    /// unavailable (rate limit, not logged in, missing binary) instead of
+    /// hiding the section entirely.
+    enum ClaudeAvailability: Sendable {
+        case available
+        case rateLimited(resetInfo: String)
+        case notLoggedIn
+        case binaryNotFound
+
+        var isAvailable: Bool {
+            if case .available = self { return true }
+            return false
+        }
+
+        var isInstalled: Bool {
+            switch self {
+            case .binaryNotFound: return false
+            default: return true
+            }
+        }
+
+        /// Short reason shown next to disabled model names.
+        var reason: String {
+            switch self {
+            case .available: return ""
+            case .rateLimited(let reset): return "limit · reset \(reset)"
+            case .notLoggedIn: return "wymaga /login"
+            case .binaryNotFound: return "brak binarki"
+            }
+        }
+    }
+
+    /// Tries to locate the `claude` binary. First asks a login shell so
+    /// .zshrc/.zprofile PATH is respected, then falls back to a short list of
+    /// common absolute paths. This is needed because an app launched from the
+    /// Dock does not inherit the user's shell PATH in a way `zsh -l` can always
+    /// resolve `~/.local/bin/claude`.
     static func detectBinaryPath() async -> String? {
+        let shellPath = await detectBinaryPathViaLoginShell()
+        if let shellPath, FileManager.default.isExecutableFile(atPath: shellPath) {
+            return shellPath
+        }
+        return knownClaudePaths.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    private static let knownClaudePaths: [String] = {
+        let home = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
+        return [
+            "\(home)/.local/bin/claude",
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
+            "/usr/bin/claude",
+        ]
+    }()
+
+    private static func detectBinaryPathViaLoginShell() async -> String? {
         await withCheckedContinuation { continuation in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -91,36 +143,99 @@ struct ClaudeCodeService: Sendable {
         }
     }
 
-    /// Fast login check: `claude -p "ping" --model haiku` should return quickly
-    /// and non-empty. Only called once at startup after `detectBinaryPath`
-    /// succeeds — a real network round-trip, so keep it to a tiny prompt.
-    static func checkLoggedIn() async -> Bool {
-        await withCheckedContinuation { continuation in
+    /// Synchronous resolver used by `streamMessage` (which starts on the
+    /// calling thread). Mirrors the async logic above without `await`.
+    private static func resolvedBinaryPath() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-l", "-c", "which claude"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let path = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if process.terminationStatus == 0, let path, !path.isEmpty,
+               FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        } catch {
+            // fall through to known paths
+        }
+        return knownClaudePaths.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    /// Fast login / limit check. Returns `.available` only if a tiny prompt
+    /// succeeds. If Anthropic responds with a rate-limit message, parses the
+    /// reset time out of it so the UI can display it instead of hiding the
+    /// whole section.
+    static func checkAvailability() async -> ClaudeAvailability {
+        guard let claudePath = await detectBinaryPath(),
+              FileManager.default.isExecutableFile(atPath: claudePath)
+        else { return .binaryNotFound }
+
+        return await withCheckedContinuation { continuation in
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.executableURL = URL(fileURLWithPath: claudePath)
             process.arguments = [
-                "-l", "-c",
-                "claude -p 'Odpowiedz jednym słowem: ok' --model haiku",
+                "-p", "Odpowiedz jednym słowem: ok",
+                "--model", "haiku",
             ]
             process.environment = Self.sanitizedEnvironment()
-            let pipe = Pipe()
-            process.standardOutput = pipe
-            process.standardError = Pipe()
+            let stdout = Pipe()
+            let stderr = Pipe()
+            process.standardOutput = stdout
+            process.standardError = stderr
 
             do {
                 try process.run()
             } catch {
-                continuation.resume(returning: false)
+                continuation.resume(returning: .binaryNotFound)
                 return
             }
             process.terminationHandler = { proc in
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                let text = String(data: data, encoding: .utf8)?
+                let outData = stdout.fileHandleForReading.readDataToEndOfFile()
+                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+                let out = String(data: outData, encoding: .utf8)?
                     .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                continuation.resume(returning: proc.terminationStatus == 0 && !text.isEmpty)
+                let err = String(data: errData, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let combined = (out + " " + err).trimmingCharacters(in: .whitespacesAndNewlines)
+                let lower = combined.lowercased()
+
+                if proc.terminationStatus == 0, !out.isEmpty {
+                    continuation.resume(returning: .available)
+                } else if lower.contains("session limit"), let reset = Self.extractResetInfo(combined) {
+                    continuation.resume(returning: .rateLimited(resetInfo: reset))
+                } else if lower.contains("rate limit") || lower.contains("usage limit") {
+                    continuation.resume(returning: .rateLimited(resetInfo: Self.extractResetInfo(combined) ?? "później"))
+                } else if lower.contains("not logged in") || lower.contains("please run") || lower.contains("/login") {
+                    continuation.resume(returning: .notLoggedIn)
+                } else {
+                    continuation.resume(returning: .notLoggedIn)
+                }
             }
         }
     }
+
+    /// Extracts "resets 11:30pm (Europe/Berlin)" style text from Anthropic
+    /// limit messages. Returns nil if no recognizable reset phrase is found.
+    private static func extractResetInfo(_ text: String) -> String? {
+        let pattern = #"resets?\s+(.+?)(?:\.|$)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: text, options: [], range: NSRange(text.startIndex..., in: text))
+        else { return nil }
+        let range = match.range(at: 1)
+        guard let swiftRange = Range(range, in: text) else { return nil }
+        return String(text[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Models offered in the chat picker. Haiku is intentionally excluded —
+    /// it is outdated for this use case.
+    static let pickerModels: [ClaudeModel] = [.sonnet, .opus]
 
     /// Strips inherited `ANTHROPIC_*` env vars that would break subscription
     /// auth (they redirect the CLI at the API-key path, which is blocked for
@@ -174,30 +289,20 @@ struct ClaudeCodeService: Sendable {
         resumeSessionID: String? = nil
     ) -> AsyncThrowingStream<Delta, Error> {
         AsyncThrowingStream { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            guard let claudePath = Self.resolvedBinaryPath() else {
+                continuation.finish(throwing: ClaudeCodeError.binaryNotFound)
+                return
+            }
 
-            // Locate `claude` once via login shell, then invoke it directly
-            // with an argument array (not a second shell layer) so the
-            // prompt never passes through shell string parsing at all.
-            var claudeArgs = [
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: claudePath)
+            process.arguments = [
                 "-p", prompt,
                 "--model", model.rawValue,
                 "--output-format", "stream-json",
                 "--include-partial-messages",
                 "--verbose",
-            ]
-            if let resumeSessionID {
-                claudeArgs += ["--resume", resumeSessionID]
-            }
-
-            // We still need a login shell to resolve PATH for `claude` itself
-            // (AgentManager pattern), but the prompt/model/session-id are
-            // passed as a literal argv array to the child `claude` process via
-            // `env -- claude <args...>`, executed FROM the login shell's
-            // resolved PATH — so `-l -c` only ever sees the fixed string
-            // "exec claude \"$@\"" and never re-parses user content.
-            process.arguments = ["-l", "-c", "exec claude \"$@\"", "--", ] + claudeArgs
+            ] + (resumeSessionID.map { ["--resume", $0] } ?? [])
             process.environment = Self.sanitizedEnvironment()
 
             let stdout = Pipe()
