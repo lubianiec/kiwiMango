@@ -87,6 +87,10 @@ final class ChatState {
     /// instead of e.g. "animate whenever this view appears".
     var lastAnimatedMessageID: UUID?
 
+    /// Bumped every time an error bubble (`⚠️`) is created — `ChatView` watches
+    /// this to trigger a brief chromatic-glitch flash over the transcript.
+    var glitchTrigger: Int = 0
+
     /// All saved conversations, newest-updated first — backs the sidebar list.
     var conversations: [Conversation] = []
 
@@ -723,6 +727,7 @@ final class ChatState {
         } else {
             messages[index].content += "\n\n" + text
         }
+        glitchTrigger += 1
     }
 }
 

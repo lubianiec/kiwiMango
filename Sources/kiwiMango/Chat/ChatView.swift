@@ -2,6 +2,29 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - GlitchOverlay
+
+/// Applies `chromaticGlitch` only while `amount > 0`. A `layerEffect` that's
+/// merely `isEnabled: false` at rest is not equivalent to not attaching it —
+/// verified empirically that the disabled-but-attached form blanks the whole
+/// transcript subtree instead of passing content through (see F9.4 note at
+/// the transcript's `.modifier` call site).
+private struct GlitchOverlay: ViewModifier {
+    let amount: CGFloat
+    let time: Double
+
+    func body(content: Content) -> some View {
+        if amount > 0 {
+            content.layerEffect(
+                kiwiShaders.chromaticGlitch(.float(amount), .float(time)),
+                maxSampleOffset: CGSize(width: 30, height: 0)
+            )
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - ChatView
 
 /// Main (and only) window content. Transcript + floating glass composer.
@@ -20,6 +43,8 @@ struct ChatView: View {
     @AppStorage("ttsEnabled") private var ttsEnabled = false
     @State private var voiceLoop: VoiceLoopController?
     @State private var voiceListenPulse = false
+    @State private var glitchAmount: CGFloat = 0
+    @State private var glitchTime: Double = 0
     @FocusState private var composerFocused: Bool
 
     private static let bottomAnchor = "transcript-bottom"
@@ -192,6 +217,19 @@ struct ChatView: View {
         // correct, but the scroll content never redraws until something else
         // (e.g. a window resize) forces a relayout.
         .id(chatState.currentConversationID)
+        // NOT `.layerEffect(..., isEnabled: glitchAmount > 0)` — on this SwiftUI/
+        // Metal build, a `layerEffect` with `isEnabled: false` still blanks the
+        // whole subtree instead of passing content through untouched (verified:
+        // even loaded history rendered empty while this was attached at rest).
+        // Only ever attach the modifier while the glitch is actually running.
+        .modifier(GlitchOverlay(amount: glitchAmount, time: glitchTime))
+        .onChange(of: chatState.glitchTrigger) {
+            glitchTime = Date.timeIntervalSinceReferenceDate
+            glitchAmount = 1
+            withAnimation(.easeOut(duration: 0.4)) {
+                glitchAmount = 0
+            }
+        }
     }
 
     // MARK: - Persona picker
