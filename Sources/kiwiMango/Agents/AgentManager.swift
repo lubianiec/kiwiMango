@@ -52,6 +52,10 @@ final class AgentSession: Identifiable {
     let startedAt = Date()
     var status: Status = .running
 
+    /// Guards against saving the same session to `agentSession` twice (Fala 13) —
+    /// `archive(_:)` can be reached from `markFinished`, `close`, or `killAll`.
+    var archived = false
+
     /// "namespace/model:tag" → "model:tag" — prefiks namespace
     /// tylko zaśmieca wąski sidebar.
     var shortModel: String { model.split(separator: "/").last.map(String.init) ?? model }
@@ -98,6 +102,9 @@ final class AgentManager: NSObject {
         let terminal = LocalProcessTerminalView(frame: .zero)
         terminal.applyKiwiMangoTheme()
         terminal.processDelegate = terminationRelay
+        // Default scrollback is only 500 lines (SwiftTerm TerminalOptions) — bump
+        // it once up front so `dumpTranscript` has up to 2000 lines to work with.
+        terminal.getTerminal().changeScrollback(2000)
 
         let session = AgentSession(kind: kind, model: model, isCloud: isCloud, workDir: workDir, terminal: terminal)
         sessions.append(session)
@@ -123,6 +130,10 @@ final class AgentManager: NSObject {
     }
 
     func close(_ session: AgentSession) {
+        // Dump BEFORE terminate — the buffer is still alive; terminate() tears
+        // down the process and can leave the view in a state that's too late
+        // to read reliably.
+        archive(session)
         if session.status == .running {
             session.terminal.terminate()
         }
@@ -130,9 +141,11 @@ final class AgentManager: NSObject {
     }
 
     /// Kills every child process. Called on app termination so quitting never
-    /// leaves `ollama`/`claude` zombies behind (PLAN.md pitfall #3).
+    /// leaves `ollama`/`claude` zombies behind (PLAN.md pitfall #3) — also a
+    /// best-effort synchronous archive of every still-live session (F13.2).
     func killAll() {
         for session in sessions where session.status == .running {
+            archive(session)
             session.terminal.terminate()
         }
         sessions.removeAll()
@@ -141,6 +154,61 @@ final class AgentManager: NSObject {
     fileprivate func markFinished(_ terminal: TerminalView) {
         guard let session = sessions.first(where: { $0.terminal === terminal }) else { return }
         session.status = .finished
+        // The process died on its own (not via `close`) — archive right away,
+        // don't wait for the user to dismiss the row.
+        archive(session)
+    }
+
+    /// One private point of entry to `agentSession` — called from `markFinished`,
+    /// `close`, and `killAll`. Guards against double-saving the same session
+    /// and skips test-run noise (<60s, no real content).
+    private func archive(_ session: AgentSession) {
+        guard !session.archived else { return }
+        let transcript = Self.dumpTranscript(of: session)
+        let duration = Date().timeIntervalSince(session.startedAt)
+        guard duration >= 60, !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            session.archived = true
+            return
+        }
+        session.archived = true
+        do {
+            try DatabaseManager.shared.saveAgentSession(
+                kind: session.kind.rawValue,
+                model: session.model,
+                isCloud: session.isCloud,
+                workDir: session.workDir.path,
+                startedAt: session.startedAt,
+                endedAt: Date(),
+                transcript: transcript
+            )
+        } catch {
+            print("[AgentManager] failed to archive session \(session.id): \(error)")
+        }
+    }
+
+    /// Reads the terminal's scrollback into a plain string, truncated to the
+    /// last 2000 lines (PLAN.md F13.0). Full-screen TUIs (Claude Code with its
+    /// "fullscreen renderer") switch to the alt buffer, which SwiftTerm never
+    /// gives scrollback to — if the normal buffer comes back too short, we fall
+    /// back to whatever's on the alt buffer's current screen and say so.
+    static func dumpTranscript(of session: AgentSession) -> String {
+        let terminal = session.terminal.getTerminal()
+        var text = String(data: terminal.getBufferAsData(kind: .normal), encoding: .utf8) ?? ""
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        let trimmedCount = lines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.count
+
+        var header = ""
+        if trimmedCount < 5 {
+            text = String(data: terminal.getBufferAsData(kind: .active), encoding: .utf8) ?? text
+            lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+            header = "> sesja pełnoekranowa — transkrypt może obejmować tylko ostatni ekran\n"
+        }
+
+        if lines.count > 2000 {
+            lines = Array(lines.suffix(2000))
+            header += "> ucięto do ostatnich 2000 linii\n"
+        }
+        return header + lines.joined(separator: "\n")
     }
 }
 
