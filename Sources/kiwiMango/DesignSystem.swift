@@ -210,6 +210,47 @@ extension View {
     }
 }
 
+// MARK: - Hover comet (F15.4)
+
+/// A little comet with a tail that circles a pill's outline, only while
+/// hovering. Reward for aiming at the sidebar's 4 action buttons, not a
+/// permanent decoration — `paused: !active` means it costs nothing at rest,
+/// and it never uses `layerEffect`/`realBloom` (chasing the mouse across 4
+/// buttons quickly would make a sampled bloom flicker).
+struct NeonComet: View {
+    let active: Bool
+    let cometColor: Color
+    let cornerRadius: CGFloat
+
+    @State private var opacity: Double = 0
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !active)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let head = (t / 1.2).truncatingRemainder(dividingBy: 1)
+            ZStack {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .trim(from: max(0, head - 0.14), to: head)
+                    .stroke(
+                        AngularGradient(colors: [.clear, cometColor], center: .center),
+                        style: StrokeStyle(lineWidth: 1.5, lineCap: .round)
+                    )
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .trim(from: max(0, head - 0.02), to: head)
+                    .stroke(cometColor, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                    .shadow(color: cometColor.opacity(0.6), radius: 3)
+            }
+        }
+        .opacity(opacity)
+        .allowsHitTesting(false)
+        .onChange(of: active) { _, isActive in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                opacity = isActive ? 1 : 0
+            }
+        }
+    }
+}
+
 /// Generalized chamfered-corner panel shape — pick which corners get cut and by
 /// how much. `UserBubbleShape`/`AssistantBubbleShape` predate this and stay as-is
 /// (single fixed corner each); this is for new panels that need it configurable.

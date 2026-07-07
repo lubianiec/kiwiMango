@@ -153,9 +153,10 @@ struct RootView: View {
 
             ScrollView {
                 VStack(spacing: 0) {
-                    // Four destinations, one style, stacked — nothing else competes for
-                    // attention at the top of the sidebar.
-                    SidebarActionButton(title: "+ NOWA_ROZMOWA", color: .kiwiMangoAccent) {
+                    // Hierarchy of intent (F15.2): NOWA ROZMOWA is the one filled
+                    // primary action; NOWY AGENT is a secondary outline; ARENA/POKÓJ
+                    // share a row as smaller, quieter half-width buttons.
+                    PrimarySidebarButton(title: "+ NOWA ROZMOWA") {
                         Task {
                             await chatState.startNewConversation()
                             selection = nil
@@ -164,7 +165,7 @@ struct RootView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 6)
 
-                    SidebarActionButton(title: "+ NOWY_AGENT", color: .kiwiMangoAccent) {
+                    SecondarySidebarButton(title: "+ NOWY AGENT") {
                         showingNewAgentPopover = true
                     }
                     .padding(.horizontal, 12)
@@ -177,14 +178,13 @@ struct RootView: View {
                         }
                     }
 
-                    SidebarActionButton(title: "ARENA", color: .kiwiMangoAccent, isActive: selection == .arena) {
-                        selection = .arena
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
-
-                    SidebarActionButton(title: "POKÓJ", color: .kiwiMangoAccent, isActive: selection == .room) {
-                        selection = .room
+                    HStack(spacing: 6) {
+                        LabSidebarButton(title: "ARENA", isActive: selection == .arena) {
+                            selection = .arena
+                        }
+                        LabSidebarButton(title: "POKÓJ", isActive: selection == .room) {
+                            selection = .room
+                        }
                     }
                     .padding(.horizontal, 12)
                     .padding(.bottom, 14)
@@ -242,19 +242,16 @@ struct RootView: View {
                     }
                 }
             }
-
-            Divider().overlay(Color.white.opacity(0.08))
-
-            SidebarActionButton(title: "MODELE_OLLAMA", color: .kiwiMangoAccent) {
-                showingModelManager = true
-            }
-            .padding(12)
         }
         .frame(maxHeight: .infinity)
-        // Same base tone as the chat's own background (`kiwiMangoNoirBackground`)
-        // instead of the lighter `kiwiMangoChrome` — no seam between the two
-        // columns, so the old accent-purple divider line is gone too.
-        .background(Color.kiwiMangoBackground)
+        // F15.2: sidebar is its own (lighter) surface again, separated from the
+        // chat by a plain graphite hairline — not the old purple neon divider.
+        .background(Color.kiwiMangoChrome)
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(width: 1)
+        }
         .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 340)
         .toolbar(removing: .sidebarToggle)
     }
@@ -373,34 +370,91 @@ struct RootView: View {
     }
 }
 
-// MARK: - SidebarActionButton
+// MARK: - Sidebar action buttons (F15.2 hierarchy)
 
-/// The ONE button style for every sidebar action that goes somewhere —
-/// new conversation, new agent, Arena, Room, model manager. Same shape,
-/// same font, same padding everywhere; only the accent color and the
-/// (optional) active fill differ. History entries (`ConversationRow`,
-/// `AgentRow`) are a different, deliberately distinct style — this one is
-/// never used for a list of past items, only for "go here" actions.
-private struct SidebarActionButton: View {
+/// Shared with the F15.4 hover-comet — the comet's `trim` must ride the exact
+/// same corner radius as the pill it circles, or it looks "detached" at the
+/// corners. One constant, not two numbers repeated in two files.
+let sidebarActionCornerRadius: CGFloat = 3
+
+/// The ONE primary action of the sidebar: filled accent background, dark text.
+/// Only "+ NOWA ROZMOWA" uses this — there must be exactly one thing that
+/// looks like the obvious next click.
+private struct PrimarySidebarButton: View {
     let title: String
-    var color: Color = .kiwiMangoAccent
-    var isActive: Bool = false
     let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             Text(title)
                 .font(KiwiMangoFont.mono(11.5, weight: .bold))
-                .foregroundStyle(isActive ? Color.kiwiMangoAccentText : color)
+                .foregroundStyle(Color.kiwiMangoAccentText)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background(Color.kiwiMangoAccent, in: RoundedRectangle(cornerRadius: sidebarActionCornerRadius))
+        }
+        .buttonStyle(.plain)
+        .overlay(NeonComet(active: hovering, cometColor: .kiwiMangoPurple, cornerRadius: sidebarActionCornerRadius))
+        .onHover { hovering = $0 }
+        .onDisappear { hovering = false }
+    }
+}
+
+/// Secondary action ("+ NOWY AGENT"): outline only, no fill — one step down
+/// from the primary button in visual weight.
+private struct SecondarySidebarButton: View {
+    let title: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(KiwiMangoFont.mono(11.5, weight: .semibold))
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
-                .background(
-                    isActive ? color : Color.white.opacity(0.03),
-                    in: RoundedRectangle(cornerRadius: 3)
+                .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: sidebarActionCornerRadius))
+                .overlay(
+                    RoundedRectangle(cornerRadius: sidebarActionCornerRadius)
+                        .strokeBorder(Color(hex: "4E5563"), lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
-        .neonBorder(color, cornerRadius: 3, active: isActive)
+        .overlay(NeonComet(active: hovering, cometColor: .kiwiMangoAccent, cornerRadius: sidebarActionCornerRadius))
+        .onHover { hovering = $0 }
+        .onDisappear { hovering = false }
+    }
+}
+
+/// Lab entries (ARENA / POKÓJ): half-width, smaller font, quietest of the four.
+private struct LabSidebarButton: View {
+    let title: String
+    var isActive: Bool = false
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(KiwiMangoFont.mono(10.5, weight: .semibold))
+                .foregroundStyle(isActive ? Color.kiwiMangoAccentText : Color.kiwiMangoTextPrimary.opacity(0.72))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(
+                    isActive ? Color.kiwiMangoAccent : Color.white.opacity(0.03),
+                    in: RoundedRectangle(cornerRadius: sidebarActionCornerRadius)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: sidebarActionCornerRadius)
+                        .strokeBorder(isActive ? Color.clear : Color(hex: "3A3F4C"), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .overlay(NeonComet(active: hovering, cometColor: isActive ? .kiwiMangoPurple : .kiwiMangoAccent, cornerRadius: sidebarActionCornerRadius))
+        .onHover { hovering = $0 }
+        .onDisappear { hovering = false }
     }
 }
 
