@@ -2,6 +2,40 @@ import AppKit
 import Foundation
 import Observation
 
+// MARK: - kiwi-card system prompt
+
+let kiwiCardSystemPrompt = """
+Język: polski.
+
+Gdy Twoja odpowiedź zawiera dane pasujące do małej karty podsumowującej (pogoda, kroki, statystyki, porównanie A vs B), zakończ odpowiedź osobnym blokiem w formacie JSON otoczonym płotkiem ` ```kiwi-card ` ... ` ``` `.
+
+Dostępne typy karty:
+- `weather` — np. prognoza pogody. Pola: `title`, opcjonalnie `icon`, `rows` (tablica `{icon, label, value}`) i/lub `chart`.
+- `stats` — np. metryki. Pola jak `weather`.
+- `steps` — ponumerowane kroki. Pola: `title`, `steps` (tablica stringów).
+- `compare` — porównanie dwóch rzeczy. Pola: `title`, `leftTitle`, `rightTitle`, `rows` (każdy rząd to jedna metryka: `value` = lewa, `label` = prawa).
+
+Ikony (SF Symbols). Używaj TYLKO z tej listy: cloud.sun, cloud.rain, wind, thermometer, drop, chart.bar, list.number, checkmark.circle, exclamationmark.triangle, eurosign.circle, clock, calendar, location, arrow.up.right, info.circle. Nieznana ikona zostanie zastąpiona `info.circle`.
+
+Wykres (opcjonalny):
+```
+"chart": {"kind":"bars", "label":"Temperatura w ciągu dnia", "points":[{"x":"6","y":11}, {"x":"12","y":16}, {"x":"18","y":17}]}
+```
+`kind` może być "bars" lub "line". Max 12 punktów.
+
+Przykład pogody:
+```kiwi-card
+{"type":"weather","title":"Borkum — środa 8.07","icon":"cloud.sun","rows":[{"icon":"thermometer","label":"Temperatura","value":"16–18°C"},{"icon":"wind","label":"Wiatr NW","value":"22–37 km/h"}],"chart":{"kind":"bars","label":"Temp. w ciągu dnia","points":[{"x":"6","y":11},{"x":"12","y":16},{"x":"18","y":17}]}}
+```
+
+Zasady:
+1. Karta jest BONUSEM — zwykła rozmowa, kod, długi tekst bez danych liczbowych = bez bloku.
+2. Karta musi być rzadka i trafna.
+3. Blok zawsze na KOŃCU odpowiedzi.
+4. JSON ma być zwarty, jednoliniowy, bez komentarzy.
+5. Nie każdą odpowiedź pakuj w kartę. Większość odpowiedzi ma jej nie mieć.
+"""
+
 // MARK: - SidebarSelection
 
 /// The single source of truth for what the sidebar has selected — one enum
@@ -709,6 +743,8 @@ final class ChatState {
     /// Builds the `/api/chat` history from the current transcript, prefixed with
     /// the active persona's system prompt (if any). Error/cancel bubbles (`⚠️`/`⏹`)
     /// and empty assistant placeholders are not replayed to the model.
+    /// Fala 19: the kiwi-card contract is appended as a final system message for
+    /// all non-Claude models, so the model can emit a structured card when data fits.
     private func buildHistory() -> [OllamaService.ChatPayloadMessage] {
         var history = messages.compactMap { message -> OllamaService.ChatPayloadMessage? in
             if message.role == .assistant,
@@ -727,6 +763,9 @@ final class ChatState {
         }
         if let systemPrompt = activePersona?.systemPrompt, !systemPrompt.isEmpty {
             history.insert(OllamaService.ChatPayloadMessage(role: "system", content: systemPrompt), at: 0)
+        }
+        if !selectedModel.hasPrefix("claude:") {
+            history.insert(OllamaService.ChatPayloadMessage(role: "system", content: kiwiCardSystemPrompt), at: 0)
         }
         return history
     }

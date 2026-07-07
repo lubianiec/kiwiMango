@@ -841,6 +841,12 @@ private struct MessageBubble: View {
 
     private var isUser: Bool { message.role == .user }
 
+    private var cardAndText: (card: KiwiCard?, text: String) {
+        KiwiCardParser.extract(from: message.content)
+    }
+    private var card: KiwiCard? { cardAndText.card }
+    private var renderedText: String { cardAndText.text }
+
     var body: some View {
         HStack(spacing: 0) {
             if isUser { Spacer(minLength: 48) }
@@ -859,41 +865,47 @@ private struct MessageBubble: View {
                     }
                 }
                 if !message.content.isEmpty {
-                    if isUser {
-                        Text(message.content)
-                            .font(KiwiMangoFont.sans(13, weight: .medium))
-                            .foregroundStyle(Color.kiwiMangoTextPrimary)
-                            .textSelection(.enabled)
+                    VStack(alignment: isUser ? .trailing : .leading, spacing: 10) {
+                        if !isUser, let card {
+                            KiwiCardView(card: card)
+                                .frame(maxWidth: 420, alignment: .leading)
+                        }
+                        if isUser {
+                            Text(renderedText)
+                                .font(KiwiMangoFont.sans(13, weight: .medium))
+                                .foregroundStyle(Color.kiwiMangoTextPrimary)
+                                .textSelection(.enabled)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Color.kiwiMangoPurple.opacity(0.10), in: UserBubbleShape())
+                                .overlay(
+                                    UserBubbleShape()
+                                        .stroke(Color.kiwiMangoPurple.opacity(0.65), lineWidth: 1)
+                                )
+                                .shadow(color: Color.kiwiMangoPurple.opacity(0.3), radius: 8)
+                                .modifier(HoloTilt(isActive: !isStreamingReply))
+                        } else {
+                            HStack(alignment: .bottom, spacing: 0) {
+                                MarkdownText(content: renderedText)
+                                if isStreamingReply {
+                                    Text("▌")
+                                        .font(KiwiMangoFont.mono(13))
+                                        .foregroundStyle(Color.kiwiMangoAccent)
+                                        .opacity(cursorVisible ? 1 : 0)
+                                        .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: cursorVisible)
+                                        .onAppear { cursorVisible = false }
+                                }
+                            }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(Color.kiwiMangoPurple.opacity(0.10), in: UserBubbleShape())
+                            .background(Color.kiwiMangoAccent.opacity(0.05), in: AssistantBubbleShape())
                             .overlay(
-                                UserBubbleShape()
-                                    .stroke(Color.kiwiMangoPurple.opacity(0.65), lineWidth: 1)
+                                AssistantBubbleShape()
+                                    .stroke(Color.kiwiMangoAccent.opacity(0.45), lineWidth: 1)
                             )
-                            .shadow(color: Color.kiwiMangoPurple.opacity(0.3), radius: 8)
+                            .shadow(color: Color.kiwiMangoAccent.opacity(0.18), radius: 8)
                             .modifier(HoloTilt(isActive: !isStreamingReply))
-                    } else {
-                        HStack(alignment: .bottom, spacing: 0) {
-                            MarkdownText(content: message.content)
-                            if isStreamingReply {
-                                Text("▌")
-                                    .font(KiwiMangoFont.mono(13))
-                                    .foregroundStyle(Color.kiwiMangoAccent)
-                                    .opacity(cursorVisible ? 1 : 0)
-                                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: cursorVisible)
-                                    .onAppear { cursorVisible = false }
-                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(Color.kiwiMangoAccent.opacity(0.05), in: AssistantBubbleShape())
-                        .overlay(
-                            AssistantBubbleShape()
-                                .stroke(Color.kiwiMangoAccent.opacity(0.45), lineWidth: 1)
-                        )
-                        .shadow(color: Color.kiwiMangoAccent.opacity(0.18), radius: 8)
-                        .modifier(HoloTilt(isActive: !isStreamingReply))
                     }
                 }
                 if let statsLine = message.statsLine {
