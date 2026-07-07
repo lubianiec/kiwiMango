@@ -592,7 +592,7 @@ final class ChatState {
                 Odpowiadaj na podstawie powyższej treści. Jeśli nie wystarcza — powiedz to wprost.
                 """
             } else {
-                let query = String(userText.prefix(400))
+                guard let query = await generateSearchQuery(from: userText) else { return history }
                 let results = try await service.webSearch(query: query, maxResults: 4)
                 guard !results.isEmpty else { return history }
                 var combined = "[WYNIKI WYSZUKIWANIA — \(Self.exportDateFormatter.string(from: Date()))]\n"
@@ -613,6 +613,44 @@ final class ChatState {
             webSearchWarning = "web niedostępny, odpowiadam bez sieci"
         }
         return history
+    }
+
+    /// Turns the raw user message into one short, date-resolved search query
+    /// using the active model. Raw text as a query sent literal phrases like
+    /// "masz dostęp do internetu, w czym masz problem?" to the search engine
+    /// and got horoscopes back; "jutro" matched calendar pages instead of a
+    /// forecast. Returns nil when the message needs no web at all (follow-up,
+    /// complaint) — then nothing is injected. On model failure falls back to
+    /// the raw text so a broken query generator never disables web search.
+    private func generateSearchQuery(from userText: String) async -> String? {
+        let today = Self.exportDateFormatter.string(from: Date())
+        let prompt = """
+        Dziś jest \(today). Zamień poniższą wiadomość użytkownika na JEDNO krótkie \
+        zapytanie do wyszukiwarki internetowej (max 10 słów, bez cudzysłowów, bez \
+        komentarza). Słowa "dziś"/"jutro"/"wczoraj" zamień na konkretne daty. \
+        Jeśli wiadomość nie wymaga szukania w internecie (komentarz, pretensja, \
+        kontynuacja rozmowy bez nowego tematu), odpowiedz dokładnie: SKIP
+
+        Wiadomość: \(userText.prefix(400))
+        """
+        var reply = ""
+        do {
+            for try await delta in service.streamChat(
+                model: selectedModel,
+                messages: [OllamaService.ChatPayloadMessage(role: "user", content: prompt)],
+                think: false
+            ) {
+                if case .content(let text) = delta { reply += text }
+            }
+        } catch {
+            return String(userText.prefix(400))
+        }
+        let line = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines).first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if line.isEmpty { return String(userText.prefix(400)) }
+        if line.uppercased().contains("SKIP") { return nil }
+        return String(line.prefix(120))
     }
 
     /// Drops the last assistant reply (transcript + DB) and streams a fresh one
