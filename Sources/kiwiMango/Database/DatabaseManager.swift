@@ -187,6 +187,47 @@ extension ArenaVote: FetchableRecord, MutablePersistableRecord {
     }
 }
 
+// MARK: - SavedPrompt (Fala 11)
+
+/// One entry in the private prompt vault — image prompts, personas, drafts,
+/// anything Paweł wants to keep. Deliberately separate from `Snippet` (the
+/// `/` composer shortcuts, F2.6) — different feature, do not merge.
+struct SavedPrompt: Identifiable, Hashable, Codable {
+    var id: Int64
+    var title: String
+    var content: String
+    var category: String
+    var createdAt: Date
+    var lastUsedAt: Date
+}
+
+extension SavedPrompt: FetchableRecord, MutablePersistableRecord {
+    static let databaseTableName = "savedPrompt"
+
+    init(pendingTitle title: String, content: String, category: String, now: Date) {
+        self.id = 0
+        self.title = title
+        self.content = content
+        self.category = category
+        self.createdAt = now
+        self.lastUsedAt = now
+    }
+
+    /// See `Conversation.encode(to:)` — same id=0 placeholder pattern.
+    func encode(to container: inout PersistenceContainer) {
+        if id != 0 { container["id"] = id }
+        container["title"] = title
+        container["content"] = content
+        container["category"] = category
+        container["createdAt"] = createdAt
+        container["lastUsedAt"] = lastUsedAt
+    }
+
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
 // MARK: - AgentSessionRecord (Fala 13)
 
 /// A finished agent terminal session, archived to survive app restart.
@@ -387,6 +428,42 @@ final class DatabaseManager: Sendable {
                 t.column("model", .text).notNull()
                 t.column("prompt", .text).notNull()
                 t.column("votedAt", .datetime).notNull()
+            }
+        }
+
+        migrator.registerMigration("addSavedPrompt") { db in
+            try db.create(table: "savedPrompt") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("title", .text).notNull()
+                t.column("content", .text).notNull()
+                t.column("category", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("lastUsedAt", .datetime).notNull()
+            }
+
+            let now = Date()
+            let seeds: [(String, String, String)] = [
+                (
+                    "Prompt SD — portret cyberpunk",
+                    "cyberpunk portrait, neon rim light, rain-soaked street, cinematic, highly detailed, 85mm",
+                    "OBRAZY"
+                ),
+                (
+                    "Persona — brutalnie szczery recenzent",
+                    "Jesteś bezlitosnym, ale rzeczowym recenzentem. Wytykasz słabe punkty wprost, bez owijania w bawełnę, ale zawsze uzasadniasz.",
+                    "ROLE"
+                ),
+                (
+                    "Szkic maila do klienta",
+                    "Krótko, konkretnie, bez lania wody: co zrobiono, co dalej, jaki termin.",
+                    "INNE"
+                ),
+            ]
+            for seed in seeds {
+                var prompt = SavedPrompt(
+                    pendingTitle: seed.0, content: seed.1, category: seed.2, now: now
+                )
+                try prompt.insert(db)
             }
         }
 
@@ -666,6 +743,41 @@ final class DatabaseManager: Sendable {
     func deleteAgentSession(_ id: Int64) throws {
         _ = try dbQueue.write { db in
             try AgentSessionRecord.deleteOne(db, key: id)
+        }
+    }
+
+    // MARK: - Saved prompts (Fala 11)
+
+    func fetchSavedPrompts() throws -> [SavedPrompt] {
+        try dbQueue.read { db in
+            try SavedPrompt.order(Column("lastUsedAt").desc).fetchAll(db)
+        }
+    }
+
+    /// Inserts a new prompt (id == 0) or updates an existing one in place —
+    /// same convention as `savePersona`/`saveSnippet`.
+    @discardableResult
+    func saveSavedPrompt(_ prompt: SavedPrompt) throws -> SavedPrompt {
+        try dbQueue.write { db in
+            var prompt = prompt
+            if prompt.id == 0 {
+                try prompt.insert(db)
+            } else {
+                try prompt.update(db)
+            }
+            return prompt
+        }
+    }
+
+    func touchSavedPromptUsage(_ id: Int64) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE savedPrompt SET lastUsedAt = ? WHERE id = ?", arguments: [Date(), id])
+        }
+    }
+
+    func deleteSavedPrompt(_ id: Int64) throws {
+        _ = try dbQueue.write { db in
+            try SavedPrompt.deleteOne(db, key: id)
         }
     }
 }
