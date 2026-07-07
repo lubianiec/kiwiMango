@@ -238,6 +238,7 @@ final class ChatState {
     /// that reply on the floor instead of saving it.
     func startNewConversation() async {
         await cancelAndWait()
+        requestTLDRForCurrentConversation()
         currentConversationID = nil
         messages = []
         lastAnimatedMessageID = nil
@@ -248,6 +249,7 @@ final class ChatState {
     func selectConversation(_ id: Int64) async {
         guard id != currentConversationID else { return }
         await cancelAndWait()
+        requestTLDRForCurrentConversation()
         currentConversationID = id
         lastAnimatedMessageID = nil
         do {
@@ -489,6 +491,15 @@ final class ChatState {
 
     /// Ensures a conversation row exists for the current thread, creating one
     /// titled from `firstUserText` (truncated) on first use.
+    /// Fala 12 (F12.4): fires whenever the user is about to leave the current
+    /// conversation (switch or start a new one) — the natural point to
+    /// backfill its TL;DR if the note is still waiting on one.
+    private func requestTLDRForCurrentConversation() {
+        guard let id = currentConversationID,
+              let title = conversations.first(where: { $0.id == id })?.title else { return }
+        ObsidianSyncService.generateTLDRIfNeeded(conversationId: id, title: title, model: selectedModel)
+    }
+
     private func ensureConversation(firstUserText: String) -> Int64 {
         if let id = currentConversationID { return id }
         let title = Self.title(from: firstUserText)
@@ -672,6 +683,7 @@ final class ChatState {
         let temperature = persona?.temperature
 
         streamTask = Task {
+            var succeeded = false
             do {
                 for try await delta in service.streamChat(
                     model: model, messages: history, think: think, temperature: temperature
@@ -688,6 +700,7 @@ final class ChatState {
                     markCancelled(assistantID)
                 } else {
                     feedSpeechIfEnabled(assistantID, isFinal: true)
+                    succeeded = true
                 }
             } catch is CancellationError {
                 markCancelled(assistantID)
@@ -701,6 +714,11 @@ final class ChatState {
             streamTask = nil
             if let final = messages.first(where: { $0.id == assistantID }) {
                 persist(final, conversationId: conversationId)
+            }
+            // Fala 12: only a real, completed reply is worth a note — not a
+            // cancelled or errored-out one.
+            if succeeded, let title = conversations.first(where: { $0.id == conversationId })?.title {
+                ObsidianSyncService.syncConversation(conversationId: conversationId, title: title, model: model)
             }
         }
         await streamTask?.value

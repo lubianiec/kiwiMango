@@ -171,6 +171,7 @@ final class AgentManager: NSObject {
             return
         }
         session.archived = true
+        let endedAt = Date()
         do {
             try DatabaseManager.shared.saveAgentSession(
                 kind: session.kind.rawValue,
@@ -178,12 +179,23 @@ final class AgentManager: NSObject {
                 isCloud: session.isCloud,
                 workDir: session.workDir.path,
                 startedAt: session.startedAt,
-                endedAt: Date(),
+                endedAt: endedAt,
                 transcript: transcript
             )
         } catch {
             print("[AgentManager] failed to archive session \(session.id): \(error)")
         }
+        // Fala 12 (F12.3): same transcript, same "≥60s and non-empty" bar
+        // already applied above — no need to re-check it here.
+        ObsidianSyncService.syncAgentSession(
+            kind: session.kind.rawValue,
+            model: session.model,
+            isCloud: session.isCloud,
+            workDir: session.workDir.path,
+            startedAt: session.startedAt,
+            endedAt: endedAt,
+            transcript: transcript
+        )
     }
 
     /// Reads the terminal's scrollback into a plain string, truncated to the

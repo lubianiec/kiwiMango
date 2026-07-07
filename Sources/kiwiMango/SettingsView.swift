@@ -8,6 +8,11 @@ struct SettingsView: View {
     @Environment(ChatState.self) private var chatState
 
     @AppStorage("ollamaHost") private var ollamaHost: String = "http://localhost:11434"
+    @AppStorage("obsidianLiveSync") private var obsidianLiveSync: Bool = true
+    @AppStorage("obsidianVaultPath") private var obsidianVaultPath: String = FileManager.default
+        .homeDirectoryForCurrentUser.appendingPathComponent("Kazik/ObsidianSync").path
+    @AppStorage("obsidianCategories") private var obsidianCategories: String =
+        "projekty, hydraulika, obrazy, muzyka, kod, inne"
 
     var body: some View {
         Form {
@@ -33,6 +38,21 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Obsidian (Fala 12)") {
+                Toggle("Zapisuj do Obsidiana na żywo", isOn: $obsidianLiveSync)
+                LabeledContent("Vault") {
+                    HStack {
+                        TextField("~/Kazik/ObsidianSync", text: $obsidianVaultPath)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Wybierz…") { pickVault() }
+                    }
+                }
+                LabeledContent("Kategorie") {
+                    TextField("projekty, hydraulika, obrazy, ...", text: $obsidianCategories)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+
             Section("Snippety") {
                 SnippetSettingsSection()
             }
@@ -40,6 +60,20 @@ struct SettingsView: View {
         .padding(20)
         .frame(width: 420)
         .task { await chatState.loadModels() }
+    }
+
+    private func pickVault() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.message = "Wybierz folder vaulta Obsidian"
+        panel.prompt = "Wybierz"
+        if !obsidianVaultPath.isEmpty {
+            panel.directoryURL = URL(fileURLWithPath: obsidianVaultPath)
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        obsidianVaultPath = url.path
     }
 }
 
