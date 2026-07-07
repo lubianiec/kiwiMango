@@ -35,6 +35,12 @@ struct ModelManagerView: View {
     @State private var importFileURL: URL?
     @State private var importName = ""
 
+    // MARK: F14.0 — web search key
+    @AppStorage("ollamaWebSearchKey") private var webSearchKey = ""
+    @State private var isTestingWebSearch = false
+    @State private var webSearchTestResult: Bool?
+    @State private var webSearchTestError: String?
+
     private let service = OllamaService()
 
     var body: some View {
@@ -43,6 +49,7 @@ struct ModelManagerView: View {
             header
             pullSection
             content
+            webSearchSection
         }
         .frame(minWidth: 460, minHeight: 480)
         .background(Color.kiwiMangoSurface)
@@ -155,6 +162,73 @@ struct ModelManagerView: View {
 
     private var totalSize: Int64 {
         models.filter { !$0.isCloud }.reduce(0) { $0 + $1.size }
+    }
+
+    // MARK: - F14.0 — Web search key
+
+    private var webSearchSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider().overlay(Color.white.opacity(0.1))
+
+            Text("WEB SEARCH")
+                .font(KiwiMangoFont.mono(10, weight: .semibold))
+                .tracking(1)
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
+                .padding(.top, 10)
+
+            Text("Klucz z ollama.com/settings/keys — daje modelom dostęp do świeżego internetu.")
+                .font(KiwiMangoFont.mono(10))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
+
+            HStack(spacing: 8) {
+                SecureField("", text: $webSearchKey, prompt: Text("klucz API").foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4)))
+                    .textFieldStyle(.plain)
+                    .font(KiwiMangoFont.mono(11.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(Color.kiwiMangoComposerBg)
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
+
+                Button("[TESTUJ]") { testWebSearch() }
+                    .buttonStyle(.plain)
+                    .font(KiwiMangoFont.mono(11, weight: .bold))
+                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .disabled(webSearchKey.trimmingCharacters(in: .whitespaces).isEmpty || isTestingWebSearch)
+
+                if isTestingWebSearch {
+                    ProgressView().controlSize(.small).tint(Color.kiwiMangoAccent)
+                } else if let result = webSearchTestResult {
+                    Text(result ? "✓" : "✗")
+                        .font(KiwiMangoFont.mono(14, weight: .bold))
+                        .foregroundStyle(result ? Color.kiwiMangoAccent : Color.kiwiMangoDanger)
+                }
+            }
+
+            if let webSearchTestError {
+                Text(webSearchTestError)
+                    .font(KiwiMangoFont.mono(10))
+                    .foregroundStyle(Color.kiwiMangoDanger)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+    }
+
+    private func testWebSearch() {
+        isTestingWebSearch = true
+        webSearchTestResult = nil
+        webSearchTestError = nil
+        Task {
+            do {
+                _ = try await service.webSearch(query: "test", maxResults: 1)
+                webSearchTestResult = true
+            } catch {
+                webSearchTestResult = false
+                webSearchTestError = error.localizedDescription
+            }
+            isTestingWebSearch = false
+        }
     }
 
     // MARK: - F10.1/F10.2 — Pull + import section
