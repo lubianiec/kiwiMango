@@ -12,10 +12,13 @@ enum AgentKind: String, CaseIterable, Identifiable {
     case claude
     case hermes
     case codex
+    /// Fala 17: bare `claude` interactive TUI via Claude Pro subscription —
+    /// NOT an `ollama launch` integration, spawned differently in `spawn()`.
+    case claudePro
 
     var id: String { rawValue }
 
-    /// Argument for `ollama launch <integration>`.
+    /// Argument for `ollama launch <integration>`. Not used by `.claudePro`.
     var integration: String { rawValue }
 
     var displayName: String {
@@ -23,6 +26,7 @@ enum AgentKind: String, CaseIterable, Identifiable {
         case .claude: "CLAUDE CODE"
         case .hermes: "HERMES"
         case .codex: "CODEX"
+        case .claudePro: "CLAUDE PRO"
         }
     }
 
@@ -32,6 +36,7 @@ enum AgentKind: String, CaseIterable, Identifiable {
         case .claude: "CLAUDE"
         case .hermes: "HERMES"
         case .codex: "CODEX"
+        case .claudePro: "PRO"
         }
     }
 }
@@ -117,7 +122,22 @@ final class AgentManager: NSObject {
 
         let escapedDir = workDir.path.replacingOccurrences(of: "'", with: "'\\''")
         let escapedModel = model.replacingOccurrences(of: "'", with: "'\\''")
-        let command = "cd '\(escapedDir)' && ollama launch \(kind.integration) --model '\(escapedModel)'"
+
+        let command: String
+        if kind == .claudePro {
+            // Claude Pro subscription — bare `claude` TUI, NOT `ollama launch`.
+            // Must never inherit API-key/base-URL env vars, or the CLI silently
+            // switches from subscription auth to (broken/ToS-violating) API auth.
+            let strippedKeys = [
+                "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDECODE",
+            ]
+            env.removeAll { entry in
+                strippedKeys.contains { entry.hasPrefix("\($0)=") }
+            }
+            command = "cd '\(escapedDir)' && claude --model '\(escapedModel)'"
+        } else {
+            command = "cd '\(escapedDir)' && ollama launch \(kind.integration) --model '\(escapedModel)'"
+        }
 
         terminal.startProcess(
             executable: "/bin/zsh",

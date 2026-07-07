@@ -253,9 +253,16 @@ struct NewAgentPopover: View {
         workDirPath.isEmpty ? "~/Kazik" : workDirPath
     }
 
+    /// `.claudePro` only shows up once `claude` is confirmed present + logged
+    /// in — hidden entirely rather than greyed out (no point advertising an
+    /// option that can't work yet).
+    private var visibleKinds: [AgentKind] {
+        AgentKind.allCases.filter { $0 != .claudePro || chatState.claudeAvailable }
+    }
+
     private var kindPicker: some View {
         HStack(spacing: 6) {
-            ForEach(AgentKind.allCases) { kind in
+            ForEach(visibleKinds) { kind in
                 Button {
                     lastKindRaw = kind.rawValue
                 } label: {
@@ -282,6 +289,43 @@ struct NewAgentPopover: View {
 
     @ViewBuilder
     private var modelList: some View {
+        if selectedKind == .claudePro {
+            claudeProModelList
+        } else {
+            ollamaModelList
+        }
+    }
+
+    /// Claude Pro doesn't pick from the Ollama model list — just Sonnet/Opus.
+    private var claudeProModelList: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            claudeProModelButton(id: "claude:sonnet", label: "Sonnet")
+            claudeProModelButton(id: "claude:opus", label: "Opus")
+        }
+    }
+
+    private func claudeProModelButton(id: String, label: String) -> some View {
+        Button {
+            let url = URL(fileURLWithPath: displayWorkDir)
+            lastWorkDirPath = displayWorkDir
+            let model = OllamaService.ModelInfo(name: id, capabilities: [], size: 0, isCloud: true)
+            onSpawn(selectedKind, model, url)
+        } label: {
+            Text(label)
+                .font(KiwiMangoFont.mono(11, weight: .medium))
+                .foregroundStyle(Color.kiwiMangoAccent)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .neonBorder(Color.kiwiMangoAccent, cornerRadius: 2)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(label)
+    }
+
+    @ViewBuilder
+    private var ollamaModelList: some View {
         let local = chatState.availableModels.filter { !$0.isCloud }
         let cloud = chatState.availableModels.filter(\.isCloud)
 
