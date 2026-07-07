@@ -99,6 +99,92 @@ struct AgentRow: View {
     }
 }
 
+// MARK: - AgentHistoryRow (Fala 13)
+
+/// One archived session row under the "HISTORIA" subheader — grey dot (never
+/// running, it's history), title + folder, relative date + duration.
+struct AgentHistoryRow: View {
+    let record: AgentSessionRecord
+    let isActive: Bool
+    let onDelete: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(isActive ? Color.kiwiMangoPurple : Color.clear)
+                .frame(width: 2)
+
+            HStack(spacing: 8) {
+                Text("●")
+                    .font(.system(size: 8))
+                    .foregroundStyle(Color.gray.opacity(0.6))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(kindLabel) · \(folderName)")
+                        .font(KiwiMangoFont.mono(11.5, weight: isActive ? .bold : .medium))
+                        .foregroundStyle(
+                            isActive ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.8)
+                        )
+                        .lineLimit(1)
+                    Text("\(relativeDate) · \(durationLabel)")
+                        .font(KiwiMangoFont.mono(9.5))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
+                }
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 8)
+            .padding(.vertical, 6)
+
+            Spacer(minLength: 0)
+
+            if isHovered {
+                Button(action: onDelete) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.kiwiMangoDanger)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 10)
+                .help("Usuń z historii")
+            }
+        }
+        .background(isHovered ? Color.white.opacity(0.04) : Color.clear)
+        .onHover { isHovered = $0 }
+    }
+
+    /// Falls back to the raw string if a future enum change makes `rawValue`
+    /// stop matching (PLAN.md F13.5 pitfall #4).
+    private var kindLabel: String {
+        AgentKind(rawValue: record.kind)?.shortName ?? record.kind
+    }
+
+    private var folderName: String {
+        URL(fileURLWithPath: record.workDir).lastPathComponent
+    }
+
+    private var durationLabel: String {
+        let minutes = max(1, Int(record.endedAt.timeIntervalSince(record.startedAt) / 60))
+        if minutes < 60 { return "\(minutes) min" }
+        return "\(minutes / 60) godz."
+    }
+
+    private var relativeDate: String {
+        let days = Calendar.current.dateComponents([.day], from: record.endedAt, to: Date()).day ?? 0
+        if days > 7 {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.locale = Locale(identifier: "pl_PL")
+            return formatter.string(from: record.endedAt)
+        }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "pl_PL")
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: record.endedAt, relativeTo: Date())
+    }
+}
+
 // MARK: - NewAgentPopover
 
 /// Popover opened from "+ NOWY_AGENT" (sidebar) or ⌘T: pick one of the
@@ -307,6 +393,113 @@ struct AgentDetailView: View {
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
                 .lineLimit(1)
                 .truncationMode(.head)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+        .background(Color.kiwiMangoChrome)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color.kiwiMangoAccent.opacity(0.15)).frame(height: 1)
+        }
+    }
+}
+
+// MARK: - AgentTranscriptView (F13.4)
+
+/// Read-only view of an archived session's transcript. No editing, no
+/// "resume" — the PTY is gone, and pretending otherwise would be dishonest
+/// (PLAN.md F13.4 pt. 3).
+struct AgentTranscriptView: View {
+    let record: AgentSessionRecord
+    @Environment(ChatState.self) private var chatState
+    @State private var toastMessage: String?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            ScrollView {
+                Text(record.transcript)
+                    .font(KiwiMangoFont.mono(11))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.85))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+            }
+            .background(Color(hex: "050507"))
+        }
+        .background(Color.kiwiMangoSurface)
+        .overlay(alignment: .bottom) {
+            if let toastMessage {
+                Text(toastMessage)
+                    .font(.callout)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Color.kiwiMangoChrome, in: Capsule())
+                    .padding(.bottom, 16)
+                    .task {
+                        try? await Task.sleep(for: .seconds(2.5))
+                        self.toastMessage = nil
+                    }
+            }
+        }
+    }
+
+    private var kindLabel: String {
+        AgentKind(rawValue: record.kind)?.displayName ?? record.kind
+    }
+
+    private var durationLabel: String {
+        let minutes = max(1, Int(record.endedAt.timeIntervalSince(record.startedAt) / 60))
+        if minutes < 60 { return "\(minutes) min" }
+        return "\(minutes / 60) godz. \(minutes % 60) min"
+    }
+
+    private var header: some View {
+        HStack {
+            Text("Agent: \(kindLabel)")
+                .font(KiwiMangoFont.mono(13, weight: .bold))
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
+
+            HStack(spacing: 4) {
+                Text("⊕ \(record.model)")
+                Text(record.isCloud ? "[Cloud]" : "[Local]")
+                    .foregroundStyle(Color.kiwiMangoPurple)
+            }
+            .font(KiwiMangoFont.mono(11, weight: .medium))
+            .foregroundStyle(Color.kiwiMangoAccent)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .neonBorder(Color.kiwiMangoAccent, cornerRadius: 4)
+
+            Text(record.workDir)
+                .font(KiwiMangoFont.mono(10))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
+                .lineLimit(1)
+                .truncationMode(.head)
+
+            Text("· \(durationLabel)")
+                .font(KiwiMangoFont.mono(10))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
+
+            Spacer()
+
+            Button("KOPIUJ CAŁOŚĆ") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(record.transcript, forType: .string)
+                toastMessage = "Skopiowano ✓"
+            }
+            .font(KiwiMangoFont.mono(10, weight: .semibold))
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.kiwiMangoAccent)
+
+            Button("→ OBSIDIAN") {
+                if chatState.sendAgentTranscriptToObsidian(title: "\(kindLabel) · \(URL(fileURLWithPath: record.workDir).lastPathComponent)", content: record.transcript) != nil {
+                    toastMessage = "Zapisano w Obsidian ✓"
+                }
+            }
+            .font(KiwiMangoFont.mono(10, weight: .semibold))
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.kiwiMangoPurple)
         }
         .padding(.horizontal, 16)
         .frame(height: 44)

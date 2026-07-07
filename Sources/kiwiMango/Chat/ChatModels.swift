@@ -14,6 +14,9 @@ enum SidebarSelection: Hashable {
     /// nothing to key by id; the view's state lives in `RootView` instead.
     case arena
     case room
+    /// A past (archived) agent session — Fala 13. Distinct from `.agent(UUID)`,
+    /// which is a live/running session keyed by `AgentSession.id`.
+    case agentHistory(Int64)
 }
 
 // MARK: - ChatMessage
@@ -324,6 +327,35 @@ final class ChatState {
             return url
         } catch {
             print("[KiwiMango] Failed to send message to Obsidian: \(error)")
+            return nil
+        }
+    }
+
+    /// An archived agent transcript, written to the Obsidian inbox — same
+    /// simple pattern as `sendMessageToObsidian` (Fala 12's dedicated
+    /// `AI/Agenci/` folder + full frontmatter lands with F12.3; until then
+    /// this is the one path from F13.4's "→ OBSIDIAN" button).
+    func sendAgentTranscriptToObsidian(title: String, content: String) -> URL? {
+        do {
+            let inbox = try Self.obsidianInbox()
+            let iso = ISO8601DateFormatter().string(from: Date())
+            let markdown = """
+            ---
+            source: kiwiMango
+            typ: agent
+            date: \(iso)
+            ---
+
+            # \(title)
+
+            \(content)
+
+            """
+            let url = Self.uniqueURL(in: inbox, base: Self.slug(from: title))
+            try markdown.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        } catch {
+            print("[KiwiMango] Failed to send agent transcript to Obsidian: \(error)")
             return nil
         }
     }

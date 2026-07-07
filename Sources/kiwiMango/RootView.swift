@@ -26,6 +26,9 @@ struct RootView: View {
     @State private var arenaState = ArenaState()
     @State private var roomState = RoomState()
 
+    /// Archived agent sessions (Fala 13) — up to 15 most recent, newest first.
+    @State private var agentHistory: [AgentSessionRecord] = []
+
     private let db = DatabaseManager.shared
 
     var body: some View {
@@ -49,7 +52,7 @@ struct RootView: View {
             switch newValue {
             case .conversation(let id):
                 Task { await chatState.selectConversation(id) }
-            case .agent, .arena, .room, nil:
+            case .agent, .arena, .room, .agentHistory, nil:
                 break
             }
         }
@@ -106,6 +109,12 @@ struct RootView: View {
                 BootSequenceView(onDone: { bootDone = true })
             }
         }
+        .task { refreshAgentHistory() }
+        .onChange(of: agentManager.sessions.count) { _, _ in refreshAgentHistory() }
+    }
+
+    private func refreshAgentHistory() {
+        agentHistory = (try? db.fetchAgentSessions(limit: 15)) ?? []
     }
 
     private var renameBinding: Binding<Bool> {
@@ -130,6 +139,12 @@ struct RootView: View {
             ArenaView(arena: arenaState)
         case .room:
             RoomView(room: roomState)
+        case .agentHistory(let id):
+            if let record = agentHistory.first(where: { $0.id == id }) {
+                AgentTranscriptView(record: record)
+            } else {
+                ChatView()
+            }
         case .conversation, nil:
             ChatView()
         }
@@ -238,7 +253,7 @@ struct RootView: View {
                         }
                     }
 
-                    if !agentManager.sessions.isEmpty {
+                    if !agentManager.sessions.isEmpty || !agentHistory.isEmpty {
                         Spacer(minLength: 0).frame(height: 16)
                         agentsSection
                     }
@@ -366,6 +381,33 @@ struct RootView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     selection = .agent(session.id)
+                }
+            }
+
+            if !agentHistory.isEmpty {
+                Text("HISTORIA")
+                    .font(KiwiMangoFont.mono(9, weight: .semibold))
+                    .tracking(1)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 10)
+                    .padding(.bottom, 4)
+
+                ForEach(agentHistory) { record in
+                    AgentHistoryRow(
+                        record: record,
+                        isActive: selection == .agentHistory(record.id),
+                        onDelete: {
+                            try? db.deleteAgentSession(record.id)
+                            refreshAgentHistory()
+                            if selection == .agentHistory(record.id) { selection = nil }
+                        }
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selection = .agentHistory(record.id)
+                    }
                 }
             }
         }
