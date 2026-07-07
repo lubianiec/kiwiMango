@@ -240,13 +240,6 @@ struct RootView: View {
                         Spacer(minLength: 0).frame(height: 16)
                         agentsSection
                     }
-
-                    Spacer(minLength: 0).frame(height: 16)
-
-                    sectionHeader("MODELE")
-                    modelsSection
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 10)
                 }
             }
 
@@ -320,40 +313,6 @@ struct RootView: View {
         .background(Color.kiwiMangoBackground)
     }
 
-    private var modelsSection: some View {
-        @Bindable var state = chatState
-        return VStack(alignment: .leading, spacing: 6) {
-            let local = chatState.availableModels.filter { !$0.isCloud }
-            let cloud = chatState.availableModels.filter(\.isCloud)
-
-            if !local.isEmpty {
-                modelSubsectionHeader("LOKALNE")
-                ForEach(local, id: \.name) { model in
-                    modelRow(model)
-                }
-            }
-            if !cloud.isEmpty {
-                modelSubsectionHeader("CLOUD")
-                ForEach(cloud, id: \.name) { model in
-                    modelRow(model)
-                }
-            }
-        }
-    }
-
-    private func modelSubsectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(KiwiMangoFont.mono(9, weight: .semibold))
-            .tracking(1)
-            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
-    }
-
-    private func modelRow(_ model: OllamaService.ModelInfo) -> some View {
-        ModelRow(model: model, isSelected: chatState.selectedModel == model.name) {
-            chatState.selectedModel = model.name
-        }
-    }
-
     private var searchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
@@ -393,16 +352,6 @@ struct RootView: View {
             guard !Task.isCancelled else { return }
             searchResultIDs = (try? db.searchConversationIDs(matching: query)) ?? []
         }
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(KiwiMangoFont.mono(9.5, weight: .semibold))
-            .tracking(1.5)
-            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 6)
     }
 
     // MARK: - Agents
@@ -452,38 +401,6 @@ private struct SidebarActionButton: View {
         }
         .buttonStyle(.plain)
         .neonBorder(color, cornerRadius: 3, active: isActive)
-    }
-}
-
-// MARK: - ModelRow
-
-/// One row in the MODELE list — same cheap hover treatment as `ConversationRow`/
-/// `AgentRow` (a flat tint, no shadow/layerEffect), no selection accent needed.
-private struct ModelRow: View {
-    let model: OllamaService.ModelInfo
-    let isSelected: Bool
-    let action: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(model.name)
-                .font(KiwiMangoFont.mono(10.5, weight: isSelected ? .bold : .regular))
-                .foregroundStyle(
-                    isSelected
-                        ? Color.kiwiMangoAccent
-                        : Color.kiwiMangoTextPrimary.opacity(isHovered ? 1 : 0.6)
-                )
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 2)
-                .padding(.horizontal, 4)
-                .background(isHovered ? Color.white.opacity(0.04) : Color.clear)
-        }
-        .buttonStyle(.plain)
-        .help(model.name)
-        .onHover { isHovered = $0 }
     }
 }
 
