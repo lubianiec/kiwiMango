@@ -52,6 +52,9 @@ struct CommandPaletteView: View {
             .action(id: "models", title: "Ustawienia modeli", systemImage: "gearshape") {
                 chatState.showingModelManager = true
             },
+            .action(id: "cron", title: "Moje automaty (cron)", systemImage: "clock") {
+                chatState.showingCronManager = true
+            },
             .action(id: "export", title: "Eksportuj bieżącą rozmowę do Markdown", systemImage: "square.and.arrow.up") {
                 guard let id = chatState.currentConversationID,
                       let url = chatState.exportConversation(id) else { return }

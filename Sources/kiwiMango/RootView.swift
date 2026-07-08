@@ -58,6 +58,12 @@ struct RootView: View {
         )) {
             ModelManagerView()
         }
+        .sheet(isPresented: Binding(
+            get: { chatState.showingCronManager },
+            set: { chatState.showingCronManager = $0 }
+        )) {
+            CronManagerView()
+        }
         .background {
             GeometryReader { proxy in
                 Color.clear

@@ -56,6 +56,10 @@ struct SettingsView: View {
             Section("Snippety") {
                 SnippetSettingsSection()
             }
+
+            Section("Automatyzacja") {
+                Button("Moje automaty (cron)…") { chatState.showingCronManager = true }
+            }
         }
         .padding(20)
         .frame(width: 420)

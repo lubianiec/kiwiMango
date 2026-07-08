@@ -66,6 +66,12 @@ actor HermesGatewayClient {
         case rpcError(code: Int, message: String)
         case sessionMissing
         case disconnected
+        /// A tool call the RPC layer accepted (no JSON-RPC error) but whose
+        /// own result payload reports `"success": false` — e.g. `cron.manage`
+        /// wraps `tools/cronjob_tools.py`'s own error JSON verbatim instead of
+        /// surfacing it as an RPC-level error. F25.1: without this, an invalid
+        /// cron schedule silently did nothing — no thrown error, no created job.
+        case toolError(String)
 
         var errorDescription: String? {
             switch self {
@@ -81,6 +87,8 @@ actor HermesGatewayClient {
                 "Brak aktywnej sesji Hermes."
             case .disconnected:
                 "Połączenie z Hermes Gateway zerwane."
+            case .toolError(let message):
+                message
             }
         }
     }
@@ -475,6 +483,81 @@ actor HermesGatewayClient {
 
     func interrupt(sessionID: String) async throws {
         _ = try await call("session.interrupt", params: ["session_id": sessionID])
+    }
+
+    // MARK: - Cron (F25.1)
+
+    /// One entry from `cron.manage(action: "list")` — Hermes's own scheduler
+    /// (already runs the vault-sync job every 60 min); kiwiMango is a thin UI
+    /// on top, not a second scheduler (per Fable's F25.1 review).
+    struct CronJob: Identifiable, Sendable {
+        let id: String
+        let name: String
+        let promptPreview: String
+        let schedule: String
+        let nextRunAt: String?
+        let lastRunAt: String?
+        let lastStatus: String?
+        let enabled: Bool
+    }
+
+    func listCronJobs() async throws -> [CronJob] {
+        // include_disabled: true — the UI shows a "WSTRZYMANY" badge for paused
+        // jobs (so pause/resume stays reachable); without this the gateway's
+        // default `list` silently drops them, verified live (a paused job just
+        // vanished from the list with no way back except the CLI).
+        let result = try await call("cron.manage", params: ["action": "list", "include_disabled": true])
+        let jobs = result["jobs"] as? [[String: Any]] ?? []
+        return jobs.map { job in
+            CronJob(
+                id: job["job_id"] as? String ?? "",
+                name: job["name"] as? String ?? "cron job",
+                promptPreview: job["prompt_preview"] as? String ?? "",
+                schedule: job["schedule"] as? String ?? "?",
+                nextRunAt: job["next_run_at"] as? String,
+                lastRunAt: job["last_run_at"] as? String,
+                lastStatus: job["last_status"] as? String,
+                enabled: job["enabled"] as? Bool ?? true
+            )
+        }
+    }
+
+    /// `schedule` does NOT understand natural language — verified live against
+    /// `cron/jobs.py:parse_schedule`, which only accepts: a bare duration
+    /// ("30m", "2h", one-shot), an interval ("every 2h", recurring), a cron
+    /// expression ("0 9 * * *"), or an ISO timestamp (one-shot). A Polish
+    /// phrase like "codziennie o 8:00" is silently rejected — see `toolError`.
+    func createCronJob(name: String, schedule: String, prompt: String) async throws {
+        let result = try await call("cron.manage", params: [
+            "action": "add", "name": name, "schedule": schedule, "prompt": prompt,
+        ])
+        try Self.throwIfToolError(result)
+    }
+
+    func pauseCronJob(id: String) async throws {
+        let result = try await call("cron.manage", params: ["action": "pause", "name": id])
+        try Self.throwIfToolError(result)
+    }
+
+    func resumeCronJob(id: String) async throws {
+        let result = try await call("cron.manage", params: ["action": "resume", "name": id])
+        try Self.throwIfToolError(result)
+    }
+
+    func removeCronJob(id: String) async throws {
+        let result = try await call("cron.manage", params: ["action": "remove", "name": id])
+        try Self.throwIfToolError(result)
+    }
+
+    /// `cron.manage`'s RPC layer wraps `tools/cronjob_tools.py`'s own JSON
+    /// verbatim as the RPC "result" — an invalid schedule or blocked prompt
+    /// comes back as `{"success": false, "error": "..."}` with NO JSON-RPC-level
+    /// error, so `call()`'s normal error path never fires. Verified live: an
+    /// unparseable schedule silently created nothing until this check was added.
+    private static func throwIfToolError(_ result: [String: Any]) throws {
+        if result["success"] as? Bool == false {
+            throw ClientError.toolError(result["error"] as? String ?? "Hermes zgłosił błąd cron.")
+        }
     }
 
     // MARK: - Teardown

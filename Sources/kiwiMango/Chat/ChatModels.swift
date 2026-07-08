@@ -207,6 +207,10 @@ final class ChatState {
     /// this flag instead of its own `@State` (the picker lives in ChatView).
     var showingModelManager: Bool = false
 
+    /// F25.1: "moje automaty" sheet (cron jobs, thin UI over Hermes's own
+    /// scheduler) — same ownership pattern as `showingModelManager`.
+    var showingCronManager: Bool = false
+
     /// Fala 14: true while `send()` is waiting on `webSearch`/`webFetch`, before
     /// the actual chat stream starts — drives the "SZUKAM W SIECI…" indicator.
     var isSearchingWeb: Bool = false
