@@ -19,6 +19,10 @@ struct MissionControlView: View {
 
     @Environment(AgentManager.self) private var agentManager
     @Environment(AgentTelemetry.self) private var telemetry
+    /// Fala 24.7: second telemetry source (Hermes gateway, live WS events) —
+    /// rendered alongside Claude's `AgentMissionCard`s below, own card type
+    /// (`HermesMissionCard`) since the underlying models aren't unified.
+    @Environment(HermesTelemetry.self) private var hermesTelemetry
 
     /// First moment we observed a session as `.finished` — used to apply the
     /// "opacity 0.75 for an hour, then drop it" rule from F18.2 pkt 6. Not
@@ -33,7 +37,7 @@ struct MissionControlView: View {
             header
             Divider().overlay(Color.white.opacity(0.08))
 
-            if visibleSessions.isEmpty {
+            if visibleSessions.isEmpty && hermesTelemetry.cards.isEmpty {
                 emptyState
             } else {
                 ScrollView {
@@ -45,6 +49,9 @@ struct MissionControlView: View {
                                 opacity: opacity(for: session),
                                 onSelect: { onSelectAgent(session.id) }
                             )
+                        }
+                        ForEach(hermesTelemetry.cards) { card in
+                            HermesMissionCard(card: card)
                         }
                     }
                     .padding(16)
@@ -65,6 +72,7 @@ struct MissionControlView: View {
         .onReceive(ticker) { date in
             now = date
             noteFinishedSessions()
+            hermesTelemetry.pruneStale(now: date)
         }
     }
 
@@ -96,12 +104,13 @@ struct MissionControlView: View {
     }
 
     private var summaryLine: String {
-        let agentCount = visibleSessions.count
+        let agentCount = visibleSessions.count + hermesTelemetry.cards.count
         let subagentCount = visibleSessions.reduce(0) { $0 + (telemetry.telemetry(for: $1)?.subagents.count ?? 0) }
+            + hermesTelemetry.cards.reduce(0) { $0 + $1.subagents.count }
         let totalTokens = visibleSessions.reduce(0) { sum, session in
             guard let t = telemetry.telemetry(for: session) else { return sum }
             return sum + t.inputTokens + t.outputTokens + t.cacheReadTokens + t.cacheCreationTokens
-        }
+        } + hermesTelemetry.cards.reduce(0) { $0 + $1.inputTokens + $1.outputTokens }
         return "\(agentCount) agentów · \(subagentCount) subagentów · \(formatTokens(totalTokens)) tokenów"
     }
 
@@ -457,6 +466,165 @@ private struct SubagentRow: View {
             return parts.joined(separator: " · ")
         }
         return "w toku…"
+    }
+}
+
+// MARK: - HermesMissionCard (Fala 24.7)
+
+/// Hermes gateway session card — same visual language as `AgentMissionCard`
+/// (spinner, activity line, token bar) but a separate, simpler view: the
+/// underlying model (`HermesTelemetry.SessionCard`) isn't unified with
+/// Claude's `AgentSession`/`SessionTelemetry` (deliberately, per PLAN.md —
+/// "NIE dotykać logiki JSONL AgentTelemetry").
+private struct HermesMissionCard: View {
+    let card: HermesTelemetry.SessionCard
+
+    @State private var now = Date()
+    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private static let spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardBody
+                .padding(12)
+                .background(Color.kiwiMangoChrome)
+                .overlay(
+                    Rectangle().strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                )
+
+            if !card.subagents.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(card.subagents) { sub in
+                        HermesSubagentRow(subagent: sub)
+                    }
+                }
+                .padding(.leading, 20)
+                .padding(.top, 6)
+            }
+        }
+        .opacity(card.isActive ? 1 : 0.75)
+        .onReceive(ticker) { now = $0 }
+    }
+
+    private var cardBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                Text("●")
+                    .font(.system(size: 9))
+                    .foregroundStyle(card.isActive ? Color.kiwiMangoAccent : Color.gray)
+                    .symbolEffect(.pulse, isActive: card.isActive)
+                    .opacity(card.isActive ? 1 : 0.5)
+                    .realBloom(strength: 1.6, radius: 2)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("🦉 HERMES · \(card.conversationTitle)")
+                        .font(KiwiMangoFont.mono(12, weight: .bold))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
+                        .lineLimit(1)
+                    Text(elapsed)
+                        .font(KiwiMangoFont.mono(10))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
+                }
+                Spacer()
+                runner
+            }
+
+            if let activity = card.currentActivity {
+                Text(activity)
+                    .font(KiwiMangoFont.mono(11, weight: .semibold))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.92))
+                    .lineLimit(1)
+            } else {
+                Text(idleActivityText)
+                    .font(KiwiMangoFont.mono(11))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
+            }
+
+            if card.inputTokens + card.outputTokens > 0 {
+                tokenBar
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var runner: some View {
+        if card.isActive {
+            TimelineView(.periodic(from: card.startedAt, by: 0.08)) { context in
+                let tick = Int(context.date.timeIntervalSince(card.startedAt) / 0.08)
+                Text(Self.spinnerFrames[tick % Self.spinnerFrames.count])
+                    .font(KiwiMangoFont.mono(15, weight: .bold))
+                    .foregroundStyle(Color.kiwiMangoAccent)
+            }
+        } else {
+            Text("✓")
+                .font(KiwiMangoFont.mono(13, weight: .bold))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+        }
+    }
+
+    private var elapsed: String {
+        let seconds = Int(now.timeIntervalSince(card.startedAt))
+        let minutes = seconds / 60
+        if minutes < 1 { return "przed chwilą" }
+        if minutes < 60 { return "\(minutes) min" }
+        return "\(minutes / 60) godz. \(minutes % 60) min"
+    }
+
+    private var idleActivityText: String {
+        if card.isTurnRunning { return "czekam na pierwszą czynność…" }
+        if card.subagents.contains(where: { !$0.isFinished }) { return "czeka na subagentów…" }
+        return "zakończone"
+    }
+
+    private var tokenBar: some View {
+        let input = card.inputTokens
+        let output = card.outputTokens
+        let total = max(input + output, 1)
+
+        return VStack(alignment: .leading, spacing: 4) {
+            GeometryReader { proxy in
+                HStack(spacing: 0) {
+                    Rectangle().fill(Color.kiwiMangoAccent)
+                        .frame(width: proxy.size.width * CGFloat(input) / CGFloat(total))
+                    Rectangle().fill(Color.kiwiMangoPurple)
+                        .frame(width: proxy.size.width * CGFloat(output) / CGFloat(total))
+                }
+            }
+            .frame(height: 5)
+
+            Text("IN \(formatTokens(input)) / OUT \(formatTokens(output))")
+                .font(KiwiMangoFont.mono(9.5))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+        }
+    }
+}
+
+private struct HermesSubagentRow: View {
+    let subagent: HermesTelemetry.SubagentCard
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Rectangle()
+                .fill(Color.kiwiMangoPurple)
+                .frame(width: 2)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(subagent.description)
+                    .font(KiwiMangoFont.mono(10.5, weight: .semibold))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.85))
+                    .lineLimit(1)
+                Text(subagent.isFinished ? "zakończony" : "w toku…")
+                    .font(KiwiMangoFont.mono(9))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+            }
+            Spacer()
+        }
+        .padding(.vertical, 4)
+        .padding(.leading, 8)
+        .background(Color.kiwiMangoChrome.opacity(0.6))
+        .opacity(subagent.isFinished ? 0.6 : 1)
+        .animation(.easeInOut(duration: 0.3), value: subagent.isFinished)
     }
 }
 

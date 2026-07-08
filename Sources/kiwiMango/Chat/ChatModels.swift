@@ -87,6 +87,18 @@ struct ChatMessage: Identifiable {
     var pendingApproval: PendingApproval?
     /// Set while a `clarify.request` is blocking the turn. Not persisted.
     var pendingClarify: PendingClarify?
+    /// Fala 24.5: whether `gatewayThinking`'s section is shown expanded.
+    /// Defaults `true` so reasoning is visible LIVE while a turn streams
+    /// (Paweł's complaint: "nie pokazuje na żywo") — `ChatState` flips it to
+    /// `false` once the turn completes, so history stays uncluttered.
+    var gatewayThinkingExpanded = true
+    /// Fala 24.6: count of still-running subagents this session delegated —
+    /// drives the "⏳ subagenci pracują… [N]" bar under the bubble. Survives
+    /// past `message.complete` (unlike the fields above) since delegated work
+    /// keeps going after the root reply finishes. Not persisted; reattached
+    /// to the last assistant bubble on conversation reselect (`ChatState.
+    /// reconcileHermesLiveAssistantIDs`).
+    var backgroundSubagentCount = 0
 
     enum Role: String {
         case user
@@ -115,6 +127,45 @@ struct PendingApproval: Equatable {
 struct PendingClarify: Equatable {
     var question: String
     var choices: [String]
+}
+
+// MARK: - HermesSessionRuntime (Fala 24.6)
+
+/// Per Hermes gateway `session_id` runtime state, kept alive independent of
+/// any single `Task` — a session might keep producing events (delegated
+/// subagents, a follow-up report) long after its root turn's `message.
+/// complete` and long after the user has switched to another conversation.
+/// Reference type deliberately: `ChatState`'s event listener mutates it from
+/// arbitrary event-handling call sites without re-fetching/re-storing a
+/// value type on every field write.
+private final class HermesSessionRuntime {
+    let conversationId: Int64
+    let model: String
+    var startedAt = Date()
+
+    /// The assistant bubble currently being written to, IF `conversationId`
+    /// is the on-screen conversation right now — `nil` when off-screen
+    /// (events accumulate into the `offscreen*` buffers instead) or between
+    /// messages. Reattached by `ChatState.reconcileHermesLiveAssistantIDs`
+    /// whenever the user switches conversations.
+    var liveAssistantID: UUID?
+    /// True from `prompt.submit` until THIS turn's `message.complete` —
+    /// gates `isStreaming`/STOP for the on-screen case and lets
+    /// `ChatState.cancel()` know an interrupt is actually meaningful.
+    var isTurnRunning = false
+
+    var offscreenThinking = ""
+    var offscreenToolLines: [String] = []
+    var offscreenText = ""
+
+    /// Active subagent ids (`subagent.start` seen, no `.complete` yet) —
+    /// backs the "⏳ subagenci pracują… [N]" bar.
+    var activeSubagentIDs: Set<String> = []
+
+    init(conversationId: Int64, model: String) {
+        self.conversationId = conversationId
+        self.model = model
+    }
 }
 
 // MARK: - AttachedImage
@@ -192,6 +243,11 @@ final class ChatState {
     /// All saved conversations, newest-updated first — backs the sidebar list.
     var conversations: [Conversation] = []
 
+    /// Fala 24.6: conversations with unseen Hermes activity that arrived
+    /// while they weren't on screen (a background subagent's follow-up
+    /// report) — sidebar shows a badge dot, cleared on `selectConversation`.
+    var hermesUnreadConversationIDs: Set<Int64> = []
+
     /// The conversation currently shown in the detail pane. `nil` until either
     /// a conversation is selected/created or the first message is sent (which
     /// lazily creates one — see `send()`).
@@ -256,6 +312,19 @@ final class ChatState {
     /// `respondClarify` all no-op without it.
     @ObservationIgnored private var activeHermesGatewaySessionID: String?
     @ObservationIgnored private var activeHermesGatewayAssistantID: UUID?
+
+    /// Fala 24.6: one runtime per Hermes gateway `session_id`, alive for as
+    /// long as that session might still produce background events (a
+    /// delegated subagent, a follow-up report after it finishes) —
+    /// deliberately NOT tied to `streamTask`/any single `Task`, unlike
+    /// Ollama/Claude turns, so conversation switches never interrupt it.
+    @ObservationIgnored private var hermesSessions: [String: HermesSessionRuntime] = [:]
+    /// One persistent consumer of `HermesGatewayClient.shared.events()` for
+    /// the whole app run (started lazily on first Hermes turn) — replaces
+    /// F24.2's per-turn `for await` loop, which stopped listening at
+    /// `message.complete` and dropped every background/subagent event after
+    /// (F24.6 pułapka #1).
+    @ObservationIgnored private var hermesListenerTask: Task<Void, Never>?
 
     /// Fresh instance per use, so a host change in Settings takes effect immediately.
     private var service: OllamaService { OllamaService() }
@@ -339,6 +408,14 @@ final class ChatState {
         currentConversationID = nil
         messages = []
         lastAnimatedMessageID = nil
+        // Fala 24.6: no conversation is on-screen now — any Hermes session
+        // still running detaches to its offscreen buffers instead of a dead
+        // bubble id. `cancelAndWait` above only touches Ollama/Claude's
+        // `streamTask`; a Hermes root turn or its background subagents keep
+        // running untouched (no `session.interrupt` sent here — see
+        // `reconcileHermesLiveAssistantIDs` doc).
+        reconcileHermesLiveAssistantIDs(selectedConversationId: nil)
+        recomputeIsStreamingForCurrentConversation()
     }
 
     /// Loads a previously saved conversation's messages into the transcript.
@@ -349,6 +426,7 @@ final class ChatState {
         requestTLDRForCurrentConversation()
         currentConversationID = id
         lastAnimatedMessageID = nil
+        hermesUnreadConversationIDs.remove(id)
         do {
             let stored = try db.fetchMessagesWithImages(conversationId: id)
             messages = stored.map { message, images in
@@ -362,6 +440,13 @@ final class ChatState {
             print("[KiwiMango] Failed to load messages for conversation \(id): \(error)")
             messages = []
         }
+        // Fala 24.6: if a Hermes session for THIS conversation kept working
+        // while the user was elsewhere, re-point it at the freshly reloaded
+        // last assistant bubble (a fresh `ChatMessage` struct — reload
+        // doesn't preserve the old, now-dead UUID) so live subagent-progress
+        // events resume landing somewhere instead of silently no-op'ing.
+        reconcileHermesLiveAssistantIDs(selectedConversationId: id)
+        recomputeIsStreamingForCurrentConversation()
     }
 
     /// Renames a saved conversation (sidebar context menu).
@@ -1007,11 +1092,19 @@ final class ChatState {
     /// of F22's one-shot headless CLI. Falls back to `runHermesStream` (F22,
     /// below) ONLY if the gateway can't even connect (binary missing, server
     /// failed to spawn) — a genuine "catastrophe at step zero", per PLAN.md's
-    /// own framing of the old path as plan B. Once connected, turn-level
-    /// errors (disconnect mid-turn, RPC error) are NOT retried through the
-    /// headless path — they surface as a Polish error bubble instead (F24.4),
-    /// since a headless retry would silently drop tool/approval context the
-    /// user already saw starting.
+    /// own framing of the old path as plan B.
+    ///
+    /// Fala 24.6 rewrite: this function no longer consumes the event stream
+    /// itself (the old per-turn `for await ... turnLoop` stopped listening at
+    /// `message.complete`, silently dropping every background subagent event
+    /// after — pułapka #1). `ensureHermesListener()` starts ONE persistent
+    /// consumer for the whole app run; this function's job is now just:
+    /// resolve/create the session, submit the prompt, and return — the
+    /// listener (`handleHermesEvent`) does all the actual event handling,
+    /// on-screen or off, for as long as the session keeps producing events.
+    /// Deliberately does NOT use `streamTask` (unlike Ollama/Claude) so
+    /// `cancelAndWait()` (conversation switch) never touches a Hermes turn —
+    /// F24.6 pułapka #2: interrupt must be explicit-STOP-only.
     private func runHermesGatewayStream(
         hermesModel: String,
         history: [OllamaService.ChatPayloadMessage],
@@ -1024,12 +1117,10 @@ final class ChatState {
             await runHermesStream(hermesModel: hermesModel, history: history, conversationId: conversationId)
             return
         }
+        ensureHermesListener()
 
         let prompt = history.last { $0.role == "user" }?.content ?? ""
         let userImages = messages.last { $0.role == .user }?.images ?? []
-        let multiImageNote = userImages.count > 1
-            ? "\n\n(Hermes przyjmuje 1 obraz na wiadomość — wysłano tylko pierwszy)"
-            : ""
 
         let assistantMessage = ChatMessage(role: .assistant, content: "")
         let assistantID = assistantMessage.id
@@ -1039,86 +1130,277 @@ final class ChatState {
         liveTokRate = 0
         activeHermesGatewayAssistantID = assistantID
 
-        let startedAt = Date()
-
-        streamTask = Task {
-            var succeeded = false
-            do {
-                let existingSessionID = conversationId != -1
-                    ? try? db.fetchConversationHermesGatewaySessionID(conversationId)
-                    : nil
-                let sessionID = try await client.resumeOrCreateSession(
-                    existingSessionID: existingSessionID, model: hermesModel, provider: "ollama-launch", cwd: nil
-                )
-                activeHermesGatewaySessionID = sessionID
-                if conversationId != -1, sessionID != existingSessionID {
-                    try? db.setConversationHermesGatewaySessionID(conversationId, sessionID: sessionID)
-                }
-
-                if let firstImage = userImages.first {
-                    let isPNG = firstImage.count >= 4 && firstImage.prefix(4) == Data([0x89, 0x50, 0x4E, 0x47])
-                    try? await client.attachImageBytes(
-                        sessionID: sessionID,
-                        base64Data: firstImage.base64EncodedString(),
-                        mimeType: isPNG ? "image/png" : "image/jpeg"
-                    )
-                }
-
-                try await client.submitPrompt(sessionID: sessionID, text: prompt)
-
-                let eventStream = await client.events()
-                turnLoop: for await event in eventStream {
-                    if Task.isCancelled { break turnLoop }
-                    switch event {
-                    case .thinkingDelta(let sid, let text) where sid == sessionID:
-                        appendGatewayThinking(text, to: assistantID)
-                    case .toolStart(let sid, _, let name, let context) where sid == sessionID:
-                        appendGatewayToolLine(ToolHumanizer.describeHermes(name: name, context: context, command: nil), to: assistantID)
-                    case .toolComplete(let sid, _, _, _, let exitCode, let errorText) where sid == sessionID:
-                        if let errorText, !errorText.isEmpty {
-                            appendGatewayToolLine("⚠️ błąd narzędzia: \(errorText)", to: assistantID)
-                        } else if let exitCode, exitCode != 0 {
-                            appendGatewayToolLine("⚠️ kod wyjścia \(exitCode)", to: assistantID)
-                        }
-                    case .subagentStart(let sid, _, let description) where sid == sessionID:
-                        appendGatewayToolLine("  ↳ subagent: \(description ?? "…")", to: assistantID)
-                    case .subagentComplete(let sid, _) where sid == sessionID:
-                        appendGatewayToolLine("  ↳ subagent zakończony", to: assistantID)
-                    case .approvalRequest(let sid, let command, let description) where sid == sessionID:
-                        setPendingApproval(PendingApproval(command: command, description: description), to: assistantID)
-                    case .clarifyRequest(let sid, let question, let choices) where sid == sessionID:
-                        setPendingClarify(PendingClarify(question: question, choices: choices), to: assistantID)
-                    case .messageComplete(let sid, let text, _) where sid == sessionID:
-                        setContent(text + multiImageNote, on: assistantID)
-                        applyHermesStats(startedAt: startedAt, to: assistantID)
-                        succeeded = true
-                        break turnLoop
-                    case .turnError(let sid, let message) where sid == nil || sid == sessionID:
-                        showGatewayError(message, on: assistantID)
-                        break turnLoop
-                    default:
-                        break
-                    }
-                }
-                if Task.isCancelled { markCancelled(assistantID) }
-            } catch is CancellationError {
-                markCancelled(assistantID)
-            } catch {
-                showGatewayError(error.localizedDescription, on: assistantID)
+        do {
+            let existingSessionID = conversationId != -1
+                ? try? db.fetchConversationHermesGatewaySessionID(conversationId)
+                : nil
+            let sessionID = try await client.resumeOrCreateSession(
+                existingSessionID: existingSessionID, model: hermesModel, provider: "ollama-launch", cwd: nil
+            )
+            activeHermesGatewaySessionID = sessionID
+            if conversationId != -1, sessionID != existingSessionID {
+                try? db.setConversationHermesGatewaySessionID(conversationId, sessionID: sessionID)
             }
+
+            let runtime = hermesSessions[sessionID] ?? HermesSessionRuntime(conversationId: conversationId, model: hermesModel)
+            runtime.liveAssistantID = assistantID
+            runtime.isTurnRunning = true
+            runtime.startedAt = Date()
+            hermesSessions[sessionID] = runtime
+
+            let title = conversations.first(where: { $0.id == conversationId })?.title ?? "Nowa rozmowa"
+            HermesTelemetry.shared.ensureCard(sessionID: sessionID, conversationTitle: title)
+
+            if let firstImage = userImages.first {
+                let isPNG = firstImage.count >= 4 && firstImage.prefix(4) == Data([0x89, 0x50, 0x4E, 0x47])
+                try? await client.attachImageBytes(
+                    sessionID: sessionID,
+                    base64Data: firstImage.base64EncodedString(),
+                    mimeType: isPNG ? "image/png" : "image/jpeg"
+                )
+            }
+            if userImages.count > 1 {
+                appendGatewayToolLine("(Hermes przyjmuje 1 obraz na wiadomość — wysłano tylko pierwszy)", to: assistantID)
+            }
+
+            try await client.submitPrompt(sessionID: sessionID, text: prompt)
+            // Returns here — `handleHermesEvent` (via the persistent listener)
+            // takes it from here, including flipping `isStreaming` back to
+            // false at `message.complete`. Nothing left to await: `send()`'s
+            // caller doesn't need the full reply to exist before regaining
+            // control, only before the composer would let you double-submit,
+            // and `isStreaming` already blocks that.
+        } catch {
+            showGatewayError(error.localizedDescription, on: assistantID)
             isStreaming = false
             liveTokRate = 0
-            streamTask = nil
             activeHermesGatewaySessionID = nil
             activeHermesGatewayAssistantID = nil
-            if let final = messages.first(where: { $0.id == assistantID }) {
-                persist(final, conversationId: conversationId)
-            }
-            if succeeded, let title = conversations.first(where: { $0.id == conversationId })?.title {
-                ObsidianSyncService.syncConversation(conversationId: conversationId, title: title, model: "hermes:\(hermesModel)")
+        }
+    }
+
+    // MARK: - Persistent event listener (Fala 24.6)
+
+    /// Starts the ONE consumer of `HermesGatewayClient.shared.events()` for
+    /// the app's lifetime. Idempotent — safe to call on every turn.
+    private func ensureHermesListener() {
+        guard hermesListenerTask == nil else { return }
+        hermesListenerTask = Task { [weak self] in
+            guard let self else { return }
+            let stream = await HermesGatewayClient.shared.events()
+            for await event in stream {
+                self.handleHermesEvent(event)
             }
         }
-        await streamTask?.value
+    }
+
+    /// Central dispatch for every Hermes gateway event, on-screen or off.
+    /// Runs on `ChatState`'s MainActor (the listener `Task` inherits it —
+    /// same pattern the old per-turn `streamTask` already relied on).
+    private func handleHermesEvent(_ event: HermesGatewayClient.Event) {
+        switch event {
+        case .ready, .sessionTitle, .subagentText:
+            return
+        case .messageStart(let sid):
+            guard let runtime = hermesSessions[sid] else { return }
+            runtime.isTurnRunning = true
+            beginHermesBubble(runtime: runtime)
+            HermesTelemetry.shared.setTurnRunning(sessionID: sid, running: true)
+        case .messageDelta(let sid, let text):
+            guard let runtime = hermesSessions[sid] else { return }
+            if isOnScreen(runtime), let liveID = runtime.liveAssistantID {
+                appendDelta(text, to: liveID)
+            } else {
+                runtime.offscreenText += text
+            }
+        case .thinkingDelta(let sid, let text):
+            guard let runtime = hermesSessions[sid] else { return }
+            if isOnScreen(runtime), let liveID = runtime.liveAssistantID {
+                appendGatewayThinking(text, to: liveID)
+            } else {
+                runtime.offscreenThinking += text
+            }
+        case .toolStart(let sid, _, let name, let context):
+            guard let runtime = hermesSessions[sid] else { return }
+            let line = ToolHumanizer.describeHermes(name: name, context: context, command: nil)
+            recordHermesLine(line, runtime: runtime)
+            HermesTelemetry.shared.setActivity(sessionID: sid, text: line)
+        case .toolComplete(let sid, _, _, _, let exitCode, let errorText):
+            guard let runtime = hermesSessions[sid] else { return }
+            if let errorText, !errorText.isEmpty {
+                recordHermesLine("⚠️ błąd narzędzia: \(errorText)", runtime: runtime)
+            } else if let exitCode, exitCode != 0 {
+                recordHermesLine("⚠️ kod wyjścia \(exitCode)", runtime: runtime)
+            }
+        case .subagentStart(let sid, let subID, let description):
+            guard let runtime = hermesSessions[sid] else { return }
+            runtime.activeSubagentIDs.insert(subID)
+            recordHermesLine("  ↳ subagent: \(description ?? "…")", runtime: runtime)
+            updateBackgroundSubagentCount(runtime: runtime)
+            HermesTelemetry.shared.subagentStarted(sessionID: sid, subagentID: subID, description: description)
+        case .subagentComplete(let sid, let subID):
+            guard let runtime = hermesSessions[sid] else { return }
+            runtime.activeSubagentIDs.remove(subID)
+            recordHermesLine("  ↳ subagent zakończony", runtime: runtime)
+            updateBackgroundSubagentCount(runtime: runtime)
+            HermesTelemetry.shared.subagentCompleted(sessionID: sid, subagentID: subID)
+        case .approvalRequest(let sid, let command, let description):
+            guard let runtime = hermesSessions[sid] else { return }
+            if isOnScreen(runtime), let liveID = runtime.liveAssistantID {
+                setPendingApproval(PendingApproval(command: command, description: description), to: liveID)
+            }
+            // Off-screen approval requests have no UI surface yet (would need
+            // a global banner independent of any bubble) — out of scope for
+            // this fala; the agent thread just blocks server-side until the
+            // user comes back to this conversation and the model times out
+            // or the user notices via the unread badge.
+        case .clarifyRequest(let sid, let question, let choices):
+            guard let runtime = hermesSessions[sid] else { return }
+            if isOnScreen(runtime), let liveID = runtime.liveAssistantID {
+                setPendingClarify(PendingClarify(question: question, choices: choices), to: liveID)
+            }
+        case .messageComplete(let sid, let text, _, let inputTokens, let outputTokens):
+            guard let runtime = hermesSessions[sid] else { return }
+            HermesTelemetry.shared.setUsage(sessionID: sid, input: inputTokens, output: outputTokens)
+            finishHermesTurn(sessionID: sid, runtime: runtime, text: text, errorMessage: nil)
+        case .turnError(let sid, let message):
+            guard let sid, let runtime = hermesSessions[sid] else { return }
+            finishHermesTurn(sessionID: sid, runtime: runtime, text: nil, errorMessage: message)
+        }
+    }
+
+    private func isOnScreen(_ runtime: HermesSessionRuntime) -> Bool {
+        runtime.conversationId == currentConversationID
+    }
+
+    /// Opens a fresh assistant bubble for a background wake-up (a follow-up
+    /// report after subagents finish) IF the conversation is on-screen and
+    /// no bubble is currently open for it — the root turn's own bubble is
+    /// already appended synchronously by `runHermesGatewayStream` before
+    /// `message.start` ever arrives, so this only fires for later turns.
+    private func beginHermesBubble(runtime: HermesSessionRuntime) {
+        guard isOnScreen(runtime) else { return }
+        guard runtime.liveAssistantID == nil else { return }
+        let msg = ChatMessage(role: .assistant, content: "")
+        messages.append(msg)
+        lastAnimatedMessageID = msg.id
+        runtime.liveAssistantID = msg.id
+    }
+
+    private func recordHermesLine(_ line: String, runtime: HermesSessionRuntime) {
+        if isOnScreen(runtime), let liveID = runtime.liveAssistantID {
+            appendGatewayToolLine(line, to: liveID)
+        } else {
+            runtime.offscreenToolLines.append(line)
+        }
+    }
+
+    private func updateBackgroundSubagentCount(runtime: HermesSessionRuntime) {
+        guard isOnScreen(runtime), let liveID = runtime.liveAssistantID,
+              let index = messages.lastIndex(where: { $0.id == liveID }) else { return }
+        messages[index].backgroundSubagentCount = runtime.activeSubagentIDs.count
+    }
+
+    /// Domyka one message.start→message.complete cycle for a session —
+    /// called for BOTH the root turn and every later background wake-up.
+    /// Only flips `isStreaming`/clears `activeHermesGateway*` when this was
+    /// the on-screen ROOT turn (subsequent background turns never touched
+    /// those in the first place).
+    private func finishHermesTurn(
+        sessionID: String, runtime: HermesSessionRuntime, text: String?, errorMessage: String?
+    ) {
+        let wasRootTurnOnScreen = runtime.isTurnRunning && isOnScreen(runtime)
+            && runtime.liveAssistantID == activeHermesGatewayAssistantID
+        runtime.isTurnRunning = false
+        HermesTelemetry.shared.setTurnRunning(sessionID: sessionID, running: false)
+
+        if isOnScreen(runtime), let liveID = runtime.liveAssistantID {
+            if let errorMessage {
+                showGatewayError(errorMessage, on: liveID)
+            } else if let text {
+                setContent(text, on: liveID)
+                applyHermesStats(startedAt: runtime.startedAt, to: liveID)
+            }
+            collapseGatewayThinking(on: liveID)
+            if let final = messages.first(where: { $0.id == liveID }) {
+                persist(final, conversationId: runtime.conversationId)
+            }
+            runtime.liveAssistantID = nil
+        } else {
+            var combined = ""
+            if !runtime.offscreenToolLines.isEmpty {
+                combined += runtime.offscreenToolLines.joined(separator: "\n") + "\n\n"
+            }
+            combined += errorMessage.map { "⚠️ \($0)" } ?? (text ?? runtime.offscreenText)
+            persistOffscreenHermesMessage(combined, conversationId: runtime.conversationId)
+            hermesUnreadConversationIDs.insert(runtime.conversationId)
+            runtime.offscreenThinking = ""
+            runtime.offscreenToolLines = []
+            runtime.offscreenText = ""
+        }
+
+        if wasRootTurnOnScreen {
+            isStreaming = false
+            liveTokRate = 0
+            activeHermesGatewaySessionID = nil
+            activeHermesGatewayAssistantID = nil
+        }
+
+        if errorMessage == nil, let title = conversations.first(where: { $0.id == runtime.conversationId })?.title {
+            ObsidianSyncService.syncConversation(conversationId: runtime.conversationId, title: title, model: "hermes:\(runtime.model)")
+        }
+    }
+
+    private func persistOffscreenHermesMessage(_ content: String, conversationId: Int64) {
+        guard conversationId != -1 else { return }
+        do {
+            try db.addMessage(conversationId: conversationId, role: "assistant", content: content, images: [])
+            try db.touchConversation(conversationId)
+            refreshConversations()
+        } catch {
+            print("[KiwiMango] Failed to persist offscreen Hermes message: \(error)")
+        }
+    }
+
+    /// Fala 24.6: called after every conversation switch. Reattaches each
+    /// live Hermes session to the freshly (re)loaded `messages` array — the
+    /// old `liveAssistantID` always points at a dead struct instance after a
+    /// reload (GRDB round-trip mints new `UUID`s), so without this every
+    /// live event for a just-reselected conversation would silently no-op.
+    private func reconcileHermesLiveAssistantIDs(selectedConversationId: Int64?) {
+        for runtime in hermesSessions.values {
+            guard runtime.conversationId == selectedConversationId else {
+                runtime.liveAssistantID = nil
+                continue
+            }
+            guard let lastAssistant = messages.last(where: { $0.role == .assistant }) else {
+                runtime.liveAssistantID = nil
+                continue
+            }
+            runtime.liveAssistantID = lastAssistant.id
+            if let index = messages.lastIndex(where: { $0.id == lastAssistant.id }) {
+                messages[index].backgroundSubagentCount = runtime.activeSubagentIDs.count
+            }
+        }
+    }
+
+    /// Fala 24.6: recomputes `isStreaming`/`activeHermesGateway*` for
+    /// whatever conversation is now on-screen — needed because switching
+    /// conversations no longer cancels a Hermes root turn (F24.6 pułapka
+    /// #2), so the flag must be derived fresh rather than left over from
+    /// whichever conversation set it last.
+    private func recomputeIsStreamingForCurrentConversation() {
+        guard let match = hermesSessions.first(where: { _, runtime in
+            runtime.conversationId == currentConversationID && runtime.isTurnRunning
+        }) else {
+            isStreaming = false
+            activeHermesGatewaySessionID = nil
+            activeHermesGatewayAssistantID = nil
+            return
+        }
+        isStreaming = true
+        activeHermesGatewaySessionID = match.key
+        activeHermesGatewayAssistantID = match.value.liveAssistantID
     }
 
     /// ZATWIERDŹ/ODRZUĆ button action (F24.2) — no-op if no approval is
@@ -1141,6 +1423,25 @@ final class ChatState {
     private func appendGatewayThinking(_ delta: String, to id: UUID) {
         guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
         messages[index].gatewayThinking = (messages[index].gatewayThinking ?? "") + delta
+        // Fala 24.5: keep it expanded WHILE streaming — collapsed only once
+        // `finishHermesTurn` calls `collapseGatewayThinking` at the end.
+        messages[index].gatewayThinkingExpanded = true
+    }
+
+    /// Fala 24.5: flip to collapsed once the turn's done — the live-expanded
+    /// default (`ChatMessage.gatewayThinkingExpanded`) would otherwise leave
+    /// every past turn's reasoning permanently unrolled in the history.
+    private func collapseGatewayThinking(on id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].gatewayThinkingExpanded = false
+    }
+
+    /// Manual toggle for the "MYŚLI…" button (F24.2/F24.5) — `MessageBubble`
+    /// has no direct binding into `chatState.messages[i]`, so it calls this
+    /// instead of managing its own `@State` (which broke: see F24.2 history).
+    func toggleGatewayThinking(on id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].gatewayThinkingExpanded.toggle()
     }
 
     private func appendGatewayToolLine(_ line: String, to id: UUID) {
@@ -1345,10 +1646,20 @@ final class ChatState {
     /// Fala 24: also sends `session.interrupt` to the gateway when a Hermes
     /// turn is in flight — cancelling only the local `Task` would stop us
     /// listening but leave the agent still running server-side.
+    /// Fala 24.6 pułapka #2: this is the ONLY call site that ever sends
+    /// `session.interrupt` — `cancelAndWait()` (conversation switch) never
+    /// does, so background subagent work survives switching away.
     func cancel() {
         streamTask?.cancel()
         speechSynthesizer.stopAll()
         if let sessionID = activeHermesGatewaySessionID {
+            // Immediate feedback — the actual `message.complete`/`error` that
+            // settles the bubble's final content still comes from the
+            // persistent listener whenever the server confirms the stop,
+            // which isn't instant (F24.6 architecture, no local fake-cancel).
+            if let assistantID = activeHermesGatewayAssistantID {
+                appendGatewayToolLine("⏹ wysłano przerwanie…", to: assistantID)
+            }
             Task { try? await HermesGatewayClient.shared.interrupt(sessionID: sessionID) }
         }
     }

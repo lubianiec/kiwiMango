@@ -870,11 +870,6 @@ private struct MessageBubble: View {
     @Environment(ChatState.self) private var chatState
     @State private var isHovered = false
     @State private var cursorVisible = true
-    /// Fala 24: manual toggle for `gatewayThinkingBlock` — `DisclosureGroup`'s
-    /// default macOS style turned out NOT clickable inside this view
-    /// hierarchy (verified live: clicks on the label/chevron never toggled
-    /// it), so a plain `Button` + `@State` replaces it outright.
-    @State private var thinkingExpanded = false
 
     private var isUser: Bool { message.role == .user }
 
@@ -925,6 +920,9 @@ private struct MessageBubble: View {
                 }
                 if !isUser, !message.gatewayToolLines.isEmpty {
                     gatewayToolLinesBlock(message.gatewayToolLines)
+                }
+                if !isUser, message.backgroundSubagentCount > 0 {
+                    gatewayBackgroundSubagentsBar(count: message.backgroundSubagentCount)
                 }
                 if !isUser, let approval = message.pendingApproval {
                     gatewayApprovalBlock(approval)
@@ -1033,17 +1031,21 @@ private struct MessageBubble: View {
 
     // MARK: - Hermes gateway blocks (Fala 24)
 
-    /// "MYŚLI…" — collapsed by default (Paweł's process-transparency ask
-    /// applies here too, but a live agent's reasoning is chattier than F22's
-    /// one-shot blob, so it starts folded rather than always-open). Plain
-    /// `Button` toggle, not `DisclosureGroup` (see `thinkingExpanded` doc).
+    /// "MYŚLI…" — Fala 24.5: expanded by DEFAULT while a turn streams
+    /// (`ChatMessage.gatewayThinkingExpanded` starts `true`, so reasoning is
+    /// visible live per Paweł's "nie pokazuje na żywo" complaint), collapsed
+    /// by `ChatState.finishHermesTurn` once the turn completes so history
+    /// stays uncluttered. Toggle state lives on the MODEL (not local
+    /// `@State`) and is mutated via `chatState.toggleGatewayThinking` — a
+    /// plain `Button`, not `DisclosureGroup` (that one's default macOS style
+    /// turned out NOT clickable in this view hierarchy, verified live in F24.2).
     private func gatewayThinkingBlock(_ thinking: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Button {
-                thinkingExpanded.toggle()
+                chatState.toggleGatewayThinking(on: message.id)
             } label: {
                 HStack(spacing: 4) {
-                    Text(thinkingExpanded ? "▾" : "▸")
+                    Text(message.gatewayThinkingExpanded ? "▾" : "▸")
                     Text("MYŚLI…")
                 }
                 .font(KiwiMangoFont.mono(10, weight: .medium))
@@ -1052,7 +1054,7 @@ private struct MessageBubble: View {
             }
             .buttonStyle(.plain)
 
-            if thinkingExpanded {
+            if message.gatewayThinkingExpanded {
                 Text(thinking)
                     .font(KiwiMangoFont.mono(11))
                     .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.7))
@@ -1071,7 +1073,7 @@ private struct MessageBubble: View {
 
     /// Live `tool.start`/`tool.complete`/`subagent.*` status lines, PO
     /// POLSKU — subagent lines already carry a "  ↳" indent prefix from
-    /// `runHermesGatewayStream`.
+    /// `ChatState.handleHermesEvent`.
     private func gatewayToolLinesBlock(_ lines: [String]) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
@@ -1081,6 +1083,19 @@ private struct MessageBubble: View {
             }
         }
         .frame(maxWidth: 420, alignment: .leading)
+    }
+
+    /// Fala 24.6: shown under a bubble whose turn already completed but
+    /// which delegated subagents still running in the background — survives
+    /// past `message.complete` and past conversation switches (reattached by
+    /// `ChatState.reconcileHermesLiveAssistantIDs` on reselect).
+    private func gatewayBackgroundSubagentsBar(count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text("⏳")
+            Text("subagenci pracują w tle… [\(count)]")
+        }
+        .font(KiwiMangoFont.mono(10.5, weight: .medium))
+        .foregroundStyle(Color.kiwiMangoPurple.opacity(0.85))
     }
 
     private func gatewayApprovalBlock(_ approval: PendingApproval) -> some View {

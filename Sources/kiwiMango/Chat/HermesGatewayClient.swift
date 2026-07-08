@@ -99,7 +99,7 @@ actor HermesGatewayClient {
         case subagentComplete(sessionID: String, id: String)
         case approvalRequest(sessionID: String, command: String?, description: String?)
         case clarifyRequest(sessionID: String, question: String, choices: [String])
-        case messageComplete(sessionID: String, text: String, reasoning: String?)
+        case messageComplete(sessionID: String, text: String, reasoning: String?, inputTokens: Int, outputTokens: Int)
         case sessionTitle(sessionID: String, title: String)
         case turnError(sessionID: String?, message: String)
     }
@@ -365,7 +365,16 @@ actor HermesGatewayClient {
         case "message.complete":
             let text = payload["text"] as? String ?? ""
             let reasoning = payload["reasoning"] as? String
-            return .messageComplete(sessionID: sessionID, text: text, reasoning: reasoning)
+            let usage = payload["usage"] as? [String: Any]
+            // Field names confirmed live in F24.0 probe: {model, input, output,
+            // reasoning, prompt, completion, total, calls, context_used,
+            // context_max, context_percent, compressions, active_subagents}.
+            let inputTokens = usage?["input"] as? Int ?? 0
+            let outputTokens = usage?["output"] as? Int ?? 0
+            return .messageComplete(
+                sessionID: sessionID, text: text, reasoning: reasoning,
+                inputTokens: inputTokens, outputTokens: outputTokens
+            )
         case "session.title":
             let title = payload["title"] as? String ?? ""
             return .sessionTitle(sessionID: sessionID, title: title)

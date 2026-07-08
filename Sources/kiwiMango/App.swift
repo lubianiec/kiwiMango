@@ -10,6 +10,11 @@ struct KiwiMangoApp: App {
     @State private var chatState = ChatState()
     @State private var agentManager = AgentManager()
     @State private var agentTelemetry = AgentTelemetry()
+    /// Fala 24.7: second Centrum Dowodzenia telemetry source (Hermes gateway,
+    /// live WS events) — `HermesTelemetry.shared` so `ChatState` (no
+    /// environment access) can push updates directly; held here in `@State`
+    /// only so SwiftUI observes it and injects it down the view tree.
+    @State private var hermesTelemetry = HermesTelemetry.shared
     @NSApplicationDelegateAdaptor(KiwiMangoAppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -18,6 +23,7 @@ struct KiwiMangoApp: App {
                 .environment(chatState)
                 .environment(agentManager)
                 .environment(agentTelemetry)
+                .environment(hermesTelemetry)
                 .frame(minWidth: 760, minHeight: 480)
                 .onAppear { appDelegate.agentManager = agentManager }
         }

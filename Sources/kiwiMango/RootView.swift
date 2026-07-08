@@ -242,6 +242,7 @@ struct RootView: View {
                             ConversationRow(
                                 conversation: conversation,
                                 isActive: selection == .conversation(conversation.id),
+                                hasUnread: chatState.hermesUnreadConversationIDs.contains(conversation.id),
                                 onDelete: { chatState.deleteConversation(conversation.id) }
                             )
                             .contentShape(Rectangle())
@@ -531,6 +532,10 @@ private struct LabSidebarButton: View {
 private struct ConversationRow: View {
     let conversation: Conversation
     let isActive: Bool
+    /// Fala 24.6: true when a background Hermes turn (subagents finishing,
+    /// a follow-up report) landed in this conversation while it wasn't on
+    /// screen — cleared by `ChatState.selectConversation`.
+    var hasUnread: Bool = false
     let onDelete: () -> Void
 
     @State private var isHovered = false
@@ -564,6 +569,15 @@ private struct ConversationRow: View {
             .padding(.vertical, 8)
 
             Spacer(minLength: 0)
+
+            if hasUnread, !isHovered {
+                Circle()
+                    .fill(Color.kiwiMangoPurple)
+                    .frame(width: 6, height: 6)
+                    .shadow(color: Color.kiwiMangoPurple.opacity(0.7), radius: 3)
+                    .padding(.trailing, 12)
+                    .help("Hermes dokończył coś w tle")
+            }
 
             if isHovered {
                 Button(action: onDelete) {

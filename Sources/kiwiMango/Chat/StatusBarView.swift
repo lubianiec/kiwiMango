@@ -43,6 +43,7 @@ struct StatusBarView: View {
 
     @Environment(AgentManager.self) private var agentManager
     @Environment(ChatState.self) private var chatState
+    @Environment(HermesTelemetry.self) private var hermesTelemetry
     @State private var monitor = OllamaStatusMonitor()
 
     private var appVersion: String {
@@ -77,8 +78,11 @@ struct StatusBarView: View {
             Button {
                 NotificationCenter.default.post(name: .kiwiMangoRequestMissionControl, object: nil)
             } label: {
-                Text("Agenci [\(agentManager.runningCount)]")
-                    .opacity(agentManager.runningCount == 0 ? 0.5 : 1)
+                // Fala 24.7: Claude agents (AgentManager) + active Hermes
+                // gateway sessions/subagents (HermesTelemetry) share one count.
+                let total = agentManager.runningCount + hermesTelemetry.activeCount
+                Text("Agenci [\(total)]")
+                    .opacity(total == 0 ? 0.5 : 1)
             }
             .buttonStyle(.plain)
             .help("Otwórz Centrum Dowodzenia")
