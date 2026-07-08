@@ -888,21 +888,50 @@ final class ChatState {
     /// and empty assistant placeholders are not replayed to the model.
     /// Fala 19: the kiwi-card contract is appended as a final system message for
     /// all non-Claude models, so the model can emit a structured card when data fits.
+    /// F21.1/F21.2: only local models get `keep_alive`/`num_ctx` — cloud models
+    /// manage their own residency/context. Mirrors the cloud-detection logic in
+    /// `ChatView.isKnownCloud`/`selectedModelIsCloud` (no shared helper — this
+    /// file has no view-layer dependency to put one in).
+    private func isLocalOllamaModel(_ name: String) -> Bool {
+        if let info = availableModels.first(where: { $0.name == name }) { return !info.isCloud }
+        return !name.hasSuffix(":cloud")
+    }
+
     private func buildHistory() -> [OllamaService.ChatPayloadMessage] {
-        var history = messages.compactMap { message -> OllamaService.ChatPayloadMessage? in
-            if message.role == .assistant,
-               message.content.isEmpty
-                || message.content.hasPrefix("⚠️")
-                || message.content.hasPrefix("⏹") {
-                return nil
-            }
-            return OllamaService.ChatPayloadMessage(
+        let eligible = messages.filter { message in
+            !(message.role == .assistant
+                && (message.content.isEmpty
+                    || message.content.hasPrefix("⚠️")
+                    || message.content.hasPrefix("⏹")))
+        }
+
+        // F21.3: full history stays in GRDB/the UI — this only windows what gets
+        // SENT to the model. Long conversations were slow to start a reply (huge
+        // prompt every turn) and could exhaust a local model's context.
+        let windowSize = 30
+        let truncatedCount = max(0, eligible.count - windowSize)
+        let windowed = Array(eligible.suffix(windowSize))
+        // Older messages in the window still go as text — the model already
+        // described any images in its own prior replies — only the last 6 keep
+        // their base64 payload.
+        let imageCutoffIndex = max(0, windowed.count - 6)
+
+        var history = windowed.enumerated().map { offset, message in
+            OllamaService.ChatPayloadMessage(
                 role: message.role.rawValue,
                 content: message.content,
-                images: message.images.isEmpty
-                    ? nil
-                    : message.images.map(OllamaService.base64(from:))
+                images: (offset >= imageCutoffIndex && !message.images.isEmpty)
+                    ? message.images.map(OllamaService.base64(from:))
+                    : nil
             )
+        }
+
+        if truncatedCount > 0 {
+            let title = conversations.first { $0.id == currentConversationID }?.title ?? "ta rozmowa"
+            history.insert(OllamaService.ChatPayloadMessage(
+                role: "system",
+                content: "Wcześniejsza, nieprzesłana część rozmowy dotyczyła: \(title)."
+            ), at: 0)
         }
         if let systemPrompt = activePersona?.systemPrompt, !systemPrompt.isEmpty {
             history.insert(OllamaService.ChatPayloadMessage(role: "system", content: systemPrompt), at: 0)
@@ -950,12 +979,13 @@ final class ChatState {
         let service = self.service
         let think: Bool? = thinkingModels.contains(model) ? false : nil
         let temperature = persona?.temperature
+        let isLocal = isLocalOllamaModel(model)
 
         streamTask = Task {
             var succeeded = false
             do {
                 for try await delta in service.streamChat(
-                    model: model, messages: history, think: think, temperature: temperature
+                    model: model, messages: history, think: think, temperature: temperature, isLocal: isLocal
                 ) {
                     switch delta {
                     case .content(let text):

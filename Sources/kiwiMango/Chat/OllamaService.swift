@@ -108,7 +108,8 @@ struct OllamaService: Sendable {
         model: String,
         messages: [ChatPayloadMessage],
         think: Bool? = nil,
-        temperature: Double? = nil
+        temperature: Double? = nil,
+        isLocal: Bool = false
     ) -> AsyncThrowingStream<ChatDelta, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -120,10 +121,21 @@ struct OllamaService: Sendable {
                     // idle gap between chunks — generous, so a cold model load does not
                     // trip it. A dead localhost still fails instantly (conn. refused).
                     request.timeoutInterval = 300
+                    // F21.1/F21.2: local models only — cloud models manage their own
+                    // lifetime/context, sending these would be meaningless noise.
+                    // keep_alive: 30m keeps the model resident so a message after an
+                    // idle gap doesn't pay a cold-load penalty (~tens of seconds).
+                    // num_ctx: 8192 avoids Ollama's smaller default context silently
+                    // truncating and "dumbing down" long local conversations — 8192
+                    // fits a Gemma e4b's KV cache comfortably in 16GB RAM; do not
+                    // raise this without checking RAM headroom first.
+                    let options: ChatOptions? = (temperature != nil || isLocal)
+                        ? ChatOptions(temperature: temperature, numCtx: isLocal ? 8192 : nil)
+                        : nil
                     request.httpBody = try JSONEncoder().encode(
                         ChatRequest(
                             model: model, messages: messages, stream: true, think: think,
-                            options: temperature.map { ChatOptions(temperature: $0) }
+                            options: options, keepAlive: isLocal ? "30m" : nil
                         )
                     )
 
@@ -387,10 +399,22 @@ struct OllamaService: Sendable {
         let stream: Bool
         let think: Bool?   // synthesized Encodable omits the key when nil
         let options: ChatOptions?
+        let keepAlive: String?
+
+        enum CodingKeys: String, CodingKey {
+            case model, messages, stream, think, options
+            case keepAlive = "keep_alive"
+        }
     }
 
     private struct ChatOptions: Encodable {
-        let temperature: Double
+        let temperature: Double?
+        let numCtx: Int?
+
+        enum CodingKeys: String, CodingKey {
+            case temperature
+            case numCtx = "num_ctx"
+        }
     }
 
     private struct ChatChunk: Decodable {
