@@ -964,10 +964,10 @@ private struct MessageBubble: View {
                                 .textSelection(.enabled)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(Color.kiwiMangoPurple.opacity(0.10), in: UserBubbleShape())
+                                .background(Color.kiwiMangoPurple.opacity(0.22), in: UserBubbleShape())
                                 .overlay(
                                     UserBubbleShape()
-                                        .stroke(Color.kiwiMangoPurple.opacity(0.65), lineWidth: 1)
+                                        .stroke(Color.kiwiMangoPurple.opacity(0.7), lineWidth: 1)
                                 )
                                 .shadow(color: Color.kiwiMangoPurple.opacity(0.3), radius: 8)
                                 .modifier(HoloTilt(isActive: !isStreamingReply))
@@ -985,10 +985,10 @@ private struct MessageBubble: View {
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(Color.kiwiMangoAccent.opacity(0.05), in: AssistantBubbleShape())
+                            .background(Color.kiwiMangoAccent.opacity(0.16), in: AssistantBubbleShape())
                             .overlay(
                                 AssistantBubbleShape()
-                                    .stroke(Color.kiwiMangoAccent.opacity(0.45), lineWidth: 1)
+                                    .stroke(Color.kiwiMangoAccent.opacity(0.6), lineWidth: 1)
                             )
                             .shadow(color: Color.kiwiMangoAccent.opacity(0.18), radius: 8)
                             .modifier(HoloTilt(isActive: !isStreamingReply))
