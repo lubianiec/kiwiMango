@@ -269,69 +269,63 @@ struct ChatView: View {
 
     // MARK: - Model picker
 
+    /// Fix (2026-07-08): a `Button` nested inside a `Picker`'s content closure
+    /// does not fire its action on macOS — the enclosing Picker's own tap
+    /// handling swallows the click before the Button sees it (confirmed live:
+    /// clicking a HERMES/ANTHROPIC row closed the menu without changing
+    /// `selectedModel`). Every section is now a plain `Button` directly inside
+    /// the `Menu`'s content — no `Picker` wrapper anywhere in this menu.
     private var modelPicker: some View {
-        @Bindable var state = chatState
-        return Menu {
-            Picker("Model", selection: $state.selectedModel) {
-                if !localModels.isEmpty {
-                    Section("💻 LOKALNE") {
-                        ForEach(localModels, id: \.self) { name in
-                            Text(displayName(for: name)).tag(name)
-                        }
-                    }
-                }
-                if !cloudModels.isEmpty {
-                    Section("☁️ CLOUD") {
-                        ForEach(cloudModels, id: \.self) { name in
-                            Text(displayName(for: name)).tag(name)
-                        }
-                    }
-                }
-                if chatState.claudeAvailability.isInstalled {
-                    Section("🤖 ANTHROPIC") {
-                        ForEach(ClaudeCodeService.pickerModels, id: \.self) { model in
-                            let id = "claude:\(model.rawValue)"
-                            let isAvailable = chatState.claudeAvailability.isAvailable
-                            let isSelected = chatState.selectedModel == id
-                            Button {
-                                if isAvailable {
-                                    chatState.selectedModel = id
-                                }
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Text(isSelected ? "✓ \(claudeDisplayName(model))" : "  \(claudeDisplayName(model))")
-                                        .foregroundStyle(isAvailable ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.42))
-                                    Spacer()
-                                    if !isAvailable {
-                                        Text(chatState.claudeAvailability.reason)
-                                            .font(KiwiMangoFont.mono(10, weight: .medium))
-                                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
-                                    }
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(!isAvailable)
-                            .help(isAvailable ? claudeDisplayName(model) : chatState.claudeAvailability.reason)
-                        }
-                    }
-                }
-                if !chatState.availableModels.isEmpty {
-                    Section("🦉 HERMES") {
-                        ForEach(chatState.availableModels, id: \.name) { model in
-                            let id = "hermes:\(model.name)"
-                            let isSelected = chatState.selectedModel == id
-                            Button {
-                                chatState.selectedModel = id
-                            } label: {
-                                Text(isSelected ? "✓ \(displayName(for: model.name))" : "  \(displayName(for: model.name))")
-                            }
-                            .buttonStyle(.plain)
-                            .help("\(displayName(for: model.name)) przez Hermes Agent")
-                        }
+        Menu {
+            if !localModels.isEmpty {
+                Section("💻 LOKALNE") {
+                    ForEach(localModels, id: \.self) { name in
+                        modelRow(id: name, label: displayName(for: name))
                     }
                 }
             }
-            .pickerStyle(.inline)
+            if !cloudModels.isEmpty {
+                Section("☁️ CLOUD") {
+                    ForEach(cloudModels, id: \.self) { name in
+                        modelRow(id: name, label: displayName(for: name))
+                    }
+                }
+            }
+            if chatState.claudeAvailability.isInstalled {
+                Section("🤖 ANTHROPIC") {
+                    ForEach(ClaudeCodeService.pickerModels, id: \.self) { model in
+                        let id = "claude:\(model.rawValue)"
+                        let isAvailable = chatState.claudeAvailability.isAvailable
+                        let isSelected = chatState.selectedModel == id
+                        Button {
+                            if isAvailable {
+                                chatState.selectedModel = id
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(isSelected ? "✓ \(claudeDisplayName(model))" : "  \(claudeDisplayName(model))")
+                                    .foregroundStyle(isAvailable ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.42))
+                                Spacer()
+                                if !isAvailable {
+                                    Text(chatState.claudeAvailability.reason)
+                                        .font(KiwiMangoFont.mono(10, weight: .medium))
+                                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+                                }
+                            }
+                        }
+                        .disabled(!isAvailable)
+                        .help(isAvailable ? claudeDisplayName(model) : chatState.claudeAvailability.reason)
+                    }
+                }
+            }
+            if !chatState.availableModels.isEmpty {
+                Section("🦉 HERMES") {
+                    ForEach(chatState.availableModels, id: \.name) { model in
+                        modelRow(id: "hermes:\(model.name)", label: displayName(for: model.name))
+                            .help("\(displayName(for: model.name)) przez Hermes Agent")
+                    }
+                }
+            }
 
             Divider()
             Button("ZARZĄDZAJ MODELAMI…") {
@@ -353,6 +347,18 @@ struct ChatView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Model Ollama")
+    }
+
+    /// Shared row for LOKALNE/CLOUD/HERMES — plain `Button`, no `Picker` tag
+    /// (see the fix note on `modelPicker`). `id` is the full value stored into
+    /// `chatState.selectedModel` (bare model name, or `"hermes:<model>"`).
+    private func modelRow(id: String, label: String) -> some View {
+        let isSelected = chatState.selectedModel == id
+        return Button {
+            chatState.selectedModel = id
+        } label: {
+            Text(isSelected ? "✓ \(label)" : "  \(label)")
+        }
     }
 
     /// Fala 17: `claude:*` ids are Anthropic subscription models, not Ollama —

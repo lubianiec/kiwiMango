@@ -205,6 +205,15 @@ struct HermesChatService: Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: hermesPath)
         process.arguments = arguments
+        // A GUI-launched app has a much thinner environment than an
+        // interactive shell (often no TERM at all) — Hermes's rich/textual
+        // output renderer picks a different code path without it and can
+        // drop the `session_id:` footer entirely. Mirrors `ClaudeCodeService`.
+        var env = ProcessInfo.processInfo.environment
+        env["TERM"] = "xterm-256color"
+        env["COLUMNS"] = "120"
+        env["LINES"] = "40"
+        process.environment = env
 
         // Set once (from `onCancel`) so the termination handler can tell a
         // user-requested STOP apart from a genuine process failure.
@@ -253,7 +262,7 @@ struct HermesChatService: Sendable {
                         return
                     }
 
-                    switch Self.parseResponse(out) {
+                    switch Self.parseResponse(stdout: out, stderr: err) {
                     case .success(let response):
                         continuation.resume(returning: response)
                     case .failure(let error):
@@ -278,31 +287,44 @@ struct HermesChatService: Sendable {
         })
     }
 
-    /// Parses raw stdout: finds the LAST `session_id: <id>` occurrence and
-    /// treats everything after that line as the final answer. Everything
-    /// before it (Reasoning box redrawn via `\r`, optional "Resumed session"
-    /// header) is discarded wholesale — verified empirically in F22.0, no
-    /// separate ANSI/`\r` stripping needed.
-    private static func parseResponse(_ raw: String) -> Result<HermesResponse, ServiceError> {
+    /// Fix (2026-07-08, live-tested): `session_id:` is written to **stderr**,
+    /// never stdout — confirmed empirically with separated-stream captures
+    /// (the original F22.0 Bash test used `2>&1`, which merged the streams
+    /// and made it *look* like stdout carried the footer). Stdout instead
+    /// contains the `┌─ Reasoning ─┐` box, redrawn via `\r` with no closing
+    /// border, flowing directly into the final answer with no delimiter.
+    ///
+    /// Distinguishing rule (verified on raw captures): every reasoning-box
+    /// line ends with `\r` (a redraw); the real final-answer line(s) end with
+    /// a plain `\n`. Dropping every `\r`-suffixed line and keeping the rest
+    /// recovers the clean answer without a separate ANSI stripping pass.
+    private static func parseResponse(stdout: String, stderr: String) -> Result<HermesResponse, ServiceError> {
         let pattern = #"session_id:\s*(\S+)"#
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
+            return .failure(.unparsableOutput(stdout))
+        }
+        let nsRange = NSRange(stderr.startIndex..., in: stderr)
+        let matches = regex.matches(in: stderr, options: [], range: nsRange)
+        guard let lastMatch = matches.last,
+              let idRange = Range(lastMatch.range(at: 1), in: stderr)
+        else {
+            let raw = [stdout, stderr].filter { !$0.isEmpty }.joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             return .failure(.unparsableOutput(raw))
         }
-        let nsRange = NSRange(raw.startIndex..., in: raw)
-        let matches = regex.matches(in: raw, options: [], range: nsRange)
-        guard let lastMatch = matches.last,
-              let idRange = Range(lastMatch.range(at: 1), in: raw),
-              let fullLineRange = Range(lastMatch.range(at: 0), in: raw)
-        else {
-            return .failure(.unparsableOutput(raw.trimmingCharacters(in: .whitespacesAndNewlines)))
+        let sessionID = String(stderr[idRange])
+        guard !sessionID.isEmpty else {
+            return .failure(.unparsableOutput(stdout.trimmingCharacters(in: .whitespacesAndNewlines)))
         }
 
-        let sessionID = String(raw[idRange])
-        let answer = String(raw[fullLineRange.upperBound...])
+        let answer = stdout
+            .components(separatedBy: "\n")
+            .filter { !$0.hasSuffix("\r") }
+            .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !sessionID.isEmpty else {
-            return .failure(.unparsableOutput(raw.trimmingCharacters(in: .whitespacesAndNewlines)))
+        guard !answer.isEmpty else {
+            return .failure(.unparsableOutput(stdout.trimmingCharacters(in: .whitespacesAndNewlines)))
         }
         return .success(HermesResponse(text: answer, sessionID: sessionID))
     }
