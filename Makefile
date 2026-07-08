@@ -62,7 +62,14 @@ build:
 	else \
 		echo "WARNING: AppIcon.icns not found — run create_icon.sh first"; \
 	fi
-	@echo "=== Code signing (ad-hoc) ==="
+	@echo "=== Code signing (stable local identity) ==="
+	@# Ad-hoc signing ("--sign -") changes the app's CDHash on every rebuild,
+	@# so macOS TCC treats each build as a brand-new app and re-asks for every
+	@# permission (Photos, Music, Desktop, etc). Signing with a fixed local
+	@# certificate keeps identity stable across builds so grants persist.
+	@# Cert created once via: openssl req -x509 ... + security import/add-trusted-cert
+	@# (CN "kiwiMango Local Dev", in login keychain). Falls back to ad-hoc if missing.
+	codesign --force --deep --sign "kiwiMango Local Dev" "$(APP_BUNDLE)" 2>/dev/null || \
 	codesign --force --deep --sign - "$(APP_BUNDLE)"
 	@echo ""
 	@echo "=== Build complete: $(APP_BUNDLE) ==="
