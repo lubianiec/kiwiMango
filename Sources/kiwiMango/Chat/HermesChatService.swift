@@ -148,6 +148,15 @@ struct HermesChatService: Sendable {
     /// turn — tool-using turns can legitimately take minutes (F22 pułapka 5).
     static let timeout: TimeInterval = 300
 
+    /// Parses the picker's `"hermes:llama3.2"` id into the underlying Ollama
+    /// model name, or `nil` if `id` doesn't have the `hermes:` prefix.
+    /// Mirrors `ClaudeCodeService.parseModelID`.
+    static func parseModelID(_ id: String) -> String? {
+        guard id.hasPrefix("hermes:") else { return nil }
+        let name = String(id.dropFirst("hermes:".count))
+        return name.isEmpty ? nil : name
+    }
+
     // MARK: - Request/response
 
     /// Sends one message through `hermes chat`, optionally resuming a prior
@@ -157,6 +166,12 @@ struct HermesChatService: Sendable {
     /// into a shell string — so no escaping is needed and command injection
     /// via pasted user text is impossible by construction. The outer `zsh -l`
     /// wrapper (binary resolution only) never sees the message text.
+    ///
+    /// Fala 22 (F22.2): wrapped in `withTaskCancellationHandler` so the STOP
+    /// button (which calls `Task.cancel()` on the caller's `streamTask`) reaches
+    /// the underlying `Process` — plain `withCheckedThrowingContinuation` never
+    /// observes cancellation on its own, and without this the CLI would keep
+    /// running in the background for up to 5 minutes after STOP.
     func send(
         message: String,
         sessionID: String? = nil,
@@ -184,64 +199,80 @@ struct HermesChatService: Sendable {
             arguments += ["--image", imagePath]
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: hermesPath)
-            process.arguments = arguments
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: hermesPath)
+        process.arguments = arguments
 
-            let stdout = Pipe()
-            let stderr = Pipe()
-            process.standardOutput = stdout
-            process.standardError = stderr
+        // Set once (from `onCancel`) so the termination handler can tell a
+        // user-requested STOP apart from a genuine process failure.
+        let wasCancelled = LockedFlag()
 
-            // Guards against double-resume of the continuation: process
-            // termination and the timeout watchdog race each other.
-            let resumed = LockedFlag()
+        return try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { continuation in
+                let stdout = Pipe()
+                let stderr = Pipe()
+                process.standardOutput = stdout
+                process.standardError = stderr
 
-            let timeoutWorkItem = DispatchWorkItem {
-                guard resumed.trySet() else { return }
-                if process.isRunning {
-                    process.terminate()
+                // Guards against double-resume of the continuation: process
+                // termination and the timeout watchdog race each other.
+                let resumed = LockedFlag()
+
+                let timeoutWorkItem = DispatchWorkItem {
+                    guard resumed.trySet() else { return }
+                    if process.isRunning {
+                        process.terminate()
+                    }
+                    continuation.resume(throwing: ServiceError.timedOut)
                 }
-                continuation.resume(throwing: ServiceError.timedOut)
+                DispatchQueue.global().asyncAfter(deadline: .now() + Self.timeout, execute: timeoutWorkItem)
+
+                process.terminationHandler = { proc in
+                    timeoutWorkItem.cancel()
+                    guard resumed.trySet() else { return }
+
+                    if wasCancelled.isSet {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+
+                    let outData = stdout.fileHandleForReading.readDataToEndOfFile()
+                    let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+                    let out = String(data: outData, encoding: .utf8) ?? ""
+                    let err = String(data: errData, encoding: .utf8)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+                    if proc.terminationStatus != 0 {
+                        let combined = [out.trimmingCharacters(in: .whitespacesAndNewlines), err]
+                            .filter { !$0.isEmpty }
+                            .joined(separator: "\n")
+                        continuation.resume(throwing: ServiceError.processFailed(combined))
+                        return
+                    }
+
+                    switch Self.parseResponse(out) {
+                    case .success(let response):
+                        continuation.resume(returning: response)
+                    case .failure(let error):
+                        continuation.resume(throwing: error)
+                    }
+                }
+
+                do {
+                    try process.run()
+                } catch {
+                    timeoutWorkItem.cancel()
+                    if resumed.trySet() {
+                        continuation.resume(throwing: ServiceError.binaryNotFound)
+                    }
+                }
             }
-            DispatchQueue.global().asyncAfter(deadline: .now() + Self.timeout, execute: timeoutWorkItem)
-
-            process.terminationHandler = { proc in
-                timeoutWorkItem.cancel()
-                guard resumed.trySet() else { return }
-
-                let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-                let errData = stderr.fileHandleForReading.readDataToEndOfFile()
-                let out = String(data: outData, encoding: .utf8) ?? ""
-                let err = String(data: errData, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-                if proc.terminationStatus != 0 {
-                    let combined = [out.trimmingCharacters(in: .whitespacesAndNewlines), err]
-                        .filter { !$0.isEmpty }
-                        .joined(separator: "\n")
-                    continuation.resume(throwing: ServiceError.processFailed(combined))
-                    return
-                }
-
-                switch Self.parseResponse(out) {
-                case .success(let response):
-                    continuation.resume(returning: response)
-                case .failure(let error):
-                    continuation.resume(throwing: error)
-                }
+        }, onCancel: {
+            wasCancelled.trySet()
+            if process.isRunning {
+                process.terminate()
             }
-
-            do {
-                try process.run()
-            } catch {
-                timeoutWorkItem.cancel()
-                if resumed.trySet() {
-                    continuation.resume(throwing: ServiceError.binaryNotFound)
-                }
-            }
-        }
+        })
     }
 
     /// Parses raw stdout: finds the LAST `session_id: <id>` occurrence and
@@ -284,11 +315,21 @@ private final class LockedFlag: @unchecked Sendable {
 
     /// Returns `true` the first time it's called (caller may proceed to
     /// resume the continuation), `false` on every subsequent call.
+    @discardableResult
     func trySet() -> Bool {
         lock.lock()
         defer { lock.unlock() }
         if value { return false }
         value = true
         return true
+    }
+
+    /// Read-only check, used by the termination handler to tell a
+    /// user-requested cancel apart from a genuine process failure without
+    /// consuming the one-shot semantics of `trySet()`.
+    var isSet: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
     }
 }

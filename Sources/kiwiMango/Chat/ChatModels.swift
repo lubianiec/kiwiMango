@@ -208,6 +208,16 @@ final class ChatState {
     /// Models whose `/api/tags` capabilities include "thinking" → send `think:false`.
     @ObservationIgnored private var thinkingModels: Set<String> = []
 
+    /// Fala 22 (F22.2): Hermes keeps conversation context on its own side via
+    /// `hermes chat --resume <id>` — this only maps kiwiMango's `conversationId`
+    /// to the last Hermes `session_id` seen for it, so the next turn in the
+    /// same conversation resumes the right session. Deliberately in-memory
+    /// only (not persisted to GRDB), same philosophy as Fala 4's agent
+    /// sessions: this is a transport-continuity detail, not durable data —
+    /// it lives only for the app run and is rebuilt (fresh Hermes session)
+    /// on next launch.
+    @ObservationIgnored private var hermesSessionIDs: [Int64: String] = [:]
+
     /// Fresh instance per use, so a host change in Settings takes effect immediately.
     private var service: OllamaService { OllamaService() }
 
@@ -769,7 +779,7 @@ final class ChatState {
         if let systemPrompt = activePersona?.systemPrompt, !systemPrompt.isEmpty {
             history.insert(OllamaService.ChatPayloadMessage(role: "system", content: systemPrompt), at: 0)
         }
-        if !selectedModel.hasPrefix("claude:") {
+        if !selectedModel.hasPrefix("claude:") && !selectedModel.hasPrefix("hermes:") {
             history.insert(OllamaService.ChatPayloadMessage(role: "system", content: kiwiCardSystemPrompt), at: 0)
         }
         return history
@@ -790,6 +800,10 @@ final class ChatState {
 
         if let claudeModel = ClaudeCodeService.parseModelID(model) {
             await runClaudeStream(claudeModel: claudeModel, history: history, conversationId: conversationId)
+            return
+        }
+        if let hermesModel = HermesChatService.parseModelID(model) {
+            await runHermesStream(hermesModel: hermesModel, history: history, conversationId: conversationId)
             return
         }
 
@@ -938,6 +952,105 @@ final class ChatState {
         } else {
             messages[index].content += "\n\n" + text
         }
+        glitchTrigger += 1
+    }
+
+    /// Placeholder shown in the assistant bubble while `hermes chat` runs —
+    /// unlike Ollama/Claude there are no deltas, just one blob at the end
+    /// (F22 pułapka 5), so without this the bubble would stay blank for up
+    /// to 5 minutes with only the global "isStreaming" dot as feedback.
+    private static let hermesPlaceholder = "🦉 HERMES pracuje…"
+
+    /// Fala 22 (F22.2): `hermes chat -q <tekst>` takes a single message,
+    /// NOT the full message array `OllamaService`/Claude's NDJSON stream use —
+    /// Hermes keeps its own conversation context server-side via
+    /// `--resume <session_id>` (pułapka 1). Only the last user turn from
+    /// `history` is sent; kiwi-card prompt / persona system messages are never
+    /// forwarded (Hermes has its own SOUL.md). No streaming: `send()` returns
+    /// once at the end, so the bubble shows `hermesPlaceholder` until then
+    /// instead of growing token-by-token.
+    private func runHermesStream(
+        hermesModel: String,
+        history: [OllamaService.ChatPayloadMessage],
+        conversationId: Int64
+    ) async {
+        let prompt = history.last { $0.role == "user" }?.content ?? ""
+
+        let assistantMessage = ChatMessage(role: .assistant, content: Self.hermesPlaceholder)
+        let assistantID = assistantMessage.id
+        messages.append(assistantMessage)
+        lastAnimatedMessageID = assistantID
+        isStreaming = true
+        liveTokRate = 0
+
+        // -1 marks a conversation row whose DB insert failed (see
+        // `ensureConversation`) — never trust it as a stable key, same guard
+        // `runClaudeStream` applies to the GRDB-backed Claude session id.
+        let resumeSessionID = conversationId != -1 ? hermesSessionIDs[conversationId] : nil
+        let service = HermesChatService()
+        let startedAt = Date()
+
+        streamTask = Task {
+            var succeeded = false
+            do {
+                let response = try await service.send(
+                    message: prompt, sessionID: resumeSessionID, model: hermesModel
+                )
+                if conversationId != -1 {
+                    hermesSessionIDs[conversationId] = response.sessionID
+                }
+                setContent(response.text, on: assistantID)
+                applyHermesStats(startedAt: startedAt, to: assistantID)
+                succeeded = true
+            } catch is CancellationError {
+                markHermesCancelled(assistantID)
+            } catch {
+                showHermesError(error, on: assistantID)
+            }
+            isStreaming = false
+            liveTokRate = 0
+            streamTask = nil
+            if let final = messages.first(where: { $0.id == assistantID }) {
+                persist(final, conversationId: conversationId)
+            }
+            if succeeded, let title = conversations.first(where: { $0.id == conversationId })?.title {
+                ObsidianSyncService.syncConversation(conversationId: conversationId, title: title, model: "hermes:\(hermesModel)")
+            }
+        }
+        await streamTask?.value
+    }
+
+    /// Hermes has no tok/s equivalent either — same "elapsed wall-clock time
+    /// only" bar as `applyClaudeStats`.
+    private func applyHermesStats(startedAt: Date, to id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        let seconds = Date().timeIntervalSince(startedAt)
+        messages[index].statsLine = String(format: "%.1f s", seconds)
+    }
+
+    /// Replaces the placeholder/partial bubble content outright — unlike
+    /// `appendDelta`, Hermes delivers the full answer in one shot, so there's
+    /// nothing to append to.
+    private func setContent(_ text: String, on id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].content = text
+    }
+
+    /// Fala 22: unlike `markCancelled` (Ollama/Claude), the bubble already
+    /// holds `hermesPlaceholder` — not empty — when STOP is pressed, so this
+    /// always overwrites rather than checking for emptiness first.
+    private func markHermesCancelled(_ id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].content = "⏹ Przerwano."
+    }
+
+    /// Fala 22: minimal Polish error surface for `HermesChatService.ServiceError`
+    /// (already has Polish `errorDescription`) — same bar as `showClaudeError`.
+    /// Full error-message polish (provider mismatch detection, install
+    /// instructions, etc.) is F22.4, not this step.
+    private func showHermesError(_ error: Error, on id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].content = "⚠️ \(error.localizedDescription)"
         glitchTrigger += 1
     }
 

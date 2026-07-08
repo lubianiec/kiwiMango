@@ -315,6 +315,21 @@ struct ChatView: View {
                         }
                     }
                 }
+                if !chatState.availableModels.isEmpty {
+                    Section("🦉 HERMES") {
+                        ForEach(chatState.availableModels, id: \.name) { model in
+                            let id = "hermes:\(model.name)"
+                            let isSelected = chatState.selectedModel == id
+                            Button {
+                                chatState.selectedModel = id
+                            } label: {
+                                Text(isSelected ? "✓ \(displayName(for: model.name))" : "  \(displayName(for: model.name))")
+                            }
+                            .buttonStyle(.plain)
+                            .help("\(displayName(for: model.name)) przez Hermes Agent")
+                        }
+                    }
+                }
             }
             .pickerStyle(.inline)
 
@@ -325,7 +340,7 @@ struct ChatView: View {
         } label: {
             HStack(spacing: 4) {
                 Text("⊕ \(displayName(for: chatState.selectedModel))")
-                Text(selectedModelIsCloud ? "[Cloud]" : "[Local]")
+                Text(isHermesModelSelected ? "[Hermes]" : (selectedModelIsCloud ? "[Cloud]" : "[Local]"))
                     .foregroundStyle(Color.kiwiMangoPurple)
                 Text("▾")
             }
@@ -381,6 +396,10 @@ struct ChatView: View {
     private func displayName(for model: String, cloudBadge: Bool = false) -> String {
         if let claudeModel = ClaudeCodeService.parseModelID(model) {
             return claudeModel.displayName
+        }
+        if let hermesModel = HermesChatService.parseModelID(model) {
+            let base = hermesModel.split(separator: "/").last.map(String.init) ?? hermesModel
+            return "🦉 " + base
         }
         let base = model.split(separator: "/").last.map(String.init) ?? model
         guard cloudBadge, isKnownCloud(model) else { return base }
@@ -716,6 +735,13 @@ struct ChatView: View {
         ClaudeCodeService.parseModelID(chatState.selectedModel) != nil
     }
 
+    /// Fala 22 (F22.2): Hermes also has its own tools/context (own agent
+    /// loop) — the Ollama-side web search plumbing doesn't apply to it either,
+    /// same reasoning as `isClaudeModelSelected`.
+    private var isHermesModelSelected: Bool {
+        HermesChatService.parseModelID(chatState.selectedModel) != nil
+    }
+
     private var webSearchToggleButton: some View {
         Button {
             // F14.2 pt. 2: no key yet → open the manager instead of silently
@@ -733,15 +759,15 @@ struct ChatView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(isClaudeModelSelected)
+        .disabled(isClaudeModelSelected || isHermesModelSelected)
         .foregroundStyle(
-            isClaudeModelSelected
+            (isClaudeModelSelected || isHermesModelSelected)
                 ? Color.kiwiMangoTextPrimary.opacity(0.3)
                 : (webSearchEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
         )
         .help(
-            isClaudeModelSelected
-                ? "Claude ma świeżą wiedzę i własne narzędzia"
+            (isClaudeModelSelected || isHermesModelSelected)
+                ? "Ten model ma własne narzędzia i świeżą wiedzę"
                 : (webSearchEnabled ? "Wyłącz internet" : "Model korzysta z internetu")
         )
     }
