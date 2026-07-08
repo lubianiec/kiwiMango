@@ -976,6 +976,19 @@ final class ChatState {
     ) async {
         let prompt = history.last { $0.role == "user" }?.content ?? ""
 
+        // Fala 22 (F22.3): `history` only carries base64 strings (built for the
+        // Ollama payload shape) — the raw `Data` attachments still live on the
+        // last user `ChatMessage` we just appended in `send()`/`regenerateLast()`,
+        // so we read them from `messages`, not `history`.
+        let userImages = messages.last { $0.role == .user }?.images ?? []
+        let imagePath = userImages.first.flatMap(Self.writeTempImageFile)
+        // Hermes only takes one `--image` per turn (pułapka F22.3) — extra
+        // attachments are silently dropped from the request but surfaced to
+        // the user as a note on the reply, never as a blocked send.
+        let multiImageNote = userImages.count > 1
+            ? "(Hermes przyjmuje 1 obraz na wiadomość — wysłano tylko pierwszy)"
+            : nil
+
         let assistantMessage = ChatMessage(role: .assistant, content: Self.hermesPlaceholder)
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
@@ -994,12 +1007,16 @@ final class ChatState {
             var succeeded = false
             do {
                 let response = try await service.send(
-                    message: prompt, sessionID: resumeSessionID, model: hermesModel
+                    message: prompt, sessionID: resumeSessionID, model: hermesModel, imagePath: imagePath
                 )
                 if conversationId != -1 {
                     hermesSessionIDs[conversationId] = response.sessionID
                 }
-                setContent(response.text, on: assistantID)
+                var text = response.text
+                if let multiImageNote {
+                    text += "\n\n" + multiImageNote
+                }
+                setContent(text, on: assistantID)
                 applyHermesStats(startedAt: startedAt, to: assistantID)
                 succeeded = true
             } catch is CancellationError {
@@ -1018,6 +1035,29 @@ final class ChatState {
             }
         }
         await streamTask?.value
+    }
+
+    /// Writes one attachment to a uniquely-named file under the system temp
+    /// directory so it can be passed as `--image <path>` — `hermes chat` reads
+    /// a file path, not in-memory bytes. Extension follows the PNG/JPEG magic
+    /// bytes `ChatImage.normalize` already guarantees (Ollama-compatible
+    /// formats only), so the CLI's own content sniffing sees a sane suffix.
+    /// Cleanup of the temp file is intentionally out of scope for F22.3 (per
+    /// PLAN.md) — just avoid leaving open file handles, which `Data.write`
+    /// doesn't (it's a single synchronous write, no handle kept open).
+    private static func writeTempImageFile(_ data: Data) -> String? {
+        let isPNG = data.count >= 4 && data.prefix(4) == Data([0x89, 0x50, 0x4E, 0x47])
+        let ext = isPNG ? "png" : "jpg"
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kiwimango-hermes-\(UUID().uuidString)")
+            .appendingPathExtension(ext)
+        do {
+            try data.write(to: url)
+            return url.path
+        } catch {
+            print("[KiwiMango] Failed to write temp image for Hermes: \(error)")
+            return nil
+        }
     }
 
     /// Hermes has no tok/s equivalent either — same "elapsed wall-clock time
@@ -1044,13 +1084,18 @@ final class ChatState {
         messages[index].content = "⏹ Przerwano."
     }
 
-    /// Fala 22: minimal Polish error surface for `HermesChatService.ServiceError`
-    /// (already has Polish `errorDescription`) — same bar as `showClaudeError`.
-    /// Full error-message polish (provider mismatch detection, install
-    /// instructions, etc.) is F22.4, not this step.
+    /// Fala 22 (F22.4): Polish error surface for `HermesChatService.ServiceError`.
+    /// Timeout gets the same "⏹" marker as a user-triggered STOP (both mean
+    /// "proces przerwany", just for different reasons) — everything else
+    /// (binary missing, provider mismatch, unparsable output) is a genuine
+    /// error and keeps the "⚠️" marker used elsewhere in the app.
     private func showHermesError(_ error: Error, on id: UUID) {
         guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
-        messages[index].content = "⚠️ \(error.localizedDescription)"
+        if case HermesChatService.ServiceError.timedOut = error {
+            messages[index].content = "⏹ \(error.localizedDescription)"
+        } else {
+            messages[index].content = "⚠️ \(error.localizedDescription)"
+        }
         glitchTrigger += 1
     }
 

@@ -54,12 +54,15 @@ struct HermesChatService: Sendable {
         var errorDescription: String? {
             switch self {
             case .binaryNotFound:
-                "Nie znaleziono binarki `hermes` na PATH."
+                "Hermes nie jest zainstalowany. Zainstaluj: `ollama launch hermes` (pierwsze uruchomienie zainstaluje binarkę) albo sprawdź `~/.local/bin/hermes`."
             case .processFailed(let message):
                 if message.lowercased().contains("anthropic") || message.contains("400") {
-                    "Hermes próbował użyć płatnego API Anthropic zamiast Ollama — sprawdź `~/.hermes/config.yaml` (provider musi być `ollama-launch`). Szczegóły: \(message)"
+                    // F22.4: wymuszony --provider ollama-launch powinien temu zapobiec —
+                    // jeśli mimo to wystąpi, pokazujemy surowy komunikat obok, żeby dało
+                    // się zdiagnozować (defensywnie, patrz pułapka 2 w PLAN.md).
+                    "⚠️ Hermes ma ustawionego płatnego providera (Anthropic) zamiast Ollama — sprawdź `~/.hermes/config.yaml` (`provider: ollama-launch`) albo uruchom `hermes model` żeby to naprawić.\n\nSzczegóły: \(message)"
                 } else {
-                    message.isEmpty ? "Proces `hermes` zakończył się błędem." : message
+                    message.isEmpty ? "Proces `hermes` zakończył się błędem." : "Hermes zwrócił błąd: \(message)"
                 }
             case .timedOut:
                 "Hermes nie odpowiedział w ciągu 5 minut — przerwano."
