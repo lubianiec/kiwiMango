@@ -43,6 +43,12 @@ struct HermesChatService: Sendable {
         /// Session id do przekazania jako `--resume` w kolejnej turze tej
         /// samej rozmowy. Zawsze obecny gdy proces zakończył się sukcesem.
         let sessionID: String
+        /// Proces myślowy z ramki `┌─ Reasoning ─┐` (Paweł: chce to widzieć,
+        /// tak jak w terminalu). `nil` gdy odpowiedź nie miała bloku Reasoning.
+        /// Best-effort odszumiony (patrz `deduplicateReasoning`) — Hermes
+        /// redraw'uje ten blok wielokrotnie przez `\r` bez prawdziwego
+        /// terminala do nadpisania w miejscu, więc surowy tekst dubluje się.
+        let reasoning: String?
     }
 
     enum ServiceError: LocalizedError {
@@ -317,8 +323,8 @@ struct HermesChatService: Sendable {
             return .failure(.unparsableOutput(stdout.trimmingCharacters(in: .whitespacesAndNewlines)))
         }
 
-        let answer = stdout
-            .components(separatedBy: "\n")
+        let lines = stdout.components(separatedBy: "\n")
+        let answer = lines
             .filter { !$0.hasSuffix("\r") }
             .joined(separator: "\n")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -326,7 +332,41 @@ struct HermesChatService: Sendable {
         guard !answer.isEmpty else {
             return .failure(.unparsableOutput(stdout.trimmingCharacters(in: .whitespacesAndNewlines)))
         }
-        return .success(HermesResponse(text: answer, sessionID: sessionID))
+
+        let reasoning = extractReasoning(from: lines)
+        return .success(HermesResponse(text: answer, sessionID: sessionID, reasoning: reasoning))
+    }
+
+    /// Pulls the `┌─ Reasoning ─┐` box content out of the `\r`-suffixed lines
+    /// (the ones `parseResponse` drops from the final answer) and collapses
+    /// Hermes's own redraw duplication (see `deduplicateReasoning`).
+    private static func extractReasoning(from lines: [String]) -> String? {
+        let boxLines = lines
+            .filter { $0.hasSuffix("\r") }
+            .map { $0.dropLast() } // strip the trailing \r
+            .filter { !$0.hasPrefix("┌") && !$0.hasPrefix("└") } // drop box borders
+            .map(String.init)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !boxLines.isEmpty else { return nil }
+        let joined = boxLines.joined(separator: " ")
+        let cleaned = deduplicateReasoning(joined).trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    /// Hermes redraws the Reasoning box by reprinting the ENTIRE
+    /// accumulated-so-far text on every tick (no real terminal to overwrite
+    /// it in place), so the raw capture contains the same paragraph doubled
+    /// back-to-back once generation finishes. Heuristic: if the text's own
+    /// opening fragment reappears later, the tail from that second
+    /// occurrence onward is the fullest, final version — keep only that.
+    private static func deduplicateReasoning(_ text: String) -> String {
+        guard text.count > 60 else { return text }
+        let prefix = String(text.prefix(40))
+        guard let firstRange = text.range(of: prefix) else { return text }
+        guard let secondRange = text.range(of: prefix, range: firstRange.upperBound..<text.endIndex) else {
+            return text
+        }
+        return String(text[secondRange.lowerBound...])
     }
 }
 

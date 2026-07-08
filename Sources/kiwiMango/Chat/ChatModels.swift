@@ -1013,6 +1013,12 @@ final class ChatState {
                     hermesSessionIDs[conversationId] = response.sessionID
                 }
                 var text = response.text
+                // Paweł: chce widzieć proces myślowy, tak jak w terminalu —
+                // fenced block reużywa istniejący CodeBlockView (mono, kopiuj,
+                // zwijalny scroll), więc wygląda spójnie z resztą appki.
+                if let reasoning = response.reasoning, !reasoning.isEmpty {
+                    text = "```reasoning\n\(reasoning)\n```\n\n\(text)"
+                }
                 if let multiImageNote {
                     text += "\n\n" + multiImageNote
                 }

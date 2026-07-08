@@ -873,8 +873,31 @@ private struct MessageBubble: View {
 
     private var isUser: Bool { message.role == .user }
 
+    /// Hermes reasoning (F22.5, Paweł: "chcę widzieć proces myślowy, jak w
+    /// terminalu") is stripped out HERE, before `KiwiCardParser`/`MarkdownText`
+    /// ever see the text — routing it through the generic ```-fence code-block
+    /// pipeline (`CodeBlockView`'s per-line `ScrollView`) rendered visually
+    /// blank for reasons that didn't reproduce outside that exact view (content
+    /// verified correct via clipboard + DB dump; only the ScrollView rows
+    /// stayed empty). A dedicated plain `Text` below sidesteps that entirely.
+    private var reasoningAndContent: (reasoning: String?, content: String) {
+        let fence = "```reasoning\n"
+        guard let openRange = message.content.range(of: fence) else {
+            return (nil, message.content)
+        }
+        let afterOpen = String(message.content[openRange.upperBound...])
+        guard let closeRange = afterOpen.range(of: "\n```") else {
+            return (nil, message.content)
+        }
+        let reasoning = String(afterOpen[..<closeRange.lowerBound])
+        let suffix = String(afterOpen[closeRange.upperBound...])
+        let prefix = String(message.content[..<openRange.lowerBound])
+        let cleaned = (prefix + suffix).trimmingCharacters(in: .whitespacesAndNewlines)
+        return (reasoning.isEmpty ? nil : reasoning, cleaned)
+    }
+
     private var cardAndText: (card: KiwiCard?, text: String) {
-        KiwiCardParser.extract(from: message.content)
+        KiwiCardParser.extract(from: reasoningAndContent.content)
     }
     private var card: KiwiCard? { cardAndText.card }
     private var renderedText: String { cardAndText.text }
@@ -888,6 +911,9 @@ private struct MessageBubble: View {
                     Text(modelPrefixLine)
                         .font(KiwiMangoFont.mono(10))
                         .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
+                }
+                if !isUser, let reasoning = reasoningAndContent.reasoning {
+                    reasoningBlock(reasoning)
                 }
                 if !message.images.isEmpty {
                     HStack(spacing: 6) {
@@ -964,6 +990,28 @@ private struct MessageBubble: View {
         let name = chatState.selectedModel.split(separator: "/").last.map(String.init) ?? chatState.selectedModel
         let isCloud = chatState.availableModels.first { $0.name == chatState.selectedModel }?.isCloud ?? false
         return "\(name)@\(isCloud ? "Cloud" : "Local")>"
+    }
+
+    /// Plain `Text` (no `ScrollView`/per-line `ForEach`, unlike `CodeBlockView`)
+    /// — same visual styling, deliberately simpler rendering path.
+    private func reasoningBlock(_ reasoning: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("REASONING")
+                .font(KiwiMangoFont.mono(10, weight: .medium))
+                .foregroundStyle(Color.kiwiMangoPurple.opacity(0.8))
+            Text(reasoning)
+                .font(KiwiMangoFont.mono(11))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.75))
+                .textSelection(.enabled)
+        }
+        .padding(10)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(Color(hex: "050507"))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(Color.kiwiMangoPurple.opacity(0.3), lineWidth: 1)
+        )
     }
 
     private var hoverActions: some View {
