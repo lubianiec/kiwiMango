@@ -870,6 +870,11 @@ private struct MessageBubble: View {
     @Environment(ChatState.self) private var chatState
     @State private var isHovered = false
     @State private var cursorVisible = true
+    /// Fala 24: manual toggle for `gatewayThinkingBlock` — `DisclosureGroup`'s
+    /// default macOS style turned out NOT clickable inside this view
+    /// hierarchy (verified live: clicks on the label/chevron never toggled
+    /// it), so a plain `Button` + `@State` replaces it outright.
+    @State private var thinkingExpanded = false
 
     private var isUser: Bool { message.role == .user }
 
@@ -914,6 +919,18 @@ private struct MessageBubble: View {
                 }
                 if !isUser, let reasoning = reasoningAndContent.reasoning {
                     reasoningBlock(reasoning)
+                }
+                if !isUser, let thinking = message.gatewayThinking, !thinking.isEmpty {
+                    gatewayThinkingBlock(thinking)
+                }
+                if !isUser, !message.gatewayToolLines.isEmpty {
+                    gatewayToolLinesBlock(message.gatewayToolLines)
+                }
+                if !isUser, let approval = message.pendingApproval {
+                    gatewayApprovalBlock(approval)
+                }
+                if !isUser, let clarify = message.pendingClarify {
+                    gatewayClarifyBlock(clarify)
                 }
                 if !message.images.isEmpty {
                     HStack(spacing: 6) {
@@ -1014,6 +1031,122 @@ private struct MessageBubble: View {
         )
     }
 
+    // MARK: - Hermes gateway blocks (Fala 24)
+
+    /// "MYŚLI…" — collapsed by default (Paweł's process-transparency ask
+    /// applies here too, but a live agent's reasoning is chattier than F22's
+    /// one-shot blob, so it starts folded rather than always-open). Plain
+    /// `Button` toggle, not `DisclosureGroup` (see `thinkingExpanded` doc).
+    private func gatewayThinkingBlock(_ thinking: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                thinkingExpanded.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Text(thinkingExpanded ? "▾" : "▸")
+                    Text("MYŚLI…")
+                }
+                .font(KiwiMangoFont.mono(10, weight: .medium))
+                .foregroundStyle(Color.kiwiMangoPurple.opacity(0.8))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if thinkingExpanded {
+                Text(thinking)
+                    .font(KiwiMangoFont.mono(11))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.7))
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(Color(hex: "050507"))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(Color.kiwiMangoPurple.opacity(0.3), lineWidth: 1)
+        )
+    }
+
+    /// Live `tool.start`/`tool.complete`/`subagent.*` status lines, PO
+    /// POLSKU — subagent lines already carry a "  ↳" indent prefix from
+    /// `runHermesGatewayStream`.
+    private func gatewayToolLinesBlock(_ lines: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                Text(line)
+                    .font(KiwiMangoFont.mono(11))
+                    .foregroundStyle(Color.kiwiMangoAccent.opacity(0.75))
+            }
+        }
+        .frame(maxWidth: 420, alignment: .leading)
+    }
+
+    private func gatewayApprovalBlock(_ approval: PendingApproval) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("⚠ HERMES CHCE WYKONAĆ KOMENDĘ")
+                .font(KiwiMangoFont.mono(10, weight: .bold))
+                .foregroundStyle(Color.kiwiMangoDanger)
+            if let command = approval.command {
+                Text(command)
+                    .font(KiwiMangoFont.mono(11))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
+                    .textSelection(.enabled)
+            }
+            if let description = approval.description, !description.isEmpty {
+                Text(description)
+                    .font(KiwiMangoFont.mono(10))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
+            }
+            HStack(spacing: 10) {
+                Button("ZATWIERDŹ") { chatState.respondApproval(approve: true) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.kiwiMangoAccent)
+                Button("ODRZUĆ") { chatState.respondApproval(approve: false) }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.kiwiMangoDanger)
+            }
+            .font(KiwiMangoFont.mono(11, weight: .bold))
+        }
+        .padding(10)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(Color.kiwiMangoDanger.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(Color.kiwiMangoDanger.opacity(0.5), lineWidth: 1)
+        )
+    }
+
+    private func gatewayClarifyBlock(_ clarify: PendingClarify) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(clarify.question)
+                .font(KiwiMangoFont.mono(11, weight: .medium))
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
+            if clarify.choices.isEmpty {
+                ClarifyTextField { answer in chatState.respondClarify(answer: answer) }
+            } else {
+                HStack(spacing: 8) {
+                    ForEach(clarify.choices, id: \.self) { choice in
+                        Button(choice) { chatState.respondClarify(answer: choice) }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color.kiwiMangoAccent)
+                    }
+                }
+                .font(KiwiMangoFont.mono(11, weight: .bold))
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(Color.kiwiMangoPurple.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(Color.kiwiMangoPurple.opacity(0.4), lineWidth: 1)
+        )
+    }
+
     private var hoverActions: some View {
         HStack(spacing: 10) {
             Button(action: copyContent) {
@@ -1058,6 +1191,36 @@ private struct MessageBubble: View {
 
     private func readAloud() {
         chatState.readMessageAloud(message.content)
+    }
+}
+
+// MARK: - ClarifyTextField (Fala 24)
+
+/// Free-text answer field for `clarify.request` when the server offers no
+/// fixed `choices` — Enter submits, mirrors the composer's plain-text feel.
+private struct ClarifyTextField: View {
+    let onSubmit: (String) -> Void
+    @State private var text = ""
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField("odpowiedz…", text: $text)
+                .textFieldStyle(.plain)
+                .font(KiwiMangoFont.mono(11))
+                .onSubmit(submit)
+            Button("WYŚLIJ", action: submit)
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.kiwiMangoAccent)
+                .font(KiwiMangoFont.mono(11, weight: .bold))
+                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+
+    private func submit() {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        onSubmit(trimmed)
+        text = ""
     }
 }
 

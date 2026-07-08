@@ -99,6 +99,49 @@ enum ToolHumanizer {
     private static func lastComponent(_ path: String) -> String {
         (path as NSString).lastPathComponent
     }
+
+    /// Fala 24 (F24.2): Hermes gateway tool names (`terminal`, `read_file`, …
+    /// — full list confirmed live in F24.0's `session.info.tools` payload),
+    /// distinct namespace from Claude Code's `Bash`/`Write`/`Read`/etc above.
+    /// `context`/`command` come straight off `tool.start`/`tool.complete`
+    /// payloads — no JSONL parsing involved here (that's Claude-Code-specific).
+    static func describeHermes(name: String, context: String, command: String?) -> String {
+        let cmd = command ?? context
+        switch name {
+        case "terminal", "process":
+            return "⚙ wykonuję komendę: \(truncate(cmd))"
+        case "write_file", "patch":
+            return "✍ piszę plik: \(truncate(cmd))"
+        case "read_file":
+            return "czytam plik: \(truncate(cmd))"
+        case "search_files":
+            return "szukam w plikach: \(truncate(cmd))"
+        case "execute_code":
+            return "▶ wykonuję kod"
+        case "browser_navigate", "browser_click", "browser_type", "browser_snapshot",
+             "browser_scroll", "browser_press", "browser_back", "browser_console",
+             "browser_get_images", "browser_vision":
+            return "🌐 przeglądarka: \(truncate(context))"
+        case "delegate_task":
+            return "odpalam subagenta: \(truncate(context))"
+        case "image_generate":
+            return "🎨 generuję obraz"
+        case "video_analyze":
+            return "🎬 analizuję wideo"
+        case "vision_analyze":
+            return "👁 analizuję obraz"
+        case "memory":
+            return "🧠 pamięć: \(truncate(context))"
+        case "cronjob":
+            return "⏰ harmonogram: \(truncate(context))"
+        case "text_to_speech":
+            return "🔊 synteza mowy"
+        case "todo":
+            return "☑ lista zadań"
+        default:
+            return truncate(context.isEmpty ? name : context)
+        }
+    }
 }
 
 // MARK: - Zdarzenia sparsowane poza MainActor (Sendable, przekraczają granicę aktora)

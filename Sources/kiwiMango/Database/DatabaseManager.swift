@@ -499,6 +499,17 @@ final class DatabaseManager: Sendable {
             }
         }
 
+        migrator.registerMigration("addHermesGatewaySessionID") { db in
+            // Fala 24 (F24.3): the WebSocket gateway's `session_id` (short
+            // 8-hex, from `session.create`'s result) — needed to `session.resume`
+            // the right agent session when the user switches back to this
+            // conversation. Distinct from F22's in-memory `hermesSessionIDs`
+            // dict (headless CLI `--resume`, still used by the fallback path).
+            try db.alter(table: "conversation") { t in
+                t.add(column: "hermesGatewaySessionID", .text)
+            }
+        }
+
         return migrator
     }
 
@@ -844,6 +855,25 @@ final class DatabaseManager: Sendable {
         try dbQueue.write { db in
             try db.execute(
                 sql: "UPDATE conversation SET claudeSessionID = ? WHERE id = ?", arguments: [sessionID, id]
+            )
+        }
+    }
+
+    // MARK: - Hermes gateway session id (Fala 24)
+
+    func fetchConversationHermesGatewaySessionID(_ id: Int64) throws -> String? {
+        try dbQueue.read { db in
+            guard let row = try Row.fetchOne(
+                db, sql: "SELECT hermesGatewaySessionID FROM conversation WHERE id = ?", arguments: [id]
+            ) else { return nil }
+            return row["hermesGatewaySessionID"]
+        }
+    }
+
+    func setConversationHermesGatewaySessionID(_ id: Int64, sessionID: String) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE conversation SET hermesGatewaySessionID = ? WHERE id = ?", arguments: [sessionID, id]
             )
         }
     }

@@ -72,6 +72,22 @@ struct ChatMessage: Identifiable {
     /// Not persisted — recomputed only for the live stream, gone after reload.
     var statsLine: String?
 
+    /// Fala 24 (F24.2): Hermes gateway's `thinking.delta`/`reasoning.delta`
+    /// stream, shown in a collapsed "MYŚLI…" section — separate from the
+    /// F22 `reasoningAndContent` fenced-block hack (that one lives inside
+    /// `content` for the headless fallback path). Not persisted.
+    var gatewayThinking: String?
+    /// Live `tool.start`/`tool.complete`/`subagent.*` status lines, PO POLSKU
+    /// via `ToolHumanizer.describeHermes`, shown above the final text while
+    /// (and after) a gateway turn runs. Not persisted — the DB only ever
+    /// gets the final `content`.
+    var gatewayToolLines: [String] = []
+    /// Set while an `approval.request` is blocking the turn — `ChatView`
+    /// renders ZATWIERDŹ/ODRZUĆ buttons. Not persisted.
+    var pendingApproval: PendingApproval?
+    /// Set while a `clarify.request` is blocking the turn. Not persisted.
+    var pendingClarify: PendingClarify?
+
     enum Role: String {
         case user
         case assistant
@@ -83,6 +99,22 @@ struct ChatMessage: Identifiable {
         self.content = content
         self.images = images
     }
+}
+
+// MARK: - PendingApproval / PendingClarify (Fala 24)
+
+/// Mirrors `approval.request`'s payload shape (confirmed in source,
+/// `tools/approval.py`) — `command`/`description` come pre-redacted by the
+/// server, safe to render verbatim.
+struct PendingApproval: Equatable {
+    var command: String?
+    var description: String?
+}
+
+/// Mirrors `clarify.request`'s payload shape.
+struct PendingClarify: Equatable {
+    var question: String
+    var choices: [String]
 }
 
 // MARK: - AttachedImage
@@ -217,6 +249,13 @@ final class ChatState {
     /// it lives only for the app run and is rebuilt (fresh Hermes session)
     /// on next launch.
     @ObservationIgnored private var hermesSessionIDs: [Int64: String] = [:]
+
+    /// Fala 24: the gateway `session_id` + assistant message id currently
+    /// waiting on an approval/clarify response or a STOP interrupt. `nil`
+    /// whenever no gateway turn is in flight — `cancel()`/`respondApproval`/
+    /// `respondClarify` all no-op without it.
+    @ObservationIgnored private var activeHermesGatewaySessionID: String?
+    @ObservationIgnored private var activeHermesGatewayAssistantID: UUID?
 
     /// Fresh instance per use, so a host change in Settings takes effect immediately.
     private var service: OllamaService { OllamaService() }
@@ -803,7 +842,7 @@ final class ChatState {
             return
         }
         if let hermesModel = HermesChatService.parseModelID(model) {
-            await runHermesStream(hermesModel: hermesModel, history: history, conversationId: conversationId)
+            await runHermesGatewayStream(hermesModel: hermesModel, history: history, conversationId: conversationId)
             return
         }
 
@@ -961,6 +1000,191 @@ final class ChatState {
     /// to 5 minutes with only the global "isStreaming" dot as feedback.
     private static let hermesPlaceholder = "🦉 HERMES pracuje…"
 
+    // MARK: - Hermes gateway (Fala 24) — full agent via WebSocket
+
+    /// Fala 24: routes `hermes:*` turns through `HermesGatewayClient` — a
+    /// full agent (tools, subagents, approvals) over the WS gateway, instead
+    /// of F22's one-shot headless CLI. Falls back to `runHermesStream` (F22,
+    /// below) ONLY if the gateway can't even connect (binary missing, server
+    /// failed to spawn) — a genuine "catastrophe at step zero", per PLAN.md's
+    /// own framing of the old path as plan B. Once connected, turn-level
+    /// errors (disconnect mid-turn, RPC error) are NOT retried through the
+    /// headless path — they surface as a Polish error bubble instead (F24.4),
+    /// since a headless retry would silently drop tool/approval context the
+    /// user already saw starting.
+    private func runHermesGatewayStream(
+        hermesModel: String,
+        history: [OllamaService.ChatPayloadMessage],
+        conversationId: Int64
+    ) async {
+        let client = HermesGatewayClient.shared
+        do {
+            try await client.connectIfNeeded()
+        } catch {
+            await runHermesStream(hermesModel: hermesModel, history: history, conversationId: conversationId)
+            return
+        }
+
+        let prompt = history.last { $0.role == "user" }?.content ?? ""
+        let userImages = messages.last { $0.role == .user }?.images ?? []
+        let multiImageNote = userImages.count > 1
+            ? "\n\n(Hermes przyjmuje 1 obraz na wiadomość — wysłano tylko pierwszy)"
+            : ""
+
+        let assistantMessage = ChatMessage(role: .assistant, content: "")
+        let assistantID = assistantMessage.id
+        messages.append(assistantMessage)
+        lastAnimatedMessageID = assistantID
+        isStreaming = true
+        liveTokRate = 0
+        activeHermesGatewayAssistantID = assistantID
+
+        let startedAt = Date()
+
+        streamTask = Task {
+            var succeeded = false
+            do {
+                let existingSessionID = conversationId != -1
+                    ? try? db.fetchConversationHermesGatewaySessionID(conversationId)
+                    : nil
+                let sessionID = try await client.resumeOrCreateSession(
+                    existingSessionID: existingSessionID, model: hermesModel, provider: "ollama-launch", cwd: nil
+                )
+                activeHermesGatewaySessionID = sessionID
+                if conversationId != -1, sessionID != existingSessionID {
+                    try? db.setConversationHermesGatewaySessionID(conversationId, sessionID: sessionID)
+                }
+
+                if let firstImage = userImages.first {
+                    let isPNG = firstImage.count >= 4 && firstImage.prefix(4) == Data([0x89, 0x50, 0x4E, 0x47])
+                    try? await client.attachImageBytes(
+                        sessionID: sessionID,
+                        base64Data: firstImage.base64EncodedString(),
+                        mimeType: isPNG ? "image/png" : "image/jpeg"
+                    )
+                }
+
+                try await client.submitPrompt(sessionID: sessionID, text: prompt)
+
+                let eventStream = await client.events()
+                turnLoop: for await event in eventStream {
+                    if Task.isCancelled { break turnLoop }
+                    switch event {
+                    case .thinkingDelta(let sid, let text) where sid == sessionID:
+                        appendGatewayThinking(text, to: assistantID)
+                    case .toolStart(let sid, _, let name, let context) where sid == sessionID:
+                        appendGatewayToolLine(ToolHumanizer.describeHermes(name: name, context: context, command: nil), to: assistantID)
+                    case .toolComplete(let sid, _, _, _, let exitCode, let errorText) where sid == sessionID:
+                        if let errorText, !errorText.isEmpty {
+                            appendGatewayToolLine("⚠️ błąd narzędzia: \(errorText)", to: assistantID)
+                        } else if let exitCode, exitCode != 0 {
+                            appendGatewayToolLine("⚠️ kod wyjścia \(exitCode)", to: assistantID)
+                        }
+                    case .subagentStart(let sid, _, let description) where sid == sessionID:
+                        appendGatewayToolLine("  ↳ subagent: \(description ?? "…")", to: assistantID)
+                    case .subagentComplete(let sid, _) where sid == sessionID:
+                        appendGatewayToolLine("  ↳ subagent zakończony", to: assistantID)
+                    case .approvalRequest(let sid, let command, let description) where sid == sessionID:
+                        setPendingApproval(PendingApproval(command: command, description: description), to: assistantID)
+                    case .clarifyRequest(let sid, let question, let choices) where sid == sessionID:
+                        setPendingClarify(PendingClarify(question: question, choices: choices), to: assistantID)
+                    case .messageComplete(let sid, let text, _) where sid == sessionID:
+                        setContent(text + multiImageNote, on: assistantID)
+                        applyHermesStats(startedAt: startedAt, to: assistantID)
+                        succeeded = true
+                        break turnLoop
+                    case .turnError(let sid, let message) where sid == nil || sid == sessionID:
+                        showGatewayError(message, on: assistantID)
+                        break turnLoop
+                    default:
+                        break
+                    }
+                }
+                if Task.isCancelled { markCancelled(assistantID) }
+            } catch is CancellationError {
+                markCancelled(assistantID)
+            } catch {
+                showGatewayError(error.localizedDescription, on: assistantID)
+            }
+            isStreaming = false
+            liveTokRate = 0
+            streamTask = nil
+            activeHermesGatewaySessionID = nil
+            activeHermesGatewayAssistantID = nil
+            if let final = messages.first(where: { $0.id == assistantID }) {
+                persist(final, conversationId: conversationId)
+            }
+            if succeeded, let title = conversations.first(where: { $0.id == conversationId })?.title {
+                ObsidianSyncService.syncConversation(conversationId: conversationId, title: title, model: "hermes:\(hermesModel)")
+            }
+        }
+        await streamTask?.value
+    }
+
+    /// ZATWIERDŹ/ODRZUĆ button action (F24.2) — no-op if no approval is
+    /// currently pending (defensive; buttons are only shown when it is).
+    func respondApproval(approve: Bool) {
+        guard let assistantID = activeHermesGatewayAssistantID,
+              let sessionID = activeHermesGatewaySessionID else { return }
+        clearPendingApproval(on: assistantID)
+        Task { try? await HermesGatewayClient.shared.respondApproval(sessionID: sessionID, approve: approve) }
+    }
+
+    /// `clarify.request` text-field submit action (F24.2).
+    func respondClarify(answer: String) {
+        guard let assistantID = activeHermesGatewayAssistantID,
+              let sessionID = activeHermesGatewaySessionID else { return }
+        clearPendingClarify(on: assistantID)
+        Task { try? await HermesGatewayClient.shared.respondClarify(sessionID: sessionID, answer: answer) }
+    }
+
+    private func appendGatewayThinking(_ delta: String, to id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].gatewayThinking = (messages[index].gatewayThinking ?? "") + delta
+    }
+
+    private func appendGatewayToolLine(_ line: String, to id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].gatewayToolLines.append(line)
+    }
+
+    private func setPendingApproval(_ approval: PendingApproval, to id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].pendingApproval = approval
+    }
+
+    private func clearPendingApproval(on id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].pendingApproval = nil
+    }
+
+    private func setPendingClarify(_ clarify: PendingClarify, to id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].pendingClarify = clarify
+    }
+
+    private func clearPendingClarify(on id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        messages[index].pendingClarify = nil
+    }
+
+    /// Fala 24 (F24.4): Polish error surface for `HermesGatewayClient.ClientError`
+    /// and turn-level `error` events — `ClientError.errorDescription` is
+    /// already Polish (server nie wstał / WS zerwany / sesja martwa), this
+    /// just applies the same "⚠️" bubble convention as every other error path.
+    private func showGatewayError(_ message: String, on id: UUID) {
+        guard let index = messages.lastIndex(where: { $0.id == id }) else { return }
+        let text = "⚠️ \(message)"
+        if messages[index].content.isEmpty {
+            messages[index].content = text
+        } else {
+            messages[index].content += "\n\n" + text
+        }
+        glitchTrigger += 1
+    }
+
+    // MARK: - Hermes headless fallback (Fala 22 — plan B, patrz F24 kontekst)
+
     /// Fala 22 (F22.2): `hermes chat -q <tekst>` takes a single message,
     /// NOT the full message array `OllamaService`/Claude's NDJSON stream use —
     /// Hermes keeps its own conversation context server-side via
@@ -969,6 +1193,10 @@ final class ChatState {
     /// forwarded (Hermes has its own SOUL.md). No streaming: `send()` returns
     /// once at the end, so the bubble shows `hermesPlaceholder` until then
     /// instead of growing token-by-token.
+    ///
+    /// Fala 24: no longer the primary path for `hermes:*` models — kept as
+    /// the "catastrophe at step zero" fallback `runHermesGatewayStream` calls
+    /// when the WS gateway can't even connect (binary missing / spawn failed).
     private func runHermesStream(
         hermesModel: String,
         history: [OllamaService.ChatPayloadMessage],
@@ -1114,9 +1342,15 @@ final class ChatState {
     }
 
     /// Cancels the in-progress streaming response (partial content is kept).
+    /// Fala 24: also sends `session.interrupt` to the gateway when a Hermes
+    /// turn is in flight — cancelling only the local `Task` would stop us
+    /// listening but leave the agent still running server-side.
     func cancel() {
         streamTask?.cancel()
         speechSynthesizer.stopAll()
+        if let sessionID = activeHermesGatewaySessionID {
+            Task { try? await HermesGatewayClient.shared.interrupt(sessionID: sessionID) }
+        }
     }
 
     /// Cancels the in-progress stream and waits for its cleanup/persist to

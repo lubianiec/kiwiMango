@@ -80,6 +80,11 @@ final class KiwiMangoAppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             agentManager?.killAll()
         }
+        // Fala 24: kiwiMango's own `hermes serve` child (spawned by
+        // `HermesGatewayClient`, its own token/port — never a foreign
+        // process) must die with the app too, same zombie-process hygiene
+        // as `agentManager.killAll()` above.
+        HermesGatewayProcessBox.shared.terminate()
         return .terminateNow
     }
 }
