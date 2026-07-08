@@ -53,6 +53,11 @@ enum SidebarSelection: Hashable {
     case agentHistory(Int64)
     /// The prompt vault (Fala 11) — one shared panel, no id to key by.
     case prompts
+    /// Centrum Dowodzenia (Fala 18) — live dashboard of running agent
+    /// sessions. One shared panel (no id), reached only via the status bar's
+    /// "Agenci [N]" segment — deliberately not a sidebar entry (F15 already
+    /// slimmed the sidebar down).
+    case missionControl
 }
 
 // MARK: - ChatMessage

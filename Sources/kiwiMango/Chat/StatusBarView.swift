@@ -74,8 +74,14 @@ struct StatusBarView: View {
 
             statusDivider
 
-            Text("Agenci [\(agentManager.runningCount)]")
-                .opacity(agentManager.runningCount == 0 ? 0.5 : 1)
+            Button {
+                NotificationCenter.default.post(name: .kiwiMangoRequestMissionControl, object: nil)
+            } label: {
+                Text("Agenci [\(agentManager.runningCount)]")
+                    .opacity(agentManager.runningCount == 0 ? 0.5 : 1)
+            }
+            .buttonStyle(.plain)
+            .help("Otwórz Centrum Dowodzenia")
 
             statusDivider
 

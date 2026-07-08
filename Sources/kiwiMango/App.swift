@@ -9,6 +9,7 @@ struct KiwiMangoApp: App {
 
     @State private var chatState = ChatState()
     @State private var agentManager = AgentManager()
+    @State private var agentTelemetry = AgentTelemetry()
     @NSApplicationDelegateAdaptor(KiwiMangoAppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -16,6 +17,7 @@ struct KiwiMangoApp: App {
             RootView()
                 .environment(chatState)
                 .environment(agentManager)
+                .environment(agentTelemetry)
                 .frame(minWidth: 760, minHeight: 480)
                 .onAppear { appDelegate.agentManager = agentManager }
         }
@@ -61,6 +63,9 @@ extension Notification.Name {
     static let kiwiMangoRequestNewConversation = Notification.Name("kiwiMangoRequestNewConversation")
     /// Posted by the ⌘P command; `RootView` listens and switches to the prompt vault.
     static let kiwiMangoRequestPrompts = Notification.Name("kiwiMangoRequestPrompts")
+    /// Posted by the status bar's "Agenci [N]" segment (F18.2); `RootView`
+    /// listens and switches to Centrum Dowodzenia.
+    static let kiwiMangoRequestMissionControl = Notification.Name("kiwiMangoRequestMissionControl")
 }
 
 // MARK: - KiwiMangoAppDelegate

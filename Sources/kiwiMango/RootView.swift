@@ -52,7 +52,7 @@ struct RootView: View {
             switch newValue {
             case .conversation(let id):
                 Task { await chatState.selectConversation(id) }
-            case .agent, .arena, .room, .agentHistory, .prompts, nil:
+            case .agent, .arena, .room, .agentHistory, .prompts, .missionControl, nil:
                 break
             }
         }
@@ -80,6 +80,9 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .kiwiMangoRequestPrompts)) { _ in
             selection = .prompts
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .kiwiMangoRequestMissionControl)) { _ in
+            selection = .missionControl
         }
         .alert("Zmień nazwę rozmowy", isPresented: renameBinding) {
             TextField("Nazwa", text: $renameText)
@@ -153,6 +156,11 @@ struct RootView: View {
                 chatState.draft = text
                 selection = nil
             }
+        case .missionControl:
+            MissionControlView(
+                onSelectAgent: { id in selection = .agent(id) },
+                onClose: { selection = nil }
+            )
         case .conversation, nil:
             ChatView()
         }
