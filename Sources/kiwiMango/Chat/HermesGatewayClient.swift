@@ -105,7 +105,7 @@ actor HermesGatewayClient {
         case subagentStart(sessionID: String, id: String, description: String?)
         case subagentText(sessionID: String, id: String, text: String)
         case subagentComplete(sessionID: String, id: String)
-        case approvalRequest(sessionID: String, command: String?, description: String?)
+        case approvalRequest(sessionID: String, command: String?, description: String?, patternKey: String?, patternKeys: [String])
         case clarifyRequest(sessionID: String, question: String, choices: [String])
         case messageComplete(sessionID: String, text: String, reasoning: String?, inputTokens: Int, outputTokens: Int)
         case sessionTitle(sessionID: String, title: String)
@@ -369,7 +369,15 @@ actor HermesGatewayClient {
         case "approval.request":
             let command = payload["command"] as? String
             let description = payload["description"] as? String
-            return .approvalRequest(sessionID: sessionID, command: command, description: description)
+            let patternKey = payload["pattern_key"] as? String
+            let patternKeys = payload["pattern_keys"] as? [String]
+            return .approvalRequest(
+                sessionID: sessionID,
+                command: command,
+                description: description,
+                patternKey: patternKey,
+                patternKeys: patternKeys ?? []
+            )
         case "clarify.request":
             let question = payload["question"] as? String ?? ""
             let choices = payload["choices"] as? [String] ?? []

@@ -121,10 +121,13 @@ struct ChatMessage: Identifiable {
 
 /// Mirrors `approval.request`'s payload shape (confirmed in source,
 /// `tools/approval.py`) — `command`/`description` come pre-redacted by the
-/// server, safe to render verbatim.
+/// server, safe to render verbatim. F25.6 also carries `pattern_key` /
+/// `pattern_keys` so the UI can show a human-readable risk justification.
 struct PendingApproval: Equatable {
     var command: String?
     var description: String?
+    var patternKey: String?
+    var patternKeys: [String]
 }
 
 /// Mirrors `clarify.request`'s payload shape.
@@ -1285,10 +1288,18 @@ final class ChatState {
             recordHermesLine("  ↳ subagent zakończony", runtime: runtime)
             updateBackgroundSubagentCount(runtime: runtime)
             HermesTelemetry.shared.subagentCompleted(sessionID: sid, subagentID: subID)
-        case .approvalRequest(let sid, let command, let description):
+        case .approvalRequest(let sid, let command, let description, let patternKey, let patternKeys):
             guard let runtime = hermesSessions[sid] else { return }
             if isOnScreen(runtime), let liveID = runtime.liveAssistantID {
-                setPendingApproval(PendingApproval(command: command, description: description), to: liveID)
+                setPendingApproval(
+                    PendingApproval(
+                        command: command,
+                        description: description,
+                        patternKey: patternKey,
+                        patternKeys: patternKeys
+                    ),
+                    to: liveID
+                )
             }
             // Off-screen approval requests have no UI surface yet (would need
             // a global banner independent of any bubble) — out of scope for

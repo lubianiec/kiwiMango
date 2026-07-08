@@ -1171,39 +1171,114 @@ private struct MessageBubble: View {
     }
 
     private func gatewayApprovalBlock(_ approval: PendingApproval) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("⚠ HERMES CHCE WYKONAĆ KOMENDĘ")
-                .font(KiwiMangoFont.mono(10, weight: .bold))
-                .foregroundStyle(Color.kiwiMangoDanger)
-            if let command = approval.command {
-                Text(command)
-                    .font(KiwiMangoFont.mono(11))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary)
-                    .textSelection(.enabled)
-            }
-            if let description = approval.description, !description.isEmpty {
-                Text(description)
-                    .font(KiwiMangoFont.mono(10))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
-            }
-            HStack(spacing: 10) {
-                Button("ZATWIERDŹ") { chatState.respondApproval(approve: true) }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.kiwiMangoAccent)
-                Button("ODRZUĆ") { chatState.respondApproval(approve: false) }
-                    .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.shield")
+                    .font(KiwiMangoFont.sans(14, weight: .bold))
+                    .foregroundStyle(Color.kiwiMangoDanger)
+                Text("HERMES CHCE WYKONAĆ KOMENDĘ")
+                    .font(KiwiMangoFont.mono(10, weight: .bold))
                     .foregroundStyle(Color.kiwiMangoDanger)
             }
-            .font(KiwiMangoFont.mono(11, weight: .bold))
+
+            if let command = approval.command, !command.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Komenda")
+                        .font(KiwiMangoFont.mono(9, weight: .medium))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                        .textCase(.uppercase)
+                    Text(command)
+                        .font(KiwiMangoFont.mono(12))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
+                        .textSelection(.enabled)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Dlaczego to oznaczono")
+                    .font(KiwiMangoFont.mono(9, weight: .medium))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    .textCase(.uppercase)
+                Text(approval.description?.isEmpty == false
+                    ? approval.description!
+                    : humanizedPatternKey(approval.patternKey))
+                    .font(KiwiMangoFont.sans(12))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.85))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Co może pójść źle")
+                    .font(KiwiMangoFont.mono(9, weight: .medium))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    .textCase(.uppercase)
+                Text(potentialRisk(for: approval))
+                    .font(KiwiMangoFont.sans(12))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.85))
+            }
+
+            HStack(spacing: 12) {
+                Button("ZATWIERDŹ RAZ") { chatState.respondApproval(approve: true) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.kiwiMangoAccent)
+                Button("ODRZUĆ") { chatState.respondApproval(approve: false) }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.kiwiMangoDanger)
+            }
         }
-        .padding(10)
-        .frame(maxWidth: 420, alignment: .leading)
+        .padding(12)
+        .frame(maxWidth: 480, alignment: .leading)
         .background(Color.kiwiMangoDanger.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color.kiwiMangoDanger.opacity(0.5), lineWidth: 1)
         )
+    }
+
+    /// F25.6: human-readable label for the dangerous-command pattern key when
+    /// the gateway omits a description. Keep in sync with the Hermes server-side
+    /// DANGEROUS_PATTERNS keys (tools/approval.py).
+    private func humanizedPatternKey(_ key: String?) -> String {
+        guard let key = key, !key.isEmpty else { return "Wykryto potencjalnie niebezpieczną operację." }
+        switch key {
+        case "rm_rf", "recursive_delete": return "Rekursywne usuwanie plików lub folderów."
+        case "system_write", "write_system_path": return "Zapis do chronionych ścieżek systemowych."
+        case "sudo_command", "sudo": return "Polecenie wymagające uprawnień administratora."
+        case "exec_code", "script_execution": return "Wykonanie kodu/skryptu w powłoce."
+        case "database_drop", "drop_db": return "Usunięcie bazy danych."
+        case "shutdown", "reboot": return "Wyłączenie lub restart komputera."
+        case "fork_bomb", "resource_exhaustion": return "Polecenie mogące zawiesić system."
+        case "curl_pipe", "piped_download": return "Pobranie i natychmiastowe wykonanie skryptu z sieci."
+        case "chmod_dangerous": return "Zmiana uprawnień w sposób mogący uszkodzić system."
+        case "docker_prune", "docker_nuke": return "Usunięcie danych kontenerów/wolumenów Dockera."
+        case let k where k.hasPrefix("tirith:"): return "Skan bezpieczeństwa wykrył problem."
+        default: return "Wzór ryzyka: \(key)"
+        }
+    }
+
+    /// F25.6: short risk sentence derived from pattern keys — enough to help the
+    /// user decide without reading server source.
+    private func potentialRisk(for approval: PendingApproval) -> String {
+        let keys = approval.patternKeys.isEmpty ? [approval.patternKey].compactMap { $0 } : approval.patternKeys
+        if keys.isEmpty { return "Przed zatwierdzeniem upewnij się, że rozumiesz skutki tej komendy." }
+        let concerns = keys.map { key -> String in
+            switch key {
+            case "rm_rf", "recursive_delete": return "może nieodwracalnie usunąć dane"
+            case "system_write", "write_system_path": return "może zmienić pliki systemowe"
+            case "sudo_command", "sudo": return "działa z uprawnieniami administratora"
+            case "exec_code", "script_execution": return "wykonuje kod zewnętrzny"
+            case "database_drop", "drop_db": return "może zniszczyć bazę danych"
+            case "shutdown", "reboot": return "może przerwać pracę systemu"
+            case "fork_bomb", "resource_exhaustion": return "może przeciążyć system"
+            case "curl_pipe", "piped_download": return "pobiera i wykonuje kod z sieci"
+            case "chmod_dangerous": return "może popsuć uprawnienia plików"
+            case "docker_prune", "docker_nuke": return "może usunąć dane Dockera"
+            case let k where k.hasPrefix("tirith:"): return "wskazanie skanu bezpieczeństwa"
+            default: return "nieznane ryzyko (\(key))"
+            }
+        }
+        let unique = Array(Set(concerns))
+        return "Jeśli coś pójdzie nie tak: \(unique.joined(separator: ", "))."
     }
 
     private func gatewayClarifyBlock(_ clarify: PendingClarify) -> some View {
