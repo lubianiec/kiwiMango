@@ -152,19 +152,19 @@ private struct CodeBlockView: View {
                 .fill(Color.kiwiMangoAccent.opacity(0.15))
                 .frame(height: 1)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                // Split into one `Text` per line: a single `Text` here collapses to
-                // one line under the ScrollView's unconstrained width proposal, even
-                // with embedded "\n" — explicit rows sidestep that entirely.
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(content.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
-                        Text(line.isEmpty ? " " : line)
-                            .font(KiwiMangoFont.mono(12))
-                            .foregroundStyle(Color.kiwiMangoTextPrimary)
-                    }
+            let lines = content.components(separatedBy: "\n")
+            let numberWidth = String(lines.count).count
+            // No ScrollView here on purpose: a horizontal ScrollView nested inside the
+            // transcript's vertical one renders its content at zero width on this macOS
+            // build (reproduced even with the pre-existing, un-highlighted code path —
+            // not something introduced by this fala). Long lines wrap instead of scrolling.
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { i, line in
+                    Text(numberedLine(index: i, width: numberWidth, line: line))
+                        .font(KiwiMangoFont.mono(12))
                 }
-                .padding(10)
             }
+            .padding(10)
         }
         .background(Color(hex: "050507"))
         .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -179,5 +179,13 @@ private struct CodeBlockView: View {
         NSPasteboard.general.setString(content, forType: .string)
         justCopied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { justCopied = false }
+    }
+
+    private func numberedLine(index: Int, width: Int, line: String) -> AttributedString {
+        let number = String(index + 1)
+        let padded = String(repeating: " ", count: max(0, width - number.count)) + number
+        var gutter = AttributedString(padded + "  ")
+        gutter.foregroundColor = Color.kiwiMangoTextPrimary.opacity(0.3)
+        return gutter + SyntaxHighlighter.highlight(line: line.isEmpty ? " " : line, language: language)
     }
 }

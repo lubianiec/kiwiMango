@@ -54,6 +54,8 @@ extension Color {
     static let kiwiMangoTextPrimary = Color(hex: "EDF2E8")
     /// Destructive/coral accent (#ff6a5c).
     static let kiwiMangoDanger = Color(hex: "ff6a5c")
+    /// Warm amber for numeric literals in the code block syntax highlighter (#FFB454).
+    static let kiwiMangoSyntaxNumber = Color(hex: "FFB454")
 }
 
 // MARK: - Fonts
