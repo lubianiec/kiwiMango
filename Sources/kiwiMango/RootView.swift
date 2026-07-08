@@ -441,9 +441,8 @@ struct RootView: View {
 
 // MARK: - Sidebar action buttons (F15.2 hierarchy)
 
-/// Shared with the F15.4 hover-comet — the comet's `trim` must ride the exact
-/// same corner radius as the pill it circles, or it looks "detached" at the
-/// corners. One constant, not two numbers repeated in two files.
+/// Shared with `HoverGlow` — its border must ride the exact same corner
+/// radius as the pill it wraps. One constant, not two numbers in two files.
 let sidebarActionCornerRadius: CGFloat = 3
 
 /// The ONE primary action of the sidebar: filled accent background, dark text.
@@ -464,7 +463,7 @@ private struct PrimarySidebarButton: View {
                 .background(Color.kiwiMangoAccent, in: RoundedRectangle(cornerRadius: sidebarActionCornerRadius))
         }
         .buttonStyle(.plain)
-        .overlay(NeonComet(active: hovering, cometColor: .kiwiMangoPurple, cornerRadius: sidebarActionCornerRadius))
+        .overlay(HoverGlow(active: hovering, glowColor: .kiwiMangoPurple, cornerRadius: sidebarActionCornerRadius))
         .onHover { hovering = $0 }
         .onDisappear { hovering = false }
     }
@@ -491,7 +490,7 @@ private struct SecondarySidebarButton: View {
                 )
         }
         .buttonStyle(.plain)
-        .overlay(NeonComet(active: hovering, cometColor: .kiwiMangoAccent, cornerRadius: sidebarActionCornerRadius))
+        .overlay(HoverGlow(active: hovering, glowColor: .kiwiMangoAccent, cornerRadius: sidebarActionCornerRadius))
         .onHover { hovering = $0 }
         .onDisappear { hovering = false }
     }
@@ -521,7 +520,7 @@ private struct LabSidebarButton: View {
                 )
         }
         .buttonStyle(.plain)
-        .overlay(NeonComet(active: hovering, cometColor: isActive ? .kiwiMangoPurple : .kiwiMangoAccent, cornerRadius: sidebarActionCornerRadius))
+        .overlay(HoverGlow(active: hovering, glowColor: isActive ? .kiwiMangoPurple : .kiwiMangoAccent, cornerRadius: sidebarActionCornerRadius))
         .onHover { hovering = $0 }
         .onDisappear { hovering = false }
     }

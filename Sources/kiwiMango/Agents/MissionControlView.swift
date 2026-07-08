@@ -252,21 +252,21 @@ private struct AgentMissionCard: View {
         return "\(minutes / 60) godz. \(minutes % 60) min"
     }
 
-    // MARK: ASCII runner (F18.2 pkt 2)
+    // MARK: Braille spinner (F18.2 pkt 2)
 
-    private static let runnerFrames = ["ᕕ( ᐛ )ᕗ", "ᕗ( ᐛ )ᕕ", " ᕕ( ᐛ )ᕗ", "ᕕ( ᐛ )ᕗ "]
+    private static let spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
     @ViewBuilder
     private var runner: some View {
         if isRunning {
-            TimelineView(.periodic(from: session.startedAt, by: 0.26)) { context in
-                let tick = Int(context.date.timeIntervalSince(session.startedAt) / 0.26)
-                Text(Self.runnerFrames[tick % Self.runnerFrames.count])
-                    .font(KiwiMangoFont.mono(13, weight: .bold))
+            TimelineView(.periodic(from: session.startedAt, by: 0.08)) { context in
+                let tick = Int(context.date.timeIntervalSince(session.startedAt) / 0.08)
+                Text(Self.spinnerFrames[tick % Self.spinnerFrames.count])
+                    .font(KiwiMangoFont.mono(15, weight: .bold))
                     .foregroundStyle(Color.kiwiMangoAccent)
             }
         } else {
-            Text("(－ω－) zzZ")
+            Text("✓")
                 .font(KiwiMangoFont.mono(13, weight: .bold))
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
         }
