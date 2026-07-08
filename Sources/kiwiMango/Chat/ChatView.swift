@@ -201,6 +201,11 @@ struct ChatView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
+                // F26.13: cap the readable column so it doesn't stretch edge-to-edge
+                // on a wide monitor, then center that capped column in the full-width
+                // scroll viewport (the classic two-step `frame` trick).
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
             }
             .onAppear {
                 proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
@@ -457,6 +462,10 @@ struct ChatView: View {
                     .padding(.bottom, 10)
             }
         }
+        // F26.13: same cap-then-center trick as the transcript, so the composer
+        // stays visually aligned under it instead of stretching wider.
+        .frame(maxWidth: 760)
+        .frame(maxWidth: .infinity)
         .background(Color.clear)
         .onChange(of: chatState.draft) { snippetPopoverDismissed = false }
     }

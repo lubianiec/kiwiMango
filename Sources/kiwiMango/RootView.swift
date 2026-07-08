@@ -18,6 +18,11 @@ struct RootView: View {
     @State private var renameTarget: Conversation?
     @State private var renameText = ""
     @State private var toastMessage: String?
+    /// F26.13: auto-collapse the sidebar below a width threshold (split-screen
+    /// laptop use), auto-restore above it. Hysteresis (680/760) avoids flicker
+    /// right at the boundary; doesn't fight a manual ⌃⌘S toggle unless the
+    /// window is actually resized across the threshold afterwards.
+    @State private var windowWidth: CGFloat = 900
 
     /// Lab state lives here, not in the views — Arena/Room must survive
     /// navigating away and back (selection switches to a conversation, then
@@ -49,6 +54,22 @@ struct RootView: View {
             set: { chatState.showingModelManager = $0 }
         )) {
             ModelManagerView()
+        }
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { windowWidth = proxy.size.width }
+                    .onChange(of: proxy.size.width) { _, newWidth in
+                        windowWidth = newWidth
+                    }
+            }
+        }
+        .onChange(of: windowWidth) { _, newWidth in
+            if newWidth < 680, columnVisibility != .detailOnly {
+                columnVisibility = .detailOnly
+            } else if newWidth > 760, columnVisibility != .all {
+                columnVisibility = .all
+            }
         }
         .onChange(of: selection) { _, newValue in
             switch newValue {
