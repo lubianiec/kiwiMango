@@ -18,7 +18,6 @@ struct RootView: View {
     @State private var renameTarget: Conversation?
     @State private var renameText = ""
     @State private var toastMessage: String?
-    @State private var bootDone = false
 
     /// Lab state lives here, not in the views — Arena/Room must survive
     /// navigating away and back (selection switches to a conversation, then
@@ -111,11 +110,6 @@ struct RootView: View {
                         try? await Task.sleep(for: .seconds(2.5))
                         withAnimation { self.toastMessage = nil }
                     }
-            }
-        }
-        .overlay {
-            if !bootDone {
-                BootSequenceView(onDone: { bootDone = true })
             }
         }
         .task { refreshAgentHistory() }
