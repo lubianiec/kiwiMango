@@ -368,6 +368,7 @@ struct ChatView: View {
     private var pickerModels: [String] {
         var models = chatState.availableModels.map(\.name)
         if ClaudeCodeService.parseModelID(chatState.selectedModel) != nil { return models }
+        if HermesChatService.parseModelID(chatState.selectedModel) != nil { return models }
         if models.isEmpty { return [chatState.selectedModel] }
         if !models.contains(chatState.selectedModel) {
             models.insert(chatState.selectedModel, at: 0)
