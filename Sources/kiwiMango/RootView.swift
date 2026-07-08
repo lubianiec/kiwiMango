@@ -18,6 +18,9 @@ struct RootView: View {
     @State private var renameTarget: Conversation?
     @State private var renameText = ""
     @State private var toastMessage: String?
+    /// F26.11: ⌘K command palette — quick jump to a conversation/agent/model
+    /// or run an action, without leaving the keyboard.
+    @State private var showingCommandPalette = false
     /// F26.13: auto-collapse the sidebar below a width threshold (split-screen
     /// laptop use), auto-restore above it. Hysteresis (680/760) avoids flicker
     /// right at the boundary; doesn't fight a manual ⌃⌘S toggle unless the
@@ -93,6 +96,9 @@ struct RootView: View {
             Button("") { toggleSidebar() }
                 .keyboardShortcut("s", modifiers: [.control, .command])
                 .hidden()
+            Button("") { showingCommandPalette = true }
+                .keyboardShortcut("k", modifiers: .command)
+                .hidden()
         }
         .onReceive(NotificationCenter.default.publisher(for: .kiwiMangoRequestNewAgent)) { _ in
             showingNewAgentPopover = true
@@ -116,6 +122,18 @@ struct RootView: View {
                 renameTarget = nil
             }
             Button("Anuluj", role: .cancel) { renameTarget = nil }
+        }
+        .overlay {
+            if showingCommandPalette {
+                CommandPaletteView(
+                    isPresented: $showingCommandPalette,
+                    onSelectConversation: { id in selection = .conversation(id) },
+                    onSelectAgent: { id in selection = .agent(id) },
+                    onExported: { filename in
+                        withAnimation { toastMessage = "Zapisano: \(filename)" }
+                    }
+                )
+            }
         }
         .overlay(alignment: .bottom) {
             if let toastMessage {
