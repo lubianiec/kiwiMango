@@ -28,7 +28,10 @@ let package = Package(
             // scan — declaring them explicitly silences the warning. The actual
             // compiled shader library comes from MetalCompilerPlugin below.
             resources: [
-                .process("Shaders")
+                .process("Shaders"),
+                // Bundled offline (F26.9) so Mermaid diagrams render with zero
+                // network access, matching the rest of the UI's no-CDN policy.
+                .copy("Resources/mermaid.min.js")
             ],
             // Swift 6 strict concurrency floods errors from GRDB internals — pragmatic v5 mode
             swiftSettings: [
