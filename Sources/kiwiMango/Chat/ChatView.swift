@@ -921,6 +921,11 @@ private struct MessageBubble: View {
                 if !isUser, !message.gatewayToolLines.isEmpty {
                     gatewayToolLinesBlock(message.gatewayToolLines)
                 }
+                if !isUser {
+                    ForEach(Array(message.gatewayDiffs.enumerated()), id: \.offset) { _, diff in
+                        gatewayDiffBlock(diff)
+                    }
+                }
                 if !isUser, message.backgroundSubagentCount > 0 {
                     gatewayBackgroundSubagentsBar(count: message.backgroundSubagentCount)
                 }
@@ -1083,6 +1088,64 @@ private struct MessageBubble: View {
             }
         }
         .frame(maxWidth: 420, alignment: .leading)
+    }
+
+    /// F26.4: unified diff from a `write_file`/`patch` tool call — one block per
+    /// edited file. No horizontal ScrollView (F26.3 found it renders at zero
+    /// width nested inside the transcript's vertical one on this macOS build);
+    /// long lines wrap instead.
+    private func gatewayDiffBlock(_ diff: String) -> some View {
+        let lines = diff.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let fileLabel = lines.first(where: { $0.hasPrefix("+++ ") }).map { String($0.dropFirst(4)) }
+
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(fileLabel ?? "DIFF")
+                    .font(KiwiMangoFont.mono(10, weight: .medium))
+                    .foregroundStyle(Color.kiwiMangoPurple.opacity(0.8))
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+
+            Rectangle()
+                .fill(Color.kiwiMangoAccent.opacity(0.15))
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    diffLineView(line)
+                }
+            }
+            .padding(10)
+        }
+        .frame(maxWidth: 420, alignment: .leading)
+        .background(Color(hex: "050507"))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(Color.kiwiMangoAccent.opacity(0.3), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func diffLineView(_ line: String) -> some View {
+        let font = KiwiMangoFont.mono(11)
+        if line.hasPrefix("--- ") || line.hasPrefix("+++ ") {
+            Text(line).font(font).foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+        } else if line.hasPrefix("@@") {
+            Text(line).font(font).foregroundStyle(Color.kiwiMangoPurple.opacity(0.8))
+        } else if line.hasPrefix("+") {
+            Text(line).font(font).foregroundStyle(Color.kiwiMangoAccent)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.kiwiMangoAccent.opacity(0.08))
+        } else if line.hasPrefix("-") {
+            Text(line).font(font).foregroundStyle(Color.kiwiMangoDanger)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.kiwiMangoDanger.opacity(0.08))
+        } else {
+            Text(line.isEmpty ? " " : line).font(font).foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+        }
     }
 
     /// Fala 24.6: shown under a bubble whose turn already completed but

@@ -82,6 +82,10 @@ struct ChatMessage: Identifiable {
     /// (and after) a gateway turn runs. Not persisted — the DB only ever
     /// gets the final `content`.
     var gatewayToolLines: [String] = []
+    /// F26.4: unified diffs from `write_file`/`patch` tool calls (`tool.complete`'s
+    /// `inline_diff`, ANSI codes already stripped) — rendered as a diff view under
+    /// the matching tool line instead of a plain status string. Not persisted.
+    var gatewayDiffs: [String] = []
     /// Set while an `approval.request` is blocking the turn — `ChatView`
     /// renders ZATWIERDŹ/ODRZUĆ buttons. Not persisted.
     var pendingApproval: PendingApproval?
@@ -1225,12 +1229,15 @@ final class ChatState {
             let line = ToolHumanizer.describeHermes(name: name, context: context, command: nil)
             recordHermesLine(line, runtime: runtime)
             HermesTelemetry.shared.setActivity(sessionID: sid, text: line)
-        case .toolComplete(let sid, _, _, _, let exitCode, let errorText):
+        case .toolComplete(let sid, _, _, _, let exitCode, let errorText, let inlineDiff):
             guard let runtime = hermesSessions[sid] else { return }
             if let errorText, !errorText.isEmpty {
                 recordHermesLine("⚠️ błąd narzędzia: \(errorText)", runtime: runtime)
             } else if let exitCode, exitCode != 0 {
                 recordHermesLine("⚠️ kod wyjścia \(exitCode)", runtime: runtime)
+            }
+            if let inlineDiff, !inlineDiff.isEmpty {
+                recordHermesDiff(inlineDiff, runtime: runtime)
             }
         case .subagentStart(let sid, let subID, let description):
             guard let runtime = hermesSessions[sid] else { return }
@@ -1293,6 +1300,23 @@ final class ChatState {
         } else {
             runtime.offscreenToolLines.append(line)
         }
+    }
+
+    /// F26.4: `inline_diff` only ever reaches the live bubble as a rendered diff
+    /// view — off-screen turns fall back to plain text (still legible, just not
+    /// colorized) so a background edit's diff isn't silently lost.
+    private func recordHermesDiff(_ diff: String, runtime: HermesSessionRuntime) {
+        let stripped = Self.stripANSI(diff)
+        if isOnScreen(runtime), let liveID = runtime.liveAssistantID,
+           let index = messages.lastIndex(where: { $0.id == liveID }) {
+            messages[index].gatewayDiffs.append(stripped)
+        } else {
+            runtime.offscreenToolLines.append(stripped)
+        }
+    }
+
+    private static func stripANSI(_ text: String) -> String {
+        text.replacingOccurrences(of: "\u{1B}\\[[0-9;]*m", with: "", options: .regularExpression)
     }
 
     private func updateBackgroundSubagentCount(runtime: HermesSessionRuntime) {

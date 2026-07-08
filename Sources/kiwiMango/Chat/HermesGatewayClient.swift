@@ -93,7 +93,7 @@ actor HermesGatewayClient {
         case messageDelta(sessionID: String, text: String)
         case thinkingDelta(sessionID: String, text: String)
         case toolStart(sessionID: String, toolID: String, name: String, context: String)
-        case toolComplete(sessionID: String, toolID: String, name: String, output: String, exitCode: Int?, errorText: String?)
+        case toolComplete(sessionID: String, toolID: String, name: String, output: String, exitCode: Int?, errorText: String?, inlineDiff: String?)
         case subagentStart(sessionID: String, id: String, description: String?)
         case subagentText(sessionID: String, id: String, text: String)
         case subagentComplete(sessionID: String, id: String)
@@ -342,7 +342,11 @@ actor HermesGatewayClient {
             let output = result["output"] as? String ?? ""
             let exitCode = result["exit_code"] as? Int
             let errorText = result["error"] as? String
-            return .toolComplete(sessionID: sessionID, toolID: toolID, name: name, output: output, exitCode: exitCode, errorText: errorText)
+            // "inline_diff" (F24 gateway, write_file/patch/skill_manage only) is a
+            // unified diff with ANSI color codes wrapped around each line — stripped
+            // in ChatModels before it reaches the UI, see F26.4.
+            let inlineDiff = payload["inline_diff"] as? String
+            return .toolComplete(sessionID: sessionID, toolID: toolID, name: name, output: output, exitCode: exitCode, errorText: errorText, inlineDiff: inlineDiff)
         case "subagent.start":
             let id = payload["id"] as? String ?? payload["subagent_id"] as? String ?? ""
             let description = payload["description"] as? String
