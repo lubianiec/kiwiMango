@@ -430,7 +430,6 @@ struct ChatView: View {
                     .padding(.top, 6)
                     .padding(.bottom, 10)
             }
-            StatusBarView(selectedModel: chatState.selectedModel)
         }
         .background(Color.clear)
         .onChange(of: chatState.draft) { snippetPopoverDismissed = false }

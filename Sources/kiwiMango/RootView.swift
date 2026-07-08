@@ -35,12 +35,15 @@ struct RootView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             sidebar
         } detail: {
-            detail
-                .safeAreaInset(edge: .leading, spacing: 0) {
-                    if columnVisibility == .detailOnly {
-                        collapsedSidebarRail
+            VStack(spacing: 0) {
+                detail
+                    .safeAreaInset(edge: .leading, spacing: 0) {
+                        if columnVisibility == .detailOnly {
+                            collapsedSidebarRail
+                        }
                     }
-                }
+                StatusBarView(selectedModel: chatState.selectedModel)
+            }
         }
         .sheet(isPresented: Binding(
             get: { chatState.showingModelManager },
