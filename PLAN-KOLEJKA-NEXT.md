@@ -10,6 +10,7 @@
 - F25.7 marketplace promptów
 - F27 całość
 - F16/F20/F23 (były zawieszone wcześniej)
+- F8 macOS Shortcuts + Services (zawieszone 2026-07-09 — Paweł pomija)
 
 ---
 
