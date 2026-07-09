@@ -14,6 +14,14 @@ struct RootView: View {
     @State private var searchText = ""
     @State private var searchResultIDs: Set<Int64> = []
     @FocusState private var searchFocused: Bool
+    @State private var expandedSection: SidebarSection? = nil
+
+    /// Sidebar sections for history grouping (F15.x).
+    enum SidebarSection: String, Hashable, Identifiable {
+        case chat = "ROZMOWY"
+        case agent = "AGENCI"
+        var id: String { rawValue }
+    }
 
     @State private var renameTarget: Conversation?
     @State private var renameText = ""
@@ -84,7 +92,10 @@ struct RootView: View {
             switch newValue {
             case .conversation(let id):
                 Task { await chatState.selectConversation(id) }
-            case .agent, .arena, .room, .agentHistory, .prompts, .missionControl, nil:
+                expandedSection = .chat
+            case .agent, .agentHistory:
+                expandedSection = .agent
+            case .arena, .room, .prompts, .missionControl, nil:
                 break
             }
         }
@@ -93,6 +104,7 @@ struct RootView: View {
             // lazily from `send()` rather than picked in the list.
             if let id = newValue {
                 selection = .conversation(id)
+                expandedSection = .chat
             }
         }
         .background {
@@ -249,6 +261,7 @@ struct RootView: View {
                         NewAgentPopover { kind, model, workDir in
                             let session = agentManager.spawn(kind: kind, model: model.name, isCloud: model.isCloud, workDir: workDir)
                             selection = .agent(session.id)
+                            expandedSection = .agent
                             showingNewAgentPopover = false
                         }
                     }
@@ -270,56 +283,59 @@ struct RootView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 14)
 
-                    // Histories live below the buttons, unlabeled — a thin
-                    // divider is enough to tell conversations from agents.
-                    searchField
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 8)
+                    // Collapsible history sections: CHAT and AGENT.
+                    sectionHeader(.chat, count: filteredConversations.count)
+                    if expandedSection == .chat {
+                        searchField
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 8)
 
-                    LazyVStack(spacing: 0) {
-                        ForEach(filteredConversations) { conversation in
-                            ConversationRow(
-                                conversation: conversation,
-                                isActive: selection == .conversation(conversation.id),
-                                hasUnread: chatState.hermesUnreadConversationIDs.contains(conversation.id),
-                                onDelete: { chatState.deleteConversation(conversation.id) }
-                            )
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                selection = .conversation(conversation.id)
-                            }
-                            .contextMenu {
-                                Button("Zmień nazwę") {
-                                    renameText = conversation.title
-                                    renameTarget = conversation
+                        LazyVStack(spacing: 0) {
+                            ForEach(filteredConversations) { conversation in
+                                ConversationRow(
+                                    conversation: conversation,
+                                    isActive: selection == .conversation(conversation.id),
+                                    hasUnread: chatState.hermesUnreadConversationIDs.contains(conversation.id),
+                                    onDelete: { chatState.deleteConversation(conversation.id) }
+                                )
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    selection = .conversation(conversation.id)
                                 }
-                                Button("Eksportuj do Markdown") {
-                                    if let url = chatState.exportConversation(conversation.id) {
-                                        withAnimation {
-                                            toastMessage = "Zapisano: \(url.lastPathComponent)"
+                                .contextMenu {
+                                    Button("Zmień nazwę") {
+                                        renameText = conversation.title
+                                        renameTarget = conversation
+                                    }
+                                    Button("Eksportuj do Markdown") {
+                                        if let url = chatState.exportConversation(conversation.id) {
+                                            withAnimation {
+                                                toastMessage = "Zapisano: \(url.lastPathComponent)"
+                                            }
                                         }
                                     }
-                                }
-                                Button("Wyślij rozmowę do Obsidiana") {
-                                    if chatState.sendConversationToObsidian(conversation.id) != nil {
-                                        withAnimation {
-                                            toastMessage = "Zapisano w Obsidian ✓"
+                                    Button("Wyślij rozmowę do Obsidiana") {
+                                        if chatState.sendConversationToObsidian(conversation.id) != nil {
+                                            withAnimation {
+                                                toastMessage = "Zapisano w Obsidian ✓"
+                                            }
                                         }
                                     }
-                                }
-                                Button("Duplikuj") {
-                                    chatState.duplicateConversation(conversation.id)
-                                }
-                                Divider()
-                                Button("Usuń", role: .destructive) {
-                                    chatState.deleteConversation(conversation.id)
+                                    Button("Duplikuj") {
+                                        chatState.duplicateConversation(conversation.id)
+                                    }
+                                    Divider()
+                                    Button("Usuń", role: .destructive) {
+                                        chatState.deleteConversation(conversation.id)
+                                    }
                                 }
                             }
                         }
                     }
 
-                    if !agentManager.sessions.isEmpty || !agentHistory.isEmpty {
-                        Spacer(minLength: 0).frame(height: 16)
+                    let agentCount = agentManager.sessions.count + agentHistory.count
+                    sectionHeader(.agent, count: agentCount)
+                    if expandedSection == .agent {
                         agentsSection
                     }
                 }
@@ -336,6 +352,36 @@ struct RootView: View {
         }
         .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 340)
         .toolbar(removing: .sidebarToggle)
+    }
+
+    private func sectionHeader(_ section: SidebarSection, count: Int) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                expandedSection = (expandedSection == section) ? nil : section
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: expandedSection == section ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
+                Text(section.rawValue)
+                    .font(KiwiMangoFont.mono(10.5, weight: .semibold))
+                    .tracking(0.5)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
+                Spacer()
+                Text("\(count)")
+                    .font(KiwiMangoFont.mono(10))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                expandedSection == section
+                    ? Color.white.opacity(0.04)
+                    : Color.clear
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var logoHeader: some View {

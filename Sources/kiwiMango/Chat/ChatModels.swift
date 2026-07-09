@@ -68,6 +68,21 @@ struct ChatMessage: Identifiable {
     var role: Role
     var content: String
     var images: [Data]
+    /// F26.6: name of the model/provider that produced this assistant message.
+    /// Not persisted — recomputed or stamped when the message is created live.
+    var senderName: String?
+    /// F26.6: which provider/system generated this message (Ollama, Claude,
+    /// Hermes, tool, subagent). Drives icon + color in the bubble header.
+    var senderKind: SenderKind?
+
+    enum SenderKind {
+        case user
+        case ollama
+        case claude
+        case hermes
+        case tool
+        case subagent
+    }
     /// Generation stats line ("128 tok • 24.3 tok/s"), shown under the bubble.
     /// Not persisted — recomputed only for the live stream, gone after reload.
     var statsLine: String?
@@ -109,11 +124,20 @@ struct ChatMessage: Identifiable {
         case assistant
     }
 
-    init(id: UUID = UUID(), role: Role, content: String, images: [Data] = []) {
+    init(
+        id: UUID = UUID(),
+        role: Role,
+        content: String,
+        images: [Data] = [],
+        senderName: String? = nil,
+        senderKind: SenderKind? = nil
+    ) {
         self.id = id
         self.role = role
         self.content = content
         self.images = images
+        self.senderName = senderName
+        self.senderKind = senderKind
     }
 }
 
@@ -336,6 +360,21 @@ final class ChatState {
     /// `message.complete` and dropped every background/subagent event after
     /// (F24.6 pułapka #1).
     @ObservationIgnored private var hermesListenerTask: Task<Void, Never>?
+
+    /// F26.6: derives the message sender provider from the routed model id.
+    private func senderKindFor(model: String) -> ChatMessage.SenderKind {
+        if model.hasPrefix("claude:") { return .claude }
+        if model.hasPrefix("hermes:") { return .hermes }
+        return .ollama
+    }
+
+    /// F26.6: readable model/provider label, e.g. "qwen3.5:32b" or "sonnet".
+    private func currentSenderName(model: String) -> String {
+        let suffix = model.split(separator: "/").last.map(String.init) ?? model
+        return suffix.hasPrefix("claude:") || suffix.hasPrefix("hermes:")
+            ? String(suffix.dropFirst(7))
+            : suffix
+    }
 
     /// Fresh instance per use, so a host change in Settings takes effect immediately.
     private var service: OllamaService { OllamaService() }
@@ -974,7 +1013,12 @@ final class ChatState {
         speechSynthesizer.stopAll()
         speechFeeder.reset()
 
-        let assistantMessage = ChatMessage(role: .assistant, content: "")
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            senderName: currentSenderName(model: model),
+            senderKind: senderKindFor(model: model)
+        )
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
         lastAnimatedMessageID = assistantID
@@ -1044,7 +1088,12 @@ final class ChatState {
     ) async {
         let prompt = history.last { $0.role == "user" }?.content ?? ""
 
-        let assistantMessage = ChatMessage(role: .assistant, content: "")
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            senderName: currentSenderName(model: "claude:\(claudeModel.rawValue)"),
+            senderKind: .claude
+        )
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
         lastAnimatedMessageID = assistantID
@@ -1163,7 +1212,12 @@ final class ChatState {
         let prompt = history.last { $0.role == "user" }?.content ?? ""
         let userImages = messages.last { $0.role == .user }?.images ?? []
 
-        let assistantMessage = ChatMessage(role: .assistant, content: "")
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            content: "",
+            senderName: currentSenderName(model: "hermes:\(hermesModel)"),
+            senderKind: .hermes
+        )
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
         lastAnimatedMessageID = assistantID
@@ -1587,7 +1641,12 @@ final class ChatState {
             ? "(Hermes przyjmuje 1 obraz na wiadomość — wysłano tylko pierwszy)"
             : nil
 
-        let assistantMessage = ChatMessage(role: .assistant, content: Self.hermesPlaceholder)
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            content: Self.hermesPlaceholder,
+            senderName: currentSenderName(model: "hermes:\(hermesModel)"),
+            senderKind: .hermes
+        )
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
         lastAnimatedMessageID = assistantID
