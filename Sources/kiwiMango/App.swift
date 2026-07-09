@@ -52,9 +52,11 @@ struct KiwiMangoApp: App {
         }
 
         Settings {
-            SettingsView()
+            SettingsWindow()
+                .frame(minWidth: 640, minHeight: 480)
                 .environment(chatState)
         }
+        .defaultSize(width: 720, height: 540)
     }
 }
 
