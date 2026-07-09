@@ -228,6 +228,50 @@ extension SavedPrompt: FetchableRecord, MutablePersistableRecord {
     }
 }
 
+// MARK: - MemoryFact (F1)
+
+/// A single long-term memory fact extracted from assistant replies.
+struct MemoryFact: Identifiable, Hashable, Codable {
+    var id: Int64
+    var content: String
+    var sourceConversationId: Int64?
+    var sourceSessionId: Int64?
+    var scope: String  // "global" or a directory path for project scope
+    var createdAt: Date
+    var lastUsedAt: Date
+    var useCount: Int
+}
+
+extension MemoryFact: FetchableRecord, MutablePersistableRecord {
+    static let databaseTableName = "memoryFact"
+
+    init(pendingContent content: String, scope: String, sourceConversationId: Int64? = nil, sourceSessionId: Int64? = nil) {
+        self.id = 0
+        self.content = content
+        self.sourceConversationId = sourceConversationId
+        self.sourceSessionId = sourceSessionId
+        self.scope = scope
+        self.createdAt = Date()
+        self.lastUsedAt = Date()
+        self.useCount = 0
+    }
+
+    func encode(to container: inout PersistenceContainer) {
+        if id != 0 { container["id"] = id }
+        container["content"] = content
+        container["sourceConversationId"] = sourceConversationId
+        container["sourceSessionId"] = sourceSessionId
+        container["scope"] = scope
+        container["createdAt"] = createdAt
+        container["lastUsedAt"] = lastUsedAt
+        container["useCount"] = useCount
+    }
+
+    mutating func didInsert(_ inserted: InsertionSuccess) {
+        id = inserted.rowID
+    }
+}
+
 // MARK: - AgentSessionRecord (Fala 13)
 
 /// A finished agent terminal session, archived to survive app restart.
@@ -507,6 +551,20 @@ final class DatabaseManager: Sendable {
             // dict (headless CLI `--resume`, still used by the fallback path).
             try db.alter(table: "conversation") { t in
                 t.add(column: "hermesGatewaySessionID", .text)
+            }
+        }
+
+        migrator.registerMigration("addMemoryFact") { db in
+            // F1: auto long-term memory extracted from assistant replies.
+            try db.create(table: "memoryFact") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("content", .text).notNull()
+                t.column("sourceConversationId", .integer)
+                t.column("sourceSessionId", .integer)
+                t.column("scope", .text).notNull().defaults(to: "global")
+                t.column("createdAt", .datetime).notNull()
+                t.column("lastUsedAt", .datetime).notNull()
+                t.column("useCount", .integer).notNull().defaults(to: 0)
             }
         }
 
@@ -877,4 +935,66 @@ final class DatabaseManager: Sendable {
             )
         }
     }
+
+    // MARK: - Memory facts (F1)
+
+    @discardableResult
+    func saveMemoryFact(_ fact: MemoryFact) throws -> MemoryFact {
+        try dbQueue.write { db in
+            var fact = fact
+            if fact.id == 0 {
+                try fact.insert(db)
+            } else {
+                try fact.update(db)
+            }
+            return fact
+        }
+    }
+
+    func deleteMemoryFact(_ id: Int64) throws {
+        _ = try dbQueue.write { db in
+            try MemoryFact.deleteOne(db, key: id)
+        }
+    }
+
+    func fetchMemoryFacts(limit: Int = 100) throws -> [MemoryFact] {
+        try dbQueue.read { db in
+            try MemoryFact.order(Column("lastUsedAt").desc).limit(limit).fetchAll(db)
+        }
+    }
+
+    /// Returns the most relevant facts: global top + project-scoped top for the given directory.
+    /// ponytail: O(n log n) in-memory sort rather than a custom SQLite ranking query —
+    /// fact counts stay small, so simplicity beats a one-off complex query.
+    func fetchRelevantMemoryFacts(projectPath: String? = nil, globalLimit: Int = 5, projectLimit: Int = 5) throws -> [MemoryFact] {
+        try dbQueue.read { db in
+            let all = try MemoryFact.fetchAll(db)
+            let global = all
+                .filter { $0.scope == "global" }
+                .sorted { compareRelevance($0, $1) }
+                .prefix(globalLimit)
+            let project = all
+                .filter { fact in
+                    guard let projectPath else { return false }
+                    return fact.scope != "global" && projectPath.hasPrefix(fact.scope)
+                }
+                .sorted { compareRelevance($0, $1) }
+                .prefix(projectLimit)
+            return Array(global) + Array(project)
+        }
+    }
+
+    func bumpMemoryFactUsage(_ id: Int64) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE memoryFact SET lastUsedAt = ?, useCount = useCount + 1 WHERE id = ?",
+                arguments: [Date(), id]
+            )
+        }
+    }
+}
+
+private func compareRelevance(_ a: MemoryFact, _ b: MemoryFact) -> Bool {
+    if a.useCount != b.useCount { return a.useCount > b.useCount }
+    return a.lastUsedAt > b.lastUsedAt
 }

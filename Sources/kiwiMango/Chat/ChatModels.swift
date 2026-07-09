@@ -985,7 +985,27 @@ final class ChatState {
         if !selectedModel.hasPrefix("claude:") && !selectedModel.hasPrefix("hermes:") {
             history.insert(OllamaService.ChatPayloadMessage(role: "system", content: kiwiCardSystemPrompt), at: 0)
         }
+
+        // F1: inject relevant long-term memory at the bottom of the system-prompt
+        // stack so it’s present but does not override persona or kiwi-card contract.
+        if UserDefaults.standard.bool(forKey: "kiwiMangoMemoryEnabled"),
+           let facts = try? fetchMemoryFactsForCurrentContext() {
+            let joined = facts.map { "- \($0.content)" }.joined(separator: "\n")
+            history.insert(OllamaService.ChatPayloadMessage(
+                role: "system",
+                content: "Wiesz z poprzednich rozmów:\n\(joined)"
+            ), at: history.count - 1) // just before the last user turn
+            facts.forEach { try? DatabaseManager.shared.bumpMemoryFactUsage($0.id) }
+        }
+
         return history
+    }
+
+    /// F1: returns the most relevant memory facts for the current conversation.
+    /// For chat conversations there is no project path yet, so only global facts.
+    /// ponytail: per-project scope waits for F1.3 agent workdir integration.
+    private func fetchMemoryFactsForCurrentContext() throws -> [MemoryFact] {
+        try db.fetchRelevantMemoryFacts(projectPath: nil)
     }
 
     /// Appends an assistant placeholder, streams deltas into it, and persists the
@@ -1069,6 +1089,21 @@ final class ChatState {
             // cancelled or errored-out one.
             if succeeded, let title = conversations.first(where: { $0.id == conversationId })?.title {
                 ObsidianSyncService.syncConversation(conversationId: conversationId, title: title, model: model)
+            }
+
+            // F1: extract durable facts from a completed local-model reply.
+            if succeeded, let final = messages.first(where: { $0.id == assistantID }),
+               final.content.count >= 40 {
+                Task.detached(priority: .background) {
+                    let facts = await MemoryService.extractFacts(
+                        from: final.content,
+                        model: model,
+                        conversationId: conversationId
+                    )
+                    for fact in facts {
+                        _ = try? DatabaseManager.shared.saveMemoryFact(fact)
+                    }
+                }
             }
         }
         await streamTask?.value
