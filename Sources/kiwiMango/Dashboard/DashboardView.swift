@@ -16,47 +16,59 @@ import SwiftUI
 struct DashboardView: View {
     @State private var store = DashboardStore()
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var cardsVisible = false
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 14) {
+            VStack(spacing: 20) {
                 UsageStatusBar(store: store)
+                    .cascadeIn(cardsVisible, index: 0, reduceMotion: reduceMotion)
                 kpiRow
-                HStack(alignment: .top, spacing: 14) {
+                HStack(alignment: .top, spacing: 20) {
                     DashboardCard(title: "Tokeny — ostatnie 30 dni") {
-                        MonthlyStackedChart(days: store.last30Days)
+                        MonthlyStackedChart(days: store.last30Days, animate: cardsVisible && !reduceMotion)
                     }
+                    .cascadeIn(cardsVisible, index: 2, reduceMotion: reduceMotion)
                     DashboardCard {
                         ModelShareDonut(store: store)
                     }
                     .frame(width: 330)
+                    .cascadeIn(cardsVisible, index: 3, reduceMotion: reduceMotion)
                 }
-                HStack(alignment: .top, spacing: 14) {
+                HStack(alignment: .top, spacing: 20) {
                     DashboardCard(title: "Per model — 7 dni") {
                         ModelTable(store: store)
                     }
+                    .cascadeIn(cardsVisible, index: 4, reduceMotion: reduceMotion)
                     DashboardCard(title: "Sesje — 7 dni") {
-                        SessionsSummary(store: store)
+                        SessionsSummary(store: store, animate: cardsVisible && !reduceMotion)
                     }
                     .frame(width: 265)
+                    .cascadeIn(cardsVisible, index: 5, reduceMotion: reduceMotion)
                     DashboardCard(title: "Pamięć Hermesa") {
                         MemoryAndCron(store: store)
                     }
                     .frame(width: 285)
+                    .cascadeIn(cardsVisible, index: 6, reduceMotion: reduceMotion)
                 }
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color.kiwiMangoBackground)
-        .task { store.start() }
+        .task {
+            store.start()
+            cardsVisible = true
+        }
     }
 
     private var kpiRow: some View {
-        HStack(alignment: .top, spacing: 14) {
-            todayCard
-            sevenDayCard
-            monthCard
-            costCard
+        HStack(alignment: .top, spacing: 20) {
+            todayCard.cascadeIn(cardsVisible, index: 1, reduceMotion: reduceMotion)
+            sevenDayCard.cascadeIn(cardsVisible, index: 1, reduceMotion: reduceMotion)
+            monthCard.cascadeIn(cardsVisible, index: 1, reduceMotion: reduceMotion)
+            costCard.cascadeIn(cardsVisible, index: 1, reduceMotion: reduceMotion)
         }
     }
 
@@ -66,6 +78,7 @@ struct DashboardView: View {
         KpiCard(title: "Dziś") {
             Text(formatTokens(store.todayTokens?.total ?? 0))
                 .kpiBigStyle(color: .kiwiMangoAccent)
+                .animation(reduceMotion ? nil : .default, value: store.todayTokens?.total)
             Text(todaySub)
                 .kpiSubStyle()
             TrendLabel(percent: store.todayTrendPercent, suffix: "vs wczoraj")
@@ -83,6 +96,7 @@ struct DashboardView: View {
         KpiCard(title: "7 dni") {
             Text(formatTokens(store.sevenDayTotal))
                 .kpiBigStyle()
+                .animation(reduceMotion ? nil : .default, value: store.sevenDayTotal)
             Text("średnio \(formatTokens(store.sevenDayTotal / 7)) / dzień")
                 .kpiSubStyle()
             Sparkline(
@@ -100,6 +114,7 @@ struct DashboardView: View {
         KpiCard(title: "Ten miesiąc") {
             Text(formatTokens(store.monthTotal))
                 .kpiBigStyle()
+                .animation(reduceMotion ? nil : .default, value: store.monthTotal)
             Text("total od początku: \(formatTokens(store.allTimeTotal))")
                 .kpiSubStyle()
             TrendLabel(percent: store.monthTrendPercent, suffix: "vs poprzedni")
@@ -141,6 +156,34 @@ struct DashboardView: View {
     }
 }
 
+// MARK: - Wejście kaskadą (F2 — animacje)
+
+private extension View {
+    /// Karty Dashboardu wjeżdżają kaskadą: opacity+offset, spring, stagger 40ms
+    /// na podstawie `index`. Jeden strzał na starcie widoku, nie na każdą zmianę
+    /// danych. Wyłączone całkowicie pod accessibilityReduceMotion.
+    func cascadeIn(_ visible: Bool, index: Int, reduceMotion: Bool) -> some View {
+        modifier(CascadeIn(visible: visible, index: index, reduceMotion: reduceMotion))
+    }
+}
+
+private struct CascadeIn: ViewModifier {
+    let visible: Bool
+    let index: Int
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content
+        } else {
+            content
+                .opacity(visible ? 1 : 0)
+                .offset(y: visible ? 0 : 8)
+                .animation(.spring(response: 0.42, dampingFraction: 0.82).delay(Double(index) * 0.04), value: visible)
+        }
+    }
+}
+
 // MARK: - Kolory serii wykresów (tylko strona "Zużycie", z mockupu)
 
 private extension Color {
@@ -157,6 +200,8 @@ struct DashboardCard<Content: View>: View {
     var title: String?
     @ViewBuilder var content: Content
 
+    @State private var hovering = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let title {
@@ -167,13 +212,16 @@ struct DashboardCard<Content: View>: View {
             }
             content
         }
-        .padding(16)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.kiwiMangoSurface, in: RoundedRectangle(cornerRadius: 12))
+        .background(hovering ? Color.kiwiMangoChrome : Color.kiwiMangoSurface, in: RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Color.kiwiMangoBorder.opacity(0.35), lineWidth: 1)
         )
+        .shadow(color: .black.opacity(hovering ? 0.22 : 0), radius: 10, x: 0, y: 4)
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .onHover { hovering = $0 }
     }
 }
 
@@ -193,6 +241,7 @@ private extension Text {
         font(.system(size: 26, weight: .bold))
             .monospacedDigit()
             .foregroundStyle(color)
+            .contentTransition(.numericText())
     }
 
     func kpiSubStyle() -> some View {
@@ -321,6 +370,11 @@ private struct UsageStatusBar: View {
 
 private struct MonthlyStackedChart: View {
     let days: [HermesStateReader.DayTokens]
+    var animate: Bool = false
+
+    // F2: słupki rosną od zera przy wejściu — skala Y na całym Canvas
+    // (prostsza droga z planu zamiast animatableData per-słupek).
+    @State private var growth: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -337,6 +391,13 @@ private struct MonthlyStackedChart: View {
             } else {
                 chartCanvas
                     .frame(height: 190)
+                    .scaleEffect(y: growth, anchor: .bottom)
+                    .onAppear {
+                        guard animate else { growth = 1; return }
+                        withAnimation(.spring(response: 0.55, dampingFraction: 0.85).delay(0.1)) {
+                            growth = 1
+                        }
+                    }
                 HStack {
                     Text(firstDayLabel)
                     Spacer()
@@ -663,6 +724,9 @@ private struct ModelTable: View {
 
 private struct SessionsSummary: View {
     let store: DashboardStore
+    var animate: Bool = false
+
+    @State private var growth: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -701,6 +765,13 @@ private struct SessionsSummary: View {
                 }
             }
             .frame(height: 60)
+            .scaleEffect(y: growth, anchor: .bottom)
+            .onAppear {
+                guard animate else { growth = 1; return }
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.85).delay(0.1)) {
+                    growth = 1
+                }
+            }
 
             HStack(spacing: 0) {
                 ForEach(store.last7Days) { day in
