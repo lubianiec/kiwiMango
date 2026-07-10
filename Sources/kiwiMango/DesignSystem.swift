@@ -50,8 +50,11 @@ extension Color {
     static let kiwiMangoAccent = Color(hex: "F2994A")
     /// Text drawn on top of the accent color.
     static let kiwiMangoAccentText = Color(hex: "FFFFFF")
-    /// Secondary warm highlight for active rows / amber details.
-    static let kiwiMangoPurple = Color(hex: "F5A623")
+    // F4: kolejny amber usunięty — plan chce JEDEN bursztynowy akcent w całej
+    // apce ("aktywny element nawigacji, fokus, kursor czatu"), nie dwa różne
+    // odcienie. Nazwa zostaje (38 call site'ów poza scope tej fali), wartość
+    // wskazuje teraz na ten sam token co kiwiMangoAccent.
+    static let kiwiMangoPurple = kiwiMangoAccent
     /// Primary text (soft white).
     static let kiwiMangoTextPrimary = Color(hex: "F2F2F7")
     /// Destructive/coral accent.
