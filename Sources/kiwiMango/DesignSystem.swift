@@ -61,11 +61,11 @@ extension Color {
     /// Warm amber for numeric literals in syntax highlighter.
     static let kiwiMangoSyntaxNumber = Color(hex: "FCA311")
 
-    // MARK: - Chat bubble colors
-    /// User message bubble background (muted grey).
-    static let kiwiMangoUserBubble = Color(hex: "3F3F46")
-    /// Assistant message bubble background (warm brown).
-    static let kiwiMangoAssistantBubble = Color(hex: "4A3428")
+    // MARK: - Chat bubble colors (F3 redesign mono: monochrom, kolor tylko w Dashboardzie)
+    /// User message bubble background — lighter graphite tone (hover tone from tokens).
+    static let kiwiMangoUserBubble = Color(hex: "232326")
+    /// Assistant message bubble background — same tone as a Dashboard card, mono.
+    static let kiwiMangoAssistantBubble = Color(hex: "1A1A1D")
     /// Assistant bubble text color.
     static let kiwiMangoAssistantText = Color(hex: "F2F2F7")
     /// Subtle border used on inactive inputs / cards.

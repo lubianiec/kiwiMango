@@ -583,10 +583,11 @@ struct ChatView: View {
             voiceLoopButton
             webSearchToggleButton
 
+            // F3: composer bez ozdób — usunięty realBloom (żelazna zasada F9:
+            // bloom tylko na kropce hero Dashboardu, nigdzie indziej).
             Text(">>")
                 .font(KiwiMangoFont.mono(12.5, weight: .bold))
                 .foregroundStyle(Color.kiwiMangoAccent.opacity(0.7))
-                .realBloom(strength: 1.2, radius: 2)
 
             ZStack(alignment: .leading) {
                 if state.draft.isEmpty {
