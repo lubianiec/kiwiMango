@@ -29,7 +29,8 @@ final class HermesHUDManager {
     private var pollTask: Task<Void, Never>?
 
     /// Fixed companion directory for the hermes-hudui checkout + venv.
-    private let huduiHome = URL(fileURLWithPath: "/Users/pawellubianiec/.hermes-hudui")
+    private let huduiHome = FileManager.default
+        .homeDirectoryForCurrentUser.appendingPathComponent(".hermes-hudui")
 
     /// The binary inside the venv; this is the only executable we trust.
     private var hermesHUDUIPath: String? {
@@ -43,7 +44,7 @@ final class HermesHUDManager {
             "/opt/homebrew/bin/python3.14",
             "/opt/homebrew/bin/python3.13",
             "/opt/homebrew/bin/python3.12",
-            "/Users/pawellubianiec/.local/bin/python3.11",
+            FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin/python3.11").path,
             "/usr/bin/python3",
         ]
         for path in candidates {

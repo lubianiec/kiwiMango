@@ -62,6 +62,12 @@ struct RootView: View {
         )) {
             CronManagerView()
         }
+        .sheet(isPresented: Binding(
+            get: { !UserDefaults.standard.bool(forKey: "kiwiMangoCompletedFirstLaunch") },
+            set: { _ in }
+        )) {
+            FirstLaunchSetupView()
+        }
         .background {
             GeometryReader { proxy in
                 Color.clear

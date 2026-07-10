@@ -117,6 +117,17 @@ Działa z modelami lokalnymi poprzez Ollamę oraz z kontem cloud `ollama.com` �
 - Xcode Command Line Tools
 - Dla agentów: `ollama launch claude` (Claude Code przez Ollamę)
 
+## ⚙️ Co działa od razu, a co jest opcjonalne
+
+| Funkcja | Wymagane do działania | Status |
+|---------|----------------------|--------|
+| Czat z Ollama | Tylko Ollama + model | ✅ działa zawsze |
+| Agenci Claude Code / Hermes / Codex | `ollama launch claude` itp. | ⚙️ opcjonalnie |
+| Hermes Gateway czat | Binarka `hermes` CLI | ⚙️ opcjonalnie |
+| Hermes HUD | Python 3.11+, npm, git | ⚙️ opcjonalnie |
+| Claude Pro modele | Subskrypcja + `claude` CLI z `/login` | ⚙️ opcjonalnie |
+| Synchronizacja Obsidian | Folder vault (wybierasz przy pierwszym uruchomieniu) | ⚙️ opcjonalnie |
+
 ---
 
 ## ⚡ Szybki start
@@ -184,6 +195,15 @@ Sources/kiwiMango/
 make clean
 make build
 ```
+
+### Aplikacja się nie uruchamia po pobraniu DMG
+
+macOS Gatekeeper może zablokować aplikację podpisaną ad-hoc. Rozwiązania:
+1. Kliknij prawym na `/Applications/kiwiMango.app` → **Otwórz** (pierwszy raz).
+2. Albo w terminalu: `xattr -rd com.apple.quarantine /Applications/kiwiMango.app`.
+
+W przyszłości aplikacja zostanie podpisana certyfikatem Apple Developer, żeby
+ominąć ten krok.
 
 ### Ollama nie jest widoczna
 Sprawdź, czy Ollama działa:
