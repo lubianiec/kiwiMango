@@ -1,6 +1,6 @@
 <div align="center">
 
-![kiwiMango banner](Assets/banner.png)
+![kiwiMango banner](Assets/banner.jpg)
 
 # kiwiMango
 
@@ -8,7 +8,7 @@
 
 [![macOS](https://img.shields.io/badge/macOS-26+-000000?logo=apple&logoColor=white)](https://www.apple.com/macos)
 [![Swift](https://img.shields.io/badge/Swift-6-FA7343?logo=swift&logoColor=white)](https://swift.org)
-[![SwiftUI](https://img.shields.io/badge/SwiftUI-blue?logo=swift&logoColor=white)](https://developer.apple.com/xcode/swiftui)
+[![SwiftUI](https://img.shields.io/badge/SwiftUI-0D96F6?logo=swift&logoColor=white)](https://developer.apple.com/xcode/swiftui)
 [![Ollama](https://img.shields.io/badge/Ollama-ready-000000?logo=ollama&logoColor=white)](https://ollama.com)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -18,11 +18,42 @@
 
 ---
 
+## 📑 Spis treści
+
+- [Co to jest](#-co-to-jest)
+- [Dlaczego kiwiMango](#-dlaczego-kiwimango)
+- [Funkcje](#-główne-funkcje)
+- [Zrzuty ekranu](#-zrzuty-ekranu)
+- [Skróty klawiszowe](#-skróty-klawiszowe)
+- [Wymagania](#-wymagania)
+- [Szybki start](#-szybki-start)
+- [Architektura](#-architektura)
+- [Stack](#-stack)
+- [Makefile](#-makefile)
+- [Rozwiązywanie problemów](#-rozwiązywanie-problemów)
+- [Wkład](#-wkład)
+- [Prywatność](#-prywatność)
+- [Licencja](#-licencja)
+
+---
+
 ## 🚀 Co to jest
 
 **kiwiMango** to natywna aplikacja macOS do rozmów z modelami AI (Ollama) i równoległej pracy autonomicznych agentów kodujących. Żadnego Electrona, żadnej przeglądarki jako UI — czysty SwiftUI, lokalna baza SQLite i wbudowany terminal oparty na SwiftTerm.
 
 Działa z modelami lokalnymi poprzez Ollamę oraz z kontem cloud `ollama.com` — wszystko w jednym oknie.
+
+---
+
+## 🎯 Dlaczego kiwiMango
+
+| Problem | Jak to rozwiązujemy |
+|---------|---------------------|
+| Electron pożera RAM i baterię | Natywny SwiftUI + Metal, zero przeglądarki w tle |
+| Historia czatów w chmurze obcej firmy | Lokalna baza SQLite (GRDB), wszystko na Twoim dysku |
+| Agenci kodujący w osobnych terminalach | Wbudowane sesje Claude Code / Hermes Agent / Codex w jednym oknie |
+| Skakanie między czatem a narzędziami | Sidebar + Centrum Dowodzenia + Hermes HUD w jednej aplikacji |
+| Brak prywatności przy modelach lokalnych | Bezpośrednie połączenie z Ollamą, bez pośrednika |
 
 ---
 
@@ -143,6 +174,42 @@ Sources/kiwiMango/
 
 ---
 
+## 🔧 Rozwiązywanie problemów
+
+### Aplikacja się nie buduje
+```bash
+make clean
+make build
+```
+
+### Ollama nie jest widoczna
+Sprawdź, czy Ollama działa:
+```bash
+curl http://localhost:11434/api/tags
+```
+
+### Brak uprawnień do mikrofonu / dyktowania
+Przejdź do **Ustawienia systemowe → Prywatność i bezpieczeństwo → Mikrofon** i zezwól kiwiMango.
+
+### Agenci nie startują
+Upewnij się, że masz zainstalowany `claude` przez Ollamę:
+```bash
+ollama launch claude --help
+```
+
+---
+
+## 🤝 Wkład
+
+Pull requesty i issue są mile widziane. Zanim zaczniesz większy refactor, otwórz issue, żeby omówić kierunek.
+
+1. Fork repo
+2. Stwórz branch: `git checkout -b feature/nazwa`
+3. Commituj zmiany
+4. Otwórz PR do `main`
+
+---
+
 ## 🔒 Prywatność
 
 - Cała historia czatów mieszka w lokalnej bazie SQLite
@@ -154,7 +221,7 @@ Sources/kiwiMango/
 
 ## 📝 Licencja
 
-[MIT](LICENSE) — używaj, modyfikuj i rozwijaj. Pull requesty mile widziane.
+[MIT](LICENSE) — używaj, modyfikuj i rozwijaj.
 
 ---
 
