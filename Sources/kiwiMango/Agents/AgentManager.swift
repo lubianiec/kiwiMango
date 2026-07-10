@@ -218,31 +218,34 @@ final class AgentManager: NSObject {
         )
     }
 
-    /// Reads the terminal's transcript, truncated to the last 2000 lines
-    /// (PLAN.md F13.0). Claude Code's TUI switches to the ALT buffer shortly
-    /// after start: the normal buffer keeps only early redraw artifacts (which
-    /// is why archived transcripts ended mid-"Reasoning"), while everything the
-    /// user actually read — including the final answer — lives on the alt
-    /// screen. The old "<5 non-empty lines" fallback never fired because those
-    /// artifacts kept the normal buffer looking populated. The alt buffer is
-    /// now always appended when it has content, whether or not the TUI already
-    /// switched back.
+    /// Reads the terminal's transcript and reduces it to a readable summary:
+    /// first 20 non-empty lines (what the user asked / initial context) plus
+    /// last 30 non-empty lines (final result). No alt-buffer TUI garbage,
+    /// no 2000-line raw dump. ponytail: PTY doesn't give us structured turns,
+    /// so we store the most useful raw window instead.
     static func dumpTranscript(of session: AgentSession) -> String {
         let terminal = session.terminal.getTerminal()
-        var text = String(data: terminal.getBufferAsData(kind: .normal), encoding: .utf8) ?? ""
-
+        let normal = String(data: terminal.getBufferAsData(kind: .normal), encoding: .utf8) ?? ""
         let altText = String(data: terminal.getBufferAsData(kind: .alt), encoding: .utf8) ?? ""
-        if !altText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            text += "\n> ── ekran sesji ──\n" + altText
-        }
+        let text = normal + "\n" + altText
 
-        var header = ""
-        var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        if lines.count > 2000 {
-            lines = Array(lines.suffix(2000))
-            header = "> ucięto do ostatnich 2000 linii\n"
+        let lines = text
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+
+        var summary = ""
+        if let first = lines.first {
+            summary += "▸ start: \(first)\n"
         }
-        return header + lines.joined(separator: "\n")
+        if lines.count > 20 {
+            summary += "\n[... \(lines.count - 50 > 0 ? lines.count - 50 : 0) linii pominiętych ...]\n\n"
+            let tail = Array(lines.suffix(30))
+            summary += tail.joined(separator: "\n")
+        } else {
+            summary += lines.dropFirst().joined(separator: "\n")
+        }
+        return summary
     }
 }
 

@@ -101,8 +101,8 @@ struct AgentRow: View {
 
 // MARK: - AgentHistoryRow (Fala 13)
 
-/// One archived session row under the "HISTORIA" subheader — grey dot (never
-/// running, it's history), title + folder, relative date + duration.
+/// One archived session under the "HISTORIA" subheader: compact metadata only.
+/// The saved transcript is now a summary, not a 2000-line terminal dump.
 struct AgentHistoryRow: View {
     let record: AgentSessionRecord
     let isActive: Bool
@@ -117,27 +117,34 @@ struct AgentHistoryRow: View {
                 .frame(width: 2)
 
             HStack(spacing: 8) {
-                Text("●")
-                    .font(.system(size: 8))
-                    .foregroundStyle(Color.gray.opacity(0.6))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(kindLabel) · \(folderName)")
-                        .font(KiwiMangoFont.mono(11.5, weight: isActive ? .bold : .medium))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(kindLabel) · \(shortModel)")
+                        .font(KiwiMangoFont.sans(12, weight: isActive ? .bold : .semibold))
                         .foregroundStyle(
-                            isActive ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.8)
+                            isActive ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.85)
                         )
                         .lineLimit(1)
-                    Text("\(relativeDate) · \(durationLabel)")
-                        .font(KiwiMangoFont.mono(9.5))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
+
+                    Text("\(folderName) · \(durationLabel)")
+                        .font(KiwiMangoFont.mono(10))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                        .lineLimit(1)
+
+                    Text(firstLine)
+                        .font(KiwiMangoFont.mono(10))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
+                        .lineLimit(1)
                 }
+
+                Spacer(minLength: 0)
+
+                Text(relativeDate)
+                    .font(KiwiMangoFont.mono(9))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
             }
             .padding(.leading, 12)
             .padding(.trailing, 8)
-            .padding(.vertical, 6)
-
-            Spacer(minLength: 0)
+            .padding(.vertical, 8)
 
             if isHovered {
                 Button(action: onDelete) {
@@ -150,18 +157,36 @@ struct AgentHistoryRow: View {
                 .help("Usuń z historii")
             }
         }
-        .background(isHovered ? Color.white.opacity(0.04) : Color.clear)
+        .background(
+            isActive
+                ? AnyShapeStyle(LinearGradient(
+                    colors: [Color.kiwiMangoPurple.opacity(0.25), Color.clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                ))
+                : AnyShapeStyle(isHovered ? Color.white.opacity(0.04) : Color.clear)
+        )
         .onHover { isHovered = $0 }
     }
 
-    /// Falls back to the raw string if a future enum change makes `rawValue`
-    /// stop matching (PLAN.md F13.5 pitfall #4).
     private var kindLabel: String {
         AgentKind(rawValue: record.kind)?.shortName ?? record.kind
     }
 
+    private var shortModel: String {
+        record.model.split(separator: "/").last.map(String.init) ?? record.model
+    }
+
     private var folderName: String {
         URL(fileURLWithPath: record.workDir).lastPathComponent
+    }
+
+    private var firstLine: String {
+        record.transcript
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+            .first { !$0.hasPrefix("[") && !$0.hasPrefix("▸") }
+            ?? ""
     }
 
     private var durationLabel: String {
@@ -187,65 +212,100 @@ struct AgentHistoryRow: View {
 
 // MARK: - NewAgentPopover
 
-/// Popover opened from "+ NOWY_AGENT" (sidebar) or ⌘T: pick one of the
-/// installed Ollama models (same source as the sidebar MODELE section),
-/// pick a working directory, spawn.
+/// Minimalist bubble for spawning a new agent. Shown as a system popover
+/// attached to the "NOWY AGENT" button; the chrome is left to the popover,
+/// so this view is just the content.
 struct NewAgentPopover: View {
     let onSpawn: (AgentKind, OllamaService.ModelInfo, URL) -> Void
+    var onClose: () -> Void = {}
 
     @Environment(ChatState.self) private var chatState
+    @AppStorage("kiwiMangoDefaultAgentKind") private var defaultAgentKind: String = AgentKind.claude.rawValue
+    @AppStorage("kiwiMangoDefaultAgentModel") private var defaultAgentModel: String = ""
+    @AppStorage("kiwiMangoDefaultAgentWorkDir") private var defaultAgentWorkDir: String = ""
     @AppStorage("agentLastWorkDir") private var lastWorkDirPath = ""
     @AppStorage("agentLastKind") private var lastKindRaw = AgentKind.claude.rawValue
     @State private var workDirPath = ""
+    @State private var preferredModel: String = ""
 
     private var selectedKind: AgentKind {
-        AgentKind(rawValue: lastKindRaw) ?? .claude
+        AgentKind(rawValue: lastKindRaw) ?? AgentKind(rawValue: defaultAgentKind) ?? .claude
+    }
+
+    /// Last-used model per kind, falling back to the global default.
+    private var lastModelStorageKey: String { "agentLastModel_\(selectedKind.rawValue)" }
+    private var resolvedDefaultModel: String {
+        UserDefaults.standard.string(forKey: lastModelStorageKey)
+            ?? defaultAgentModel
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("NOWY AGENT")
-                .font(KiwiMangoFont.mono(11, weight: .semibold))
-                .tracking(1)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("NOWY AGENT")
+                    .font(KiwiMangoFont.mono(11, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(Color.kiwiMangoAccent)
 
-            kindPicker
+                Spacer()
 
-            Text("MODEL")
-                .font(KiwiMangoFont.mono(9, weight: .semibold))
-                .tracking(1)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
+                }
+                .buttonStyle(.plain)
+                .help("Zamknij")
+            }
+            .padding(.bottom, 10)
 
-            modelList
+            VStack(alignment: .leading, spacing: 10) {
+                kindPicker
 
-            Divider().overlay(Color.white.opacity(0.12))
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("KATALOG ROBOCZY")
+                Text("MODEL")
                     .font(KiwiMangoFont.mono(9, weight: .semibold))
                     .tracking(1)
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
-                HStack(spacing: 6) {
-                    Text(displayWorkDir)
-                        .font(KiwiMangoFont.mono(10.5))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.7))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                    Spacer()
-                    Button("Wybierz…") { pickWorkDir() }
-                        .font(KiwiMangoFont.mono(10))
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.kiwiMangoPurple)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+
+                modelList
+
+                Divider().overlay(Color.white.opacity(0.10))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("KATALOG ROBOCZY")
+                        .font(KiwiMangoFont.mono(9, weight: .semibold))
+                        .tracking(1)
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    HStack(spacing: 6) {
+                        Text(displayWorkDir)
+                            .font(KiwiMangoFont.mono(10.5))
+                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.7))
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                        Spacer()
+                        Button("Wybierz…") { pickWorkDir() }
+                            .font(KiwiMangoFont.mono(10))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(Color.kiwiMangoAccent.opacity(0.85))
+                    }
                 }
             }
         }
-        .padding(16)
-        .frame(width: 280)
-        .background(Color.kiwiMangoChrome)
+        .padding(12)
+        .frame(width: 220)
+        .background(Color.kiwiMangoPanelDeep)
         .onAppear {
             workDirPath = lastWorkDirPath.isEmpty
-                ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Kazik").path
+                ? (defaultAgentWorkDir.isEmpty ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Kazik").path : defaultAgentWorkDir)
                 : lastWorkDirPath
+            if lastKindRaw.isEmpty {
+                lastKindRaw = defaultAgentKind
+            }
+            preferredModel = resolvedDefaultModel
+            Task {
+                await chatState.loadModels()
+                await chatState.refreshClaudeAvailability()
+            }
         }
     }
 
@@ -305,18 +365,21 @@ struct NewAgentPopover: View {
     }
 
     private func claudeProModelButton(id: String, label: String, isAvailable: Bool) -> some View {
-        Button {
+        let selected = preferredModel == id || (preferredModel.isEmpty && id == "claude:sonnet")
+        return Button {
             guard isAvailable else { return }
-            let url = URL(fileURLWithPath: displayWorkDir)
-            lastWorkDirPath = displayWorkDir
-            let model = OllamaService.ModelInfo(name: id, capabilities: [], size: 0, isCloud: true)
-            onSpawn(selectedKind, model, url)
+            spawnClaudePro(id: id)
         } label: {
             HStack(spacing: 6) {
                 Text(label)
                     .font(KiwiMangoFont.mono(11, weight: .medium))
-                    .foregroundStyle(isAvailable ? Color.kiwiMangoAccent : Color.kiwiMangoAccent.opacity(0.42))
+                    .foregroundStyle(isAvailable ? (selected ? Color.kiwiMangoAccentText : Color.kiwiMangoAccent) : Color.kiwiMangoAccent.opacity(0.42))
                 Spacer()
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.kiwiMangoAccentText)
+                }
                 if !isAvailable {
                     Text(chatState.claudeAvailability.reason)
                         .font(KiwiMangoFont.mono(9, weight: .medium))
@@ -326,12 +389,21 @@ struct NewAgentPopover: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
+            .background(selected ? Color.kiwiMangoAccent.opacity(0.85) : Color.clear)
             .neonBorder(isAvailable ? Color.kiwiMangoAccent : Color.white.opacity(0.16), cornerRadius: 2)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isAvailable)
         .help(isAvailable ? label : chatState.claudeAvailability.reason)
+    }
+
+    private func spawnClaudePro(id: String) {
+        let url = URL(fileURLWithPath: displayWorkDir)
+        lastWorkDirPath = displayWorkDir
+        UserDefaults.standard.set(id, forKey: lastModelStorageKey)
+        let model = OllamaService.ModelInfo(name: id, capabilities: [], size: 0, isCloud: true)
+        onSpawn(selectedKind, model, url)
     }
 
     @ViewBuilder
@@ -369,21 +441,32 @@ struct NewAgentPopover: View {
     }
 
     private func modelButton(_ model: OllamaService.ModelInfo) -> some View {
-        Button {
+        let selected = preferredModel == model.name || (preferredModel.isEmpty && chatState.availableModels.first?.name == model.name)
+        return Button {
             let url = URL(fileURLWithPath: displayWorkDir)
             lastWorkDirPath = displayWorkDir
+            UserDefaults.standard.set(model.name, forKey: lastModelStorageKey)
             onSpawn(selectedKind, model, url)
         } label: {
-            Text(model.name)
-                .font(KiwiMangoFont.mono(11, weight: .medium))
-                .foregroundStyle(Color.kiwiMangoAccent)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .neonBorder(Color.kiwiMangoAccent, cornerRadius: 2)
-                .contentShape(Rectangle())
+            HStack(spacing: 6) {
+                Text(model.name)
+                    .font(KiwiMangoFont.mono(11, weight: .medium))
+                    .foregroundStyle(selected ? Color.kiwiMangoAccentText : Color.kiwiMangoAccent)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.kiwiMangoAccentText)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(selected ? Color.kiwiMangoAccent.opacity(0.85) : Color.clear)
+            .neonBorder(Color.kiwiMangoAccent, cornerRadius: 2)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(model.name)
@@ -459,9 +542,8 @@ struct AgentDetailView: View {
 
 // MARK: - AgentTranscriptView (F13.4)
 
-/// Read-only view of an archived session's transcript. No editing, no
-/// "resume" — the PTY is gone, and pretending otherwise would be dishonest
-/// (PLAN.md F13.4 pt. 3).
+/// Read-only summary of a finished agent session. The archived text is already
+/// compressed to start + tail; this view just renders it cleanly.
 struct AgentTranscriptView: View {
     let record: AgentSessionRecord
     @Environment(ChatState.self) private var chatState
@@ -471,14 +553,20 @@ struct AgentTranscriptView: View {
         VStack(spacing: 0) {
             header
             ScrollView {
-                Text(record.transcript)
-                    .font(KiwiMangoFont.mono(11))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.85))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Podsumowanie sesji")
+                        .font(KiwiMangoFont.sans(13, weight: .semibold))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
+
+                    Text(record.transcript)
+                        .font(KiwiMangoFont.mono(11))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.85))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(16)
             }
-            .background(Color(hex: "050507"))
+            .background(Color.kiwiMangoBackground)
         }
         .background(Color.kiwiMangoSurface)
         .overlay(alignment: .bottom) {

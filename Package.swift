@@ -33,7 +33,10 @@ let package = Package(
                 .process("Shaders"),
                 // Bundled offline (F26.9) so Mermaid diagrams render with zero
                 // network access, matching the rest of the UI's no-CDN policy.
-                .copy("Resources/mermaid.min.js")
+                .copy("Resources/mermaid.min.js"),
+                // Native Ollama app icon for the status bar (reused instead of
+                // drawing a generic hexagon approximation).
+                .copy("Resources/OllamaIcon.icns")
             ],
             // Swift 6 strict concurrency floods errors from GRDB internals — pragmatic v5 mode
             swiftSettings: [

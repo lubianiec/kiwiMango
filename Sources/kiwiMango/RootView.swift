@@ -2,62 +2,52 @@ import SwiftUI
 
 // MARK: - RootView
 
-/// Two-column window: sidebar of saved conversations + the chat detail pane.
-/// Custom dark "terminal" theme (not native materials) — see DesignSystem.swift.
+/// Two-column window: top bar navigation + drawer sidebar + detail pane.
+/// Three spaces: CHAT, AGENTS, MISSION.
 struct RootView: View {
 
     @Environment(ChatState.self) private var chatState
     @Environment(AgentManager.self) private var agentManager
+    @Environment(HermesHUDManager.self) private var hudManager
+
     @State private var selection: SidebarSelection?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showingNewAgentPopover = false
     @State private var searchText = ""
     @State private var searchResultIDs: Set<Int64> = []
     @FocusState private var searchFocused: Bool
-    @State private var expandedSection: SidebarSection? = nil
-
-    /// Sidebar sections for history grouping (F15.x).
-    enum SidebarSection: String, Hashable, Identifiable {
-        case chat = "ROZMOWY"
-        case agent = "AGENCI"
-        var id: String { rawValue }
-    }
+    @State private var topSection: TopSection = .chat
 
     @State private var renameTarget: Conversation?
     @State private var renameText = ""
     @State private var toastMessage: String?
-    /// F26.11: ⌘K command palette — quick jump to a conversation/agent/model
-    /// or run an action, without leaving the keyboard.
     @State private var showingCommandPalette = false
-    /// F26.13: auto-collapse the sidebar below a width threshold (split-screen
-    /// laptop use), auto-restore above it. Hysteresis (680/760) avoids flicker
-    /// right at the boundary; doesn't fight a manual ⌃⌘S toggle unless the
-    /// window is actually resized across the threshold afterwards.
     @State private var windowWidth: CGFloat = 900
 
-    /// Lab state lives here, not in the views — Arena/Room must survive
-    /// navigating away and back (selection switches to a conversation, then
-    /// back to `.arena`/`.room`), which would otherwise reset `@State`.
-    @State private var arenaState = ArenaState()
-    @State private var roomState = RoomState()
-
-    /// Archived agent sessions (Fala 13) — up to 15 most recent, newest first.
     @State private var agentHistory: [AgentSessionRecord] = []
 
     private let db = DatabaseManager.shared
 
+    enum TopSection: String, Hashable, Identifiable, CaseIterable {
+        case chat = "Chat"
+        case agent = "Agenci"
+        case mission = "Aktywne zadania"
+        case hud = "Dashboard"
+        var id: String { rawValue }
+    }
+
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            sidebar
-        } detail: {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            TopSystemBar()
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                sidebar
+            } detail: {
                 detail
                     .safeAreaInset(edge: .leading, spacing: 0) {
                         if columnVisibility == .detailOnly {
                             collapsedSidebarRail
                         }
                     }
-                StatusBarView(selectedModel: chatState.selectedModel)
             }
         }
         .sheet(isPresented: Binding(
@@ -92,19 +82,21 @@ struct RootView: View {
             switch newValue {
             case .conversation(let id):
                 Task { await chatState.selectConversation(id) }
-                expandedSection = .chat
+                topSection = .chat
             case .agent, .agentHistory:
-                expandedSection = .agent
-            case .arena, .room, .prompts, .missionControl, nil:
+                topSection = .agent
+            case .missionControl:
+                topSection = .mission
+            case .hud:
+                topSection = .hud
+            case nil:
                 break
             }
         }
         .onChange(of: chatState.currentConversationID) { _, newValue in
-            // Keep sidebar highlight in sync when a conversation is created
-            // lazily from `send()` rather than picked in the list.
             if let id = newValue {
                 selection = .conversation(id)
-                expandedSection = .chat
+                topSection = .chat
             }
         }
         .background {
@@ -120,16 +112,16 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .kiwiMangoRequestNewAgent)) { _ in
             showingNewAgentPopover = true
+            topSection = .agent
         }
         .onReceive(NotificationCenter.default.publisher(for: .kiwiMangoRequestNewConversation)) { _ in
             selection = nil
+            topSection = .chat
             Task { await chatState.startNewConversation() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .kiwiMangoRequestPrompts)) { _ in
-            selection = .prompts
         }
         .onReceive(NotificationCenter.default.publisher(for: .kiwiMangoRequestMissionControl)) { _ in
             selection = .missionControl
+            topSection = .mission
         }
         .alert("Zmień nazwę rozmowy", isPresented: renameBinding) {
             TextField("Nazwa", text: $renameText)
@@ -169,7 +161,11 @@ struct RootView: View {
                     }
             }
         }
-        .task { refreshAgentHistory() }
+        .task {
+            refreshAgentHistory()
+            await chatState.loadModels()
+            await chatState.refreshClaudeAvailability()
+        }
         .onChange(of: agentManager.sessions.count) { _, _ in refreshAgentHistory() }
     }
 
@@ -195,26 +191,19 @@ struct RootView: View {
             } else {
                 ChatView()
             }
-        case .arena:
-            ArenaView(arena: arenaState)
-        case .room:
-            RoomView(room: roomState)
         case .agentHistory(let id):
             if let record = agentHistory.first(where: { $0.id == id }) {
                 AgentTranscriptView(record: record)
             } else {
                 ChatView()
             }
-        case .prompts:
-            PromptVaultView { text in
-                chatState.draft = text
-                selection = nil
-            }
         case .missionControl:
             MissionControlView(
                 onSelectAgent: { id in selection = .agent(id) },
                 onClose: { selection = nil }
             )
+        case .hud:
+            HermesHUDView(manager: hudManager)
         case .conversation, nil:
             ChatView()
         }
@@ -233,182 +222,278 @@ struct RootView: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            logoHeader
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .padding(.bottom, 14)
-
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Hierarchy of intent (F15.2): NOWA ROZMOWA is the one filled
-                    // primary action; NOWY AGENT is a secondary outline; ARENA/POKÓJ
-                    // share a row as smaller, quieter half-width buttons.
-                    PrimarySidebarButton(title: "+ NOWA ROZMOWA") {
-                        Task {
-                            await chatState.startNewConversation()
-                            selection = nil
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
-
-                    SecondarySidebarButton(title: "+ NOWY AGENT") {
-                        showingNewAgentPopover = true
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
-                    .popover(isPresented: $showingNewAgentPopover, arrowEdge: .trailing) {
-                        NewAgentPopover { kind, model, workDir in
-                            let session = agentManager.spawn(kind: kind, model: model.name, isCloud: model.isCloud, workDir: workDir)
-                            selection = .agent(session.id)
-                            expandedSection = .agent
-                            showingNewAgentPopover = false
-                        }
-                    }
-
-                    SecondarySidebarButton(title: "📓 PROMPTY") {
-                        selection = .prompts
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
-
-                    HStack(spacing: 6) {
-                        LabSidebarButton(title: "ARENA", isActive: selection == .arena) {
-                            selection = .arena
-                        }
-                        LabSidebarButton(title: "POKÓJ", isActive: selection == .room) {
-                            selection = .room
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 14)
-
-                    // Collapsible history sections: CHAT and AGENT.
-                    sectionHeader(.chat, count: filteredConversations.count)
-                    if expandedSection == .chat {
-                        searchField
-                            .padding(.horizontal, 12)
-                            .padding(.bottom, 8)
-
-                        LazyVStack(spacing: 0) {
-                            ForEach(filteredConversations) { conversation in
-                                ConversationRow(
-                                    conversation: conversation,
-                                    isActive: selection == .conversation(conversation.id),
-                                    hasUnread: chatState.hermesUnreadConversationIDs.contains(conversation.id),
-                                    onDelete: { chatState.deleteConversation(conversation.id) }
-                                )
-                                .contentShape(Rectangle())
-                                .onTapGesture {
-                                    selection = .conversation(conversation.id)
-                                }
-                                .contextMenu {
-                                    Button("Zmień nazwę") {
-                                        renameText = conversation.title
-                                        renameTarget = conversation
-                                    }
-                                    Button("Eksportuj do Markdown") {
-                                        if let url = chatState.exportConversation(conversation.id) {
-                                            withAnimation {
-                                                toastMessage = "Zapisano: \(url.lastPathComponent)"
-                                            }
-                                        }
-                                    }
-                                    Button("Wyślij rozmowę do Obsidiana") {
-                                        if chatState.sendConversationToObsidian(conversation.id) != nil {
-                                            withAnimation {
-                                                toastMessage = "Zapisano w Obsidian ✓"
-                                            }
-                                        }
-                                    }
-                                    Button("Duplikuj") {
-                                        chatState.duplicateConversation(conversation.id)
-                                    }
-                                    Divider()
-                                    Button("Usuń", role: .destructive) {
-                                        chatState.deleteConversation(conversation.id)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    let agentCount = agentManager.sessions.count + agentHistory.count
-                    sectionHeader(.agent, count: agentCount)
-                    if expandedSection == .agent {
-                        agentsSection
-                    }
-                }
-            }
+            controlPanel
+            drawer
         }
         .frame(maxHeight: .infinity)
-        // F15.2: sidebar is its own (lighter) surface again, separated from the
-        // chat by a plain graphite hairline — not the old purple neon divider.
-        .background(Color.kiwiMangoChrome)
+        .background(Color.kiwiMangoBackground)
         .overlay(alignment: .trailing) {
             Rectangle()
-                .fill(Color.white.opacity(0.06))
+                .fill(Color.white.opacity(0.04))
                 .frame(width: 1)
         }
-        .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 340)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 380)
         .toolbar(removing: .sidebarToggle)
     }
 
-    private func sectionHeader(_ section: SidebarSection, count: Int) -> some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                expandedSection = (expandedSection == section) ? nil : section
+    // MARK: - Control panel (left column)
+
+    private var controlPanel: some View {
+        VStack(spacing: 8) {
+            Text("CONTROL PANEL")
+                .font(KiwiMangoFont.mono(9, weight: .bold))
+                .tracking(1)
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 6) {
+                ControlButton(
+                    title: "NOWY CHAT",
+                    icon: "plus.bubble.fill",
+                    isAccent: true
+                ) {
+                    topSection = .chat
+                    selection = nil
+                    Task { await chatState.startNewConversation() }
+                }
+
+                ControlButton(
+                    title: "NOWY AGENT",
+                    icon: "cpu.fill",
+                    isAccent: true
+                ) {
+                    topSection = .agent
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        showingNewAgentPopover.toggle()
+                    }
+                }
+                .popover(isPresented: $showingNewAgentPopover) {
+                    NewAgentPopover { kind, model, workDir in
+                        showingNewAgentPopover = false
+                        let session = agentManager.spawn(
+                            kind: kind,
+                            model: model.name,
+                            isCloud: model.isCloud,
+                            workDir: workDir
+                        )
+                        selection = .agent(session.id)
+                        topSection = .agent
+                    } onClose: {
+                        showingNewAgentPopover = false
+                    }
+                }
+
+                ControlButton(
+                    title: "DASHBOARD",
+                    icon: "chart.bar.xaxis",
+                    isAccent: true
+                ) {
+                    selection = .hud
+                    topSection = .hud
+                }
             }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: expandedSection == section ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
-                Text(section.rawValue)
-                    .font(KiwiMangoFont.mono(10.5, weight: .semibold))
-                    .tracking(0.5)
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
-                Spacer()
-                Text("\(count)")
-                    .font(KiwiMangoFont.mono(10))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                expandedSection == section
-                    ? Color.white.opacity(0.04)
-                    : Color.clear
-            )
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity)
+        .background(Color.kiwiMangoBackground)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(height: 1)
+        }
     }
 
-    private var logoHeader: some View {
-        HStack(spacing: 8) {
-            Text("KM//")
-                .font(KiwiMangoFont.mono(20, weight: .bold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [Color.kiwiMangoAccent, Color.kiwiMangoPurple],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
+    // MARK: - Drawer
+
+    private var drawer: some View {
+        VStack(spacing: 0) {
+            drawerHeader
+                .padding(.horizontal, 14)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
+
+            switch topSection {
+            case .chat:
+                chatDrawer
+            case .agent:
+                agentDrawer
+            case .mission:
+                missionDrawer
+            case .hud:
+                hudDrawer
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.kiwiMangoBackground)
+    }
+
+    private var drawerHeader: some View {
+        HStack(spacing: 4) {
+            ForEach([TopSection.chat, .agent, .mission], id: \.self) { section in
+                Button(section.rawValue.uppercased()) {
+                    topSection = section
+                    switch section {
+                    case .chat:
+                        if case .conversation = selection {} else { selection = nil }
+                    case .agent:
+                        if case .agent = selection {} else { selection = nil }
+                    case .mission:
+                        selection = .missionControl
+                    case .hud:
+                        selection = .hud
+                    }
+                }
+                .font(KiwiMangoFont.mono(9, weight: topSection == section ? .bold : .semibold))
+                .tracking(0.6)
+                .foregroundStyle(topSection == section ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.55))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.kiwiMangoAccent.opacity(topSection == section ? 0.12 : 0))
                 )
-                .neonGlow(Color.kiwiMangoAccent, intensity: 0.4)
-                .realBloom(strength: 1.4, radius: 3)
-            Text("kiwiMango")
-                .font(KiwiMangoFont.mono(11, weight: .medium))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
+                .buttonStyle(.plain)
+            }
+
             Spacer()
+
             Button { toggleSidebar() } label: {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
             }
             .buttonStyle(.plain)
             .help("Schowaj panel (⌃⌘S)")
         }
+    }
+
+    private var chatDrawer: some View {
+        VStack(spacing: 0) {
+            searchField
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
+
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(filteredConversations) { conversation in
+                        ConversationRow(
+                            conversation: conversation,
+                            isActive: selection == .conversation(conversation.id),
+                            hasUnread: chatState.hermesUnreadConversationIDs.contains(conversation.id),
+                            onDelete: { chatState.deleteConversation(conversation.id) }
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selection = .conversation(conversation.id)
+                        }
+                        .contextMenu {
+                            Button("Zmień nazwę") {
+                                renameText = conversation.title
+                                renameTarget = conversation
+                            }
+                            Button("Eksportuj do Markdown") {
+                                if let url = chatState.exportConversation(conversation.id) {
+                                    withAnimation {
+                                        toastMessage = "Zapisano: \(url.lastPathComponent)"
+                                    }
+                                }
+                            }
+                            Button("Wyślij rozmowę do Obsidiana") {
+                                if chatState.sendConversationToObsidian(conversation.id) != nil {
+                                    withAnimation {
+                                        toastMessage = "Zapisano w Obsidian ✓"
+                                    }
+                                }
+                            }
+                            Button("Duplikuj") {
+                                chatState.duplicateConversation(conversation.id)
+                            }
+                            Divider()
+                            Button("Usuń", role: .destructive) {
+                                chatState.deleteConversation(conversation.id)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var agentDrawer: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    if !agentManager.sessions.isEmpty {
+                        SectionHeader(title: "NA ŻYWO", count: agentManager.sessions.count)
+                        ForEach(agentManager.sessions) { session in
+                            AgentRow(
+                                session: session,
+                                isActive: selection == .agent(session.id),
+                                onClose: { agentManager.close(session) }
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selection = .agent(session.id)
+                            }
+                        }
+                    }
+
+                    if !agentHistory.isEmpty {
+                        SectionHeader(title: "HISTORIA", count: agentHistory.count)
+                        ForEach(agentHistory) { record in
+                            AgentHistoryRow(
+                                record: record,
+                                isActive: selection == .agentHistory(record.id),
+                                onDelete: {
+                                    try? db.deleteAgentSession(record.id)
+                                    refreshAgentHistory()
+                                    if selection == .agentHistory(record.id) { selection = nil }
+                                }
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                selection = .agentHistory(record.id)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 14)
+            }
+        }
+    }
+
+    private var missionDrawer: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Centrum Dowodzenia")
+                    .font(KiwiMangoFont.mono(13, weight: .semibold))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
+                Text("Podgląd wszystkich żywych agentów, ich modeli, katalogów roboczych i ostatniej aktywności.")
+                    .font(KiwiMangoFont.mono(10.5))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    .lineLimit(nil)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 4)
+        }
+    }
+
+    private var hudDrawer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Hermes HUD")
+                .font(KiwiMangoFont.mono(13, weight: .semibold))
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
+            Text("Podgląd pamięci, sesji, zadań cron, kosztów i zdrowia Hermesa — osadzony z lokalnego serwera hermes-hudui.")
+                .font(KiwiMangoFont.mono(10.5))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .lineLimit(nil)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 4)
     }
 
     // MARK: - Sidebar toggle
@@ -419,8 +504,7 @@ struct RootView: View {
         }
     }
 
-    /// Wąska listwa widoczna po schowaniu sidebara — jedyna droga powrotu myszą
-    /// (poza ⌃⌘S), bo natywny toolbar toggle jest usunięty.
+    /// Wąska listwa widoczna po schowaniu sidebara.
     private var collapsedSidebarRail: some View {
         VStack {
             Button { toggleSidebar() } label: {
@@ -443,7 +527,7 @@ struct RootView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11))
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
-            TextField("", text: $searchText, prompt: Text("szukaj rozmów…").foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66)))
+            TextField("", text: $searchText, prompt: Text("szukaj…").foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66)))
                 .textFieldStyle(.plain)
                 .font(KiwiMangoFont.mono(11))
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
@@ -478,137 +562,27 @@ struct RootView: View {
             searchResultIDs = (try? db.searchConversationIDs(matching: query)) ?? []
         }
     }
-
-    // MARK: - Agents
-
-    private var agentsSection: some View {
-        VStack(spacing: 0) {
-            ForEach(agentManager.sessions) { session in
-                AgentRow(
-                    session: session,
-                    isActive: selection == .agent(session.id),
-                    onClose: { agentManager.close(session) }
-                )
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    selection = .agent(session.id)
-                }
-            }
-
-            if !agentHistory.isEmpty {
-                Text("HISTORIA")
-                    .font(KiwiMangoFont.mono(9, weight: .semibold))
-                    .tracking(1)
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 10)
-                    .padding(.bottom, 4)
-
-                ForEach(agentHistory) { record in
-                    AgentHistoryRow(
-                        record: record,
-                        isActive: selection == .agentHistory(record.id),
-                        onDelete: {
-                            try? db.deleteAgentSession(record.id)
-                            refreshAgentHistory()
-                            if selection == .agentHistory(record.id) { selection = nil }
-                        }
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selection = .agentHistory(record.id)
-                    }
-                }
-            }
-        }
-    }
 }
 
-// MARK: - Sidebar action buttons (F15.2 hierarchy)
+// MARK: - Section header
 
-/// Shared with `HoverGlow` — its border must ride the exact same corner
-/// radius as the pill it wraps. One constant, not two numbers in two files.
-let sidebarActionCornerRadius: CGFloat = 3
-
-/// The ONE primary action of the sidebar: filled accent background, dark text.
-/// Only "+ NOWA ROZMOWA" uses this — there must be exactly one thing that
-/// looks like the obvious next click.
-private struct PrimarySidebarButton: View {
+private struct SectionHeader: View {
     let title: String
-    let action: () -> Void
-    @State private var hovering = false
+    let count: Int
 
     var body: some View {
-        Button(action: action) {
+        HStack {
             Text(title)
-                .font(KiwiMangoFont.mono(11.5, weight: .bold))
-                .foregroundStyle(Color.kiwiMangoAccentText)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(Color.kiwiMangoAccent, in: RoundedRectangle(cornerRadius: sidebarActionCornerRadius))
+                .font(KiwiMangoFont.mono(9, weight: .bold))
+                .tracking(0.8)
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
+            Spacer()
+            Text("\(count)")
+                .font(KiwiMangoFont.mono(9))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
         }
-        .buttonStyle(.plain)
-        .overlay(HoverGlow(active: hovering, glowColor: .kiwiMangoPurple, cornerRadius: sidebarActionCornerRadius))
-        .onHover { hovering = $0 }
-        .onDisappear { hovering = false }
-    }
-}
-
-/// Secondary action ("+ NOWY AGENT"): outline only, no fill — one step down
-/// from the primary button in visual weight.
-private struct SecondarySidebarButton: View {
-    let title: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(KiwiMangoFont.mono(11.5, weight: .semibold))
-                .foregroundStyle(Color.kiwiMangoTextPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 7)
-                .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: sidebarActionCornerRadius))
-                .overlay(
-                    RoundedRectangle(cornerRadius: sidebarActionCornerRadius)
-                        .strokeBorder(Color(hex: "4E5563"), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .overlay(HoverGlow(active: hovering, glowColor: .kiwiMangoAccent, cornerRadius: sidebarActionCornerRadius))
-        .onHover { hovering = $0 }
-        .onDisappear { hovering = false }
-    }
-}
-
-/// Lab entries (ARENA / POKÓJ): half-width, smaller font, quietest of the four.
-private struct LabSidebarButton: View {
-    let title: String
-    var isActive: Bool = false
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(KiwiMangoFont.mono(10.5, weight: .semibold))
-                .foregroundStyle(isActive ? Color.kiwiMangoAccentText : Color.kiwiMangoTextPrimary.opacity(0.72))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(
-                    isActive ? Color.kiwiMangoAccent : Color.white.opacity(0.03),
-                    in: RoundedRectangle(cornerRadius: sidebarActionCornerRadius)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: sidebarActionCornerRadius)
-                        .strokeBorder(isActive ? Color.clear : Color(hex: "3A3F4C"), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .overlay(HoverGlow(active: hovering, glowColor: isActive ? .kiwiMangoPurple : .kiwiMangoAccent, cornerRadius: sidebarActionCornerRadius))
-        .onHover { hovering = $0 }
-        .onDisappear { hovering = false }
+        .padding(.top, 12)
+        .padding(.bottom, 6)
     }
 }
 
@@ -617,9 +591,6 @@ private struct LabSidebarButton: View {
 private struct ConversationRow: View {
     let conversation: Conversation
     let isActive: Bool
-    /// Fala 24.6: true when a background Hermes turn (subagents finishing,
-    /// a follow-up report) landed in this conversation while it wasn't on
-    /// screen — cleared by `ChatState.selectConversation`.
     var hasUnread: Bool = false
     let onDelete: () -> Void
 
@@ -641,7 +612,7 @@ private struct ConversationRow: View {
                             : Color.kiwiMangoTextPrimary.opacity(0.8)
                     )
                     .lineLimit(1)
-                Text(Self.relativeDate(conversation.updatedAt))
+                Text(relativeDate(conversation.updatedAt))
                     .font(KiwiMangoFont.mono(10.5))
                     .foregroundStyle(
                         isActive
@@ -687,13 +658,12 @@ private struct ConversationRow: View {
         .onHover { isHovered = $0 }
     }
 
-    /// Relative wording ("2 godz. temu") within 7 days, plain locale date beyond that.
-    private static func relativeDate(_ date: Date) -> String {
+    private func relativeDate(_ date: Date) -> String {
         let days = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0
         if days > 7 {
-            return absoluteFormatter.string(from: date)
+            return Self.absoluteFormatter.string(from: date)
         }
-        return relativeFormatter.localizedString(for: date, relativeTo: Date())
+        return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 
     private static let relativeFormatter: RelativeDateTimeFormatter = {
@@ -709,4 +679,57 @@ private struct ConversationRow: View {
         formatter.locale = Locale(identifier: "pl_PL")
         return formatter
     }()
+}
+
+// MARK: - ControlButton
+
+/// Text-only sidebar controls with a soft, deep hover glow. No button shapes.
+private struct ControlButton: View {
+    let title: String
+    let icon: String
+    var isActive: Bool = false
+    var isAccent: Bool = false
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(KiwiMangoFont.sans(10.5, weight: isActive ? .bold : .semibold))
+                    .tracking(0.3)
+                Spacer()
+            }
+            .foregroundStyle(foregroundColor)
+            .padding(.horizontal, 2)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity)
+            .background { hoverBackground }
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+
+    private var foregroundColor: Color {
+        if isActive || isAccent { return Color.kiwiMangoAccent }
+        return hovering ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.72)
+    }
+
+    /// Deep, soft glow behind the text on hover; no box, no border.
+    private var hoverBackground: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color.kiwiMangoAccent.opacity(isActive ? 0.12 : (hovering ? 0.10 : 0)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(
+                        Color.kiwiMangoAccent.opacity(isActive ? 0.45 : (hovering ? 0.35 : 0)),
+                        lineWidth: 1
+                    )
+            )
+            .shadow(color: Color.kiwiMangoAccent.opacity(hovering ? 0.35 : 0), radius: 12)
+            .shadow(color: Color.kiwiMangoAccent.opacity(hovering ? 0.18 : 0), radius: 28)
+    }
 }

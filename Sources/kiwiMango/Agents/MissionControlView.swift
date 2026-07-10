@@ -17,6 +17,7 @@ struct MissionControlView: View {
     var onSelectAgent: (UUID) -> Void = { _ in }
     var onClose: () -> Void = {}
 
+    @Environment(ChatState.self) private var chatState
     @Environment(AgentManager.self) private var agentManager
     @Environment(AgentTelemetry.self) private var telemetry
     /// Fala 24.7: second telemetry source (Hermes gateway, live WS events) —
@@ -35,6 +36,7 @@ struct MissionControlView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            metricsBar
             Divider().overlay(Color.white.opacity(0.08))
 
             if visibleSessions.isEmpty && hermesTelemetry.cards.isEmpty {
@@ -87,7 +89,7 @@ struct MissionControlView: View {
             }
             .buttonStyle(.plain)
 
-            Text("CENTRUM DOWODZENIA")
+            Text("AKTYWNE ZADANIA")
                 .font(KiwiMangoFont.mono(13, weight: .bold))
                 .tracking(1)
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
@@ -101,6 +103,34 @@ struct MissionControlView: View {
         .padding(.horizontal, 16)
         .frame(height: 44)
         .background(Color.kiwiMangoChrome)
+    }
+
+    private var metricsBar: some View {
+        HStack(spacing: 16) {
+            MetricItem(label: "ROZMOWY", value: "\(chatState.conversations.count)")
+            MetricItem(label: "AGENCI", value: "\(agentManager.sessions.count)")
+            MetricItem(label: "TOKENY", value: totalTokensLabel)
+            MetricItem(label: "MODEL", value: activeModelLabel)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 34)
+        .background(Color.kiwiMangoBackground)
+    }
+
+    private var totalTokensLabel: String {
+        let total = visibleSessions.reduce(0) { sum, session in
+            guard let t = telemetry.telemetry(for: session) else { return sum }
+            return sum + t.inputTokens + t.outputTokens + t.cacheReadTokens + t.cacheCreationTokens
+        } + hermesTelemetry.cards.reduce(0) { $0 + $1.inputTokens + $1.outputTokens }
+        return formatTokens(total)
+    }
+
+    private var activeModelLabel: String {
+        let name = chatState.selectedModel
+        if name.hasPrefix("claude:") { return name.replacingOccurrences(of: "claude:", with: "") }
+        if name.hasPrefix("hermes:") { return "hermes" }
+        return name.split(separator: "/").last.map(String.init) ?? name
     }
 
     private var summaryLine: String {
@@ -634,4 +664,24 @@ private func formatTokens(_ count: Int) -> String {
     if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
     if count >= 1_000 { return String(format: "%.1fk", Double(count) / 1_000) }
     return "\(count)"
+}
+
+// MARK: - Metric item
+
+private struct MetricItem: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(KiwiMangoFont.mono(8, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
+            Text(value)
+                .font(KiwiMangoFont.mono(11, weight: .semibold))
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
+                .lineLimit(1)
+        }
+    }
 }

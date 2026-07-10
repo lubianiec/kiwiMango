@@ -15,6 +15,8 @@ struct KiwiMangoApp: App {
     /// environment access) can push updates directly; held here in `@State`
     /// only so SwiftUI observes it and injects it down the view tree.
     @State private var hermesTelemetry = HermesTelemetry.shared
+    /// HUD companion: local hermes-hudui server + web view.
+    @State private var hermesHUDManager = HermesHUDManager()
     @NSApplicationDelegateAdaptor(KiwiMangoAppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -24,6 +26,7 @@ struct KiwiMangoApp: App {
                 .environment(agentManager)
                 .environment(agentTelemetry)
                 .environment(hermesTelemetry)
+                .environment(hermesHUDManager)
                 .frame(minWidth: 760, minHeight: 480)
                 .onAppear { appDelegate.agentManager = agentManager }
         }
@@ -41,22 +44,13 @@ struct KiwiMangoApp: App {
                 }
                 .keyboardShortcut("t")
             }
-            // ⌘P normally prints — this app has nothing to print, so it's free
-            // to repurpose for the prompt vault (F11.1).
             CommandGroup(replacing: .printItem) {
-                Button("Prompty") {
-                    NotificationCenter.default.post(name: .kiwiMangoRequestPrompts, object: nil)
+                Button("Centrum Dowodzenia") {
+                    NotificationCenter.default.post(name: .kiwiMangoRequestMissionControl, object: nil)
                 }
                 .keyboardShortcut("p")
             }
         }
-
-        Settings {
-            SettingsWindow()
-                .frame(minWidth: 640, minHeight: 480)
-                .environment(chatState)
-        }
-        .defaultSize(width: 720, height: 540)
     }
 }
 
@@ -69,8 +63,6 @@ extension Notification.Name {
     /// i dopiero wtedy startuje nową rozmowę (samo `startNewConversation`
     /// nie zmienia `selection`, więc przy aktywnym agencie nic nie było widać).
     static let kiwiMangoRequestNewConversation = Notification.Name("kiwiMangoRequestNewConversation")
-    /// Posted by the ⌘P command; `RootView` listens and switches to the prompt vault.
-    static let kiwiMangoRequestPrompts = Notification.Name("kiwiMangoRequestPrompts")
     /// Posted by the status bar's "Agenci [N]" segment (F18.2); `RootView`
     /// listens and switches to Centrum Dowodzenia.
     static let kiwiMangoRequestMissionControl = Notification.Name("kiwiMangoRequestMissionControl")

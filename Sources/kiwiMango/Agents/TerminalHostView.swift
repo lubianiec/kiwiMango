@@ -44,13 +44,13 @@ struct TerminalHostView: NSViewRepresentable {
 // MARK: - Terminal styling
 
 extension LocalProcessTerminalView {
-    /// Applies the kiwiMango design system to a freshly created terminal:
-    /// background #101218, text #EDF2E8, cursor lime #B6FF4D, mono 12.
-    /// ANSI palette is left untouched — the Claude Code TUI supplies its own colors.
+    /// Applies the Pinterest palette to a freshly created terminal:
+    /// background #14213D, text #E5E5E5, cursor orange #FCA311, mono 12.
+    /// ANSI palette is left untouched — the agent TUI supplies its own colors.
     func applyKiwiMangoTheme() {
-        nativeBackgroundColor = NSColor(hex: "101218")
-        nativeForegroundColor = NSColor(hex: "EDF2E8")
-        caretColor = NSColor(hex: "B6FF4D")
+        nativeBackgroundColor = NSColor(hex: "14213D")
+        nativeForegroundColor = NSColor(hex: "E5E5E5")
+        caretColor = NSColor(hex: "FCA311")
         font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     }
 }

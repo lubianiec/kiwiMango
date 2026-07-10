@@ -44,20 +44,13 @@ Zasady:
 enum SidebarSelection: Hashable {
     case conversation(Int64)
     case agent(UUID)
-    /// Model Arena / Agent Room (F8) — single shared instance each, so there's
-    /// nothing to key by id; the view's state lives in `RootView` instead.
-    case arena
-    case room
     /// A past (archived) agent session — Fala 13. Distinct from `.agent(UUID)`,
     /// which is a live/running session keyed by `AgentSession.id`.
     case agentHistory(Int64)
-    /// The prompt vault (Fala 11) — one shared panel, no id to key by.
-    case prompts
-    /// Centrum Dowodzenia (Fala 18) — live dashboard of running agent
-    /// sessions. One shared panel (no id), reached only via the status bar's
-    /// "Agenci [N]" segment — deliberately not a sidebar entry (F15 already
-    /// slimmed the sidebar down).
+    /// Centrum Dowodzenia (Fala 18) — live dashboard of running agent sessions.
     case missionControl
+    /// Osadzony Hermes HUD (Web UI) jako pełna sekcja aplikacji.
+    case hud
 }
 
 // MARK: - ChatMessage
@@ -238,8 +231,6 @@ final class ChatState {
     /// scheduler) — same ownership pattern as `showingModelManager`.
     var showingCronManager: Bool = false
 
-    /// Fala 14: true while `send()` is waiting on `webSearch`/`webFetch`, before
-    /// the actual chat stream starts — drives the "SZUKAM W SIECI…" indicator.
     var isSearchingWeb: Bool = false
 
     /// Fala 17: cached availability state for Anthropic models. The section is
@@ -708,6 +699,61 @@ final class ChatState {
         }
     }
 
+    /// Context compression: asks the current model to summarize the oldest part
+    /// of the transcript, stores the summary in the conversation row, then drops
+    /// the summarized messages from the database and keeps the last 4 turns live.
+    func compressContext() async {
+        guard let conversationID = currentConversationID, messages.count > 4 else { return }
+
+        let keep = 4
+        let summarizable = Array(messages.dropLast(keep))
+        let transcript = summarizable.map { "\($0.role == .user ? "Użytkownik" : "Asystent"): \($0.content)" }
+            .joined(separator: "\n\n")
+
+        let prompt = """
+        Podsumuj poniższą rozmowę po polsku. Zachowaj kluczowe fakty, decyzje, wykonane czynności \
+        oraz wszystkie zadania/następne kroki, które zostały ustalone. Bądź zwięzły, ale nie pomijaj \
+        szczegółów potrzebnych do kontynuacji rozmowy.
+
+        ---
+        \(transcript)
+        ---
+        """
+
+        let model = activePersona?.model ?? selectedModel
+        guard !model.hasPrefix("claude:"), !model.hasPrefix("hermes:") else {
+            // ponytail: Claude/Hermes routes need their own summarization path later.
+            return
+        }
+
+        let service = self.service
+        var summary = ""
+        do {
+            for try await delta in service.streamChat(
+                model: model,
+                messages: [OllamaService.ChatPayloadMessage(role: "user", content: prompt)],
+                isLocal: isLocalOllamaModel(model)
+            ) {
+                if case .content(let text) = delta {
+                    summary += text
+                }
+            }
+        } catch {
+            print("[KiwiMango] Failed to generate context summary: \(error)")
+            return
+        }
+
+        guard !summary.isEmpty else { return }
+
+        do {
+            try db.updateSummary(conversationId: conversationID, summary: summary)
+            try db.compressMessages(conversationId: conversationID, keepingLast: keep)
+            messages = Array(messages.suffix(keep))
+        } catch {
+            print("[KiwiMango] Failed to compress context: \(error)")
+        }
+    }
+
     // MARK: - Snippets
 
     func refreshSnippets() {
@@ -970,6 +1016,15 @@ final class ChatState {
                     ? message.images.map(OllamaService.base64(from:))
                     : nil
             )
+        }
+
+        if let conversationID = currentConversationID,
+           let summary = try? db.fetchConversation(conversationID)?.summary,
+           !summary.isEmpty {
+            history.insert(OllamaService.ChatPayloadMessage(
+                role: "system",
+                content: "Podsumowanie wcześniejszej części rozmowy: \(summary)"
+            ), at: 0)
         }
 
         if truncatedCount > 0 {

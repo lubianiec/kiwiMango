@@ -43,9 +43,6 @@ struct CommandPaletteView: View {
             .action(id: "agent", title: "Nowy agent", systemImage: "cpu") {
                 NotificationCenter.default.post(name: .kiwiMangoRequestNewAgent, object: nil)
             },
-            .action(id: "prompts", title: "Prompty", systemImage: "text.book.closed") {
-                NotificationCenter.default.post(name: .kiwiMangoRequestPrompts, object: nil)
-            },
             .action(id: "mission", title: "Centrum Dowodzenia", systemImage: "eye") {
                 NotificationCenter.default.post(name: .kiwiMangoRequestMissionControl, object: nil)
             },

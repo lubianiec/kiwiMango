@@ -36,26 +36,28 @@ extension Color {
 // MARK: - KiwiMango palette (v2 — deep cyberpunk terminal)
 
 extension Color {
-    /// Page-level background outside the app chrome (#101218, graphite — v3).
-    static let kiwiMangoBackground = Color(hex: "101218")
-    /// Title bars, sidebar background (#161922, jaśniejsza powierzchnia sidebara).
-    static let kiwiMangoChrome = Color(hex: "161922")
-    /// Main content surface (#1D212C).
-    static let kiwiMangoSurface = Color(hex: "1D212C")
-    /// Composer background (#171B25).
-    static let kiwiMangoComposerBg = Color(hex: "171B25")
-    /// Softened lime accent (#B6FF4D) — active states, terminal text, primary borders.
-    static let kiwiMangoAccent = Color(hex: "B6FF4D")
-    /// Text drawn on top of the accent color (#14180A).
-    static let kiwiMangoAccentText = Color(hex: "14180A")
-    /// Neon violet (#BF00FF) — decorations, secondary borders, sidebar highlights.
-    static let kiwiMangoPurple = Color(hex: "BF00FF")
-    /// Primary text, faint green-white tint (#EDF2E8).
-    static let kiwiMangoTextPrimary = Color(hex: "EDF2E8")
+    /// Page-level background and unified chrome (#14213D, deep navy — Pinterest palette).
+    static let kiwiMangoBackground = Color(hex: "14213D")
+    /// Title bars, sidebar header, elevated chrome — same navy for a single surface.
+    static let kiwiMangoChrome = Color(hex: "14213D")
+    /// Main content surface — same navy so the terminal and panel merge.
+    static let kiwiMangoSurface = Color(hex: "14213D")
+    /// Composer background — same navy; border/glow provides separation.
+    static let kiwiMangoComposerBg = Color(hex: "14213D")
+    /// Primary accent / buttons — muted dark orange, matte and understated.
+    static let kiwiMangoAccent = Color(hex: "C47A2C")
+    /// Text drawn on top of the accent color (light, so it reads on the dark orange).
+    static let kiwiMangoAccentText = Color(hex: "E5E5E5")
+    /// Secondary decorations share the same understated orange.
+    static let kiwiMangoPurple = Color(hex: "C47A2C")
+    /// Primary text, light gray (#E5E5E5 — Pinterest palette).
+    static let kiwiMangoTextPrimary = Color(hex: "E5E5E5")
     /// Destructive/coral accent (#ff6a5c).
     static let kiwiMangoDanger = Color(hex: "ff6a5c")
-    /// Warm amber for numeric literals in the code block syntax highlighter (#FFB454).
-    static let kiwiMangoSyntaxNumber = Color(hex: "FFB454")
+    /// Deep recessed panel for embedded drawers (e.g. NOWY AGENT).
+    static let kiwiMangoPanelDeep = Color(hex: "0B1628")
+    /// Warm amber for numeric literals in the code block syntax highlighter.
+    static let kiwiMangoSyntaxNumber = Color(hex: "FCA311")
 }
 
 // MARK: - Fonts
@@ -105,7 +107,7 @@ private struct BreathingBackdrop: View {
                 let speed = 1.2 + min(chatState.liveTokRate / 40.0, 2.0)
                 let t = timeline.date.timeIntervalSinceReferenceDate * speed
                 Rectangle()
-                    .fill(Color(hex: "101218"))
+                    .fill(Color.kiwiMangoBackground)
                     .colorEffect(kiwiShaders.breathingGlow(.float2(proxy.size), .float(t), .float(intensity)))
             }
         }

@@ -11,6 +11,7 @@ struct Conversation: Identifiable, Hashable, Codable {
     var title: String
     var createdAt: Date
     var updatedAt: Date
+    var summary: String?
 }
 
 extension Conversation: FetchableRecord, MutablePersistableRecord {
@@ -22,6 +23,7 @@ extension Conversation: FetchableRecord, MutablePersistableRecord {
         self.title = title
         self.createdAt = now
         self.updatedAt = now
+        self.summary = nil
     }
 
     /// Omits `id` from the INSERT when it's still the `0` placeholder, so SQLite
@@ -34,6 +36,7 @@ extension Conversation: FetchableRecord, MutablePersistableRecord {
         container["title"] = title
         container["createdAt"] = createdAt
         container["updatedAt"] = updatedAt
+        container["summary"] = summary
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -146,81 +149,6 @@ extension Snippet: FetchableRecord, MutablePersistableRecord {
         container["trigger"] = trigger
         container["content"] = content
         container["position"] = position
-    }
-
-    mutating func didInsert(_ inserted: InsertionSuccess) {
-        id = inserted.rowID
-    }
-}
-
-// MARK: - ArenaVote
-
-/// A single vote cast in the Arena (F8.1) — which model won a given prompt.
-/// Votes are the only thing Arena persists; the rounds themselves are ephemeral.
-struct ArenaVote: Identifiable, Hashable, Codable {
-    var id: Int64
-    var model: String
-    var prompt: String
-    var votedAt: Date
-}
-
-extension ArenaVote: FetchableRecord, MutablePersistableRecord {
-    static let databaseTableName = "arenaVote"
-
-    fileprivate init(pendingModel model: String, prompt: String, now: Date) {
-        self.id = 0
-        self.model = model
-        self.prompt = prompt
-        self.votedAt = now
-    }
-
-    /// See `Conversation.encode(to:)` — same id=0 placeholder pattern.
-    func encode(to container: inout PersistenceContainer) {
-        if id != 0 { container["id"] = id }
-        container["model"] = model
-        container["prompt"] = prompt
-        container["votedAt"] = votedAt
-    }
-
-    mutating func didInsert(_ inserted: InsertionSuccess) {
-        id = inserted.rowID
-    }
-}
-
-// MARK: - SavedPrompt (Fala 11)
-
-/// One entry in the private prompt vault — image prompts, personas, drafts,
-/// anything Paweł wants to keep. Deliberately separate from `Snippet` (the
-/// `/` composer shortcuts, F2.6) — different feature, do not merge.
-struct SavedPrompt: Identifiable, Hashable, Codable {
-    var id: Int64
-    var title: String
-    var content: String
-    var category: String
-    var createdAt: Date
-    var lastUsedAt: Date
-}
-
-extension SavedPrompt: FetchableRecord, MutablePersistableRecord {
-    static let databaseTableName = "savedPrompt"
-
-    init(pendingTitle title: String, content: String, category: String, now: Date) {
-        self.id = 0
-        self.title = title
-        self.content = content
-        self.category = category
-        self.createdAt = now
-        self.lastUsedAt = now
-    }
-
-    /// See `Conversation.encode(to:)` — same id=0 placeholder pattern.
-    func encode(to container: inout PersistenceContainer) {
-        if id != 0 { container["id"] = id }
-        container["title"] = title
-        container["content"] = content
-        container["category"] = category
-        container["createdAt"] = createdAt
-        container["lastUsedAt"] = lastUsedAt
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
@@ -466,15 +394,6 @@ final class DatabaseManager: Sendable {
             }
         }
 
-        migrator.registerMigration("addArenaVote") { db in
-            try db.create(table: "arenaVote") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("model", .text).notNull()
-                t.column("prompt", .text).notNull()
-                t.column("votedAt", .datetime).notNull()
-            }
-        }
-
         migrator.registerMigration("addObsidianColumns") { db in
             // Fala 12: which vault file a conversation lives in (assigned once,
             // stable across renames) and its auto-classified category.
@@ -484,87 +403,10 @@ final class DatabaseManager: Sendable {
             }
         }
 
-        migrator.registerMigration("addSavedPrompt") { db in
-            try db.create(table: "savedPrompt") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("title", .text).notNull()
-                t.column("content", .text).notNull()
-                t.column("category", .text).notNull()
-                t.column("createdAt", .datetime).notNull()
-                t.column("lastUsedAt", .datetime).notNull()
-            }
-
-            let now = Date()
-            let seeds: [(String, String, String)] = [
-                (
-                    "Prompt SD — portret cyberpunk",
-                    "cyberpunk portrait, neon rim light, rain-soaked street, cinematic, highly detailed, 85mm",
-                    "OBRAZY"
-                ),
-                (
-                    "Persona — brutalnie szczery recenzent",
-                    "Jesteś bezlitosnym, ale rzeczowym recenzentem. Wytykasz słabe punkty wprost, bez owijania w bawełnę, ale zawsze uzasadniasz.",
-                    "ROLE"
-                ),
-                (
-                    "Szkic maila do klienta",
-                    "Krótko, konkretnie, bez lania wody: co zrobiono, co dalej, jaki termin.",
-                    "INNE"
-                ),
-            ]
-            for seed in seeds {
-                var prompt = SavedPrompt(
-                    pendingTitle: seed.0, content: seed.1, category: seed.2, now: now
-                )
-                try prompt.insert(db)
-            }
-        }
-
-        migrator.registerMigration("addAgentSession") { db in
-            try db.create(table: "agentSession") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("kind", .text).notNull()
-                t.column("model", .text).notNull()
-                t.column("isCloud", .boolean).notNull()
-                t.column("workDir", .text).notNull()
-                t.column("startedAt", .datetime).notNull()
-                t.column("endedAt", .datetime).notNull()
-                t.column("transcript", .text).notNull()
-            }
-        }
-
-        migrator.registerMigration("addClaudeSessionID") { db in
-            // Fala 17: `claude -p --resume <id>` needs the CLI's own session id
-            // (returned on the `result` line) to continue a conversation — this
-            // is unrelated to `conversation.id` and only ever set for Anthropic
-            // model threads.
+        migrator.registerMigration("addConversationSummary") { db in
+            // Context compression summary persisted per conversation.
             try db.alter(table: "conversation") { t in
-                t.add(column: "claudeSessionID", .text)
-            }
-        }
-
-        migrator.registerMigration("addHermesGatewaySessionID") { db in
-            // Fala 24 (F24.3): the WebSocket gateway's `session_id` (short
-            // 8-hex, from `session.create`'s result) — needed to `session.resume`
-            // the right agent session when the user switches back to this
-            // conversation. Distinct from F22's in-memory `hermesSessionIDs`
-            // dict (headless CLI `--resume`, still used by the fallback path).
-            try db.alter(table: "conversation") { t in
-                t.add(column: "hermesGatewaySessionID", .text)
-            }
-        }
-
-        migrator.registerMigration("addMemoryFact") { db in
-            // F1: auto long-term memory extracted from assistant replies.
-            try db.create(table: "memoryFact") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("content", .text).notNull()
-                t.column("sourceConversationId", .integer)
-                t.column("sourceSessionId", .integer)
-                t.column("scope", .text).notNull().defaults(to: "global")
-                t.column("createdAt", .datetime).notNull()
-                t.column("lastUsedAt", .datetime).notNull()
-                t.column("useCount", .integer).notNull().defaults(to: 0)
+                t.add(column: "summary", .text)
             }
         }
 
@@ -587,6 +429,21 @@ final class DatabaseManager: Sendable {
             try Conversation
                 .order(Column("updatedAt").desc)
                 .fetchAll(db)
+        }
+    }
+
+    func fetchConversation(_ id: Int64) throws -> Conversation? {
+        try dbQueue.read { db in
+            try Conversation.fetchOne(db, key: id)
+        }
+    }
+
+    func updateSummary(conversationId: Int64, summary: String) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE conversation SET summary = ?, updatedAt = ? WHERE id = ?",
+                arguments: [summary, Date(), conversationId]
+            )
         }
     }
 
@@ -706,6 +563,25 @@ final class DatabaseManager: Sendable {
         }
     }
 
+    /// Keeps only the last `keep` messages of a conversation; older rows are deleted.
+    func compressMessages(conversationId: Int64, keepingLast keep: Int) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: """
+                DELETE FROM message
+                WHERE conversationId = ?
+                  AND id NOT IN (
+                    SELECT id FROM message
+                    WHERE conversationId = ?
+                    ORDER BY createdAt DESC
+                    LIMIT ?
+                  )
+                """,
+                arguments: [conversationId, conversationId, keep]
+            )
+        }
+    }
+
     /// Messages for a conversation, paired with their attached images (ordered by `position`).
     func fetchMessagesWithImages(conversationId: Int64) throws -> [(StoredMessage, [Data])] {
         try dbQueue.read { db in
@@ -783,26 +659,6 @@ final class DatabaseManager: Sendable {
         }
     }
 
-    // MARK: - Arena votes
-
-    func addArenaVote(model: String, prompt: String) throws {
-        try dbQueue.write { db in
-            var vote = ArenaVote(pendingModel: model, prompt: prompt, now: Date())
-            try vote.insert(db)
-        }
-    }
-
-    /// Vote counts per model across all rounds ever played, highest first.
-    func fetchArenaRanking() throws -> [(model: String, votes: Int)] {
-        try dbQueue.read { db in
-            let rows = try Row.fetchAll(
-                db,
-                sql: "SELECT model, COUNT(*) AS votes FROM arenaVote GROUP BY model ORDER BY votes DESC"
-            )
-            return rows.map { (model: $0["model"], votes: $0["votes"]) }
-        }
-    }
-
     // MARK: - Agent session history (Fala 13)
 
     @discardableResult
@@ -831,41 +687,6 @@ final class DatabaseManager: Sendable {
     func deleteAgentSession(_ id: Int64) throws {
         _ = try dbQueue.write { db in
             try AgentSessionRecord.deleteOne(db, key: id)
-        }
-    }
-
-    // MARK: - Saved prompts (Fala 11)
-
-    func fetchSavedPrompts() throws -> [SavedPrompt] {
-        try dbQueue.read { db in
-            try SavedPrompt.order(Column("lastUsedAt").desc).fetchAll(db)
-        }
-    }
-
-    /// Inserts a new prompt (id == 0) or updates an existing one in place —
-    /// same convention as `savePersona`/`saveSnippet`.
-    @discardableResult
-    func saveSavedPrompt(_ prompt: SavedPrompt) throws -> SavedPrompt {
-        try dbQueue.write { db in
-            var prompt = prompt
-            if prompt.id == 0 {
-                try prompt.insert(db)
-            } else {
-                try prompt.update(db)
-            }
-            return prompt
-        }
-    }
-
-    func touchSavedPromptUsage(_ id: Int64) throws {
-        try dbQueue.write { db in
-            try db.execute(sql: "UPDATE savedPrompt SET lastUsedAt = ? WHERE id = ?", arguments: [Date(), id])
-        }
-    }
-
-    func deleteSavedPrompt(_ id: Int64) throws {
-        _ = try dbQueue.write { db in
-            try SavedPrompt.deleteOne(db, key: id)
         }
     }
 
