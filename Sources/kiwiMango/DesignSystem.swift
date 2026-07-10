@@ -33,31 +33,67 @@ extension Color {
     }
 }
 
-// MARK: - KiwiMango palette (v2 — deep cyberpunk terminal)
+// MARK: - KiwiMango palette (v3 — warm dark, unified)
+// Based on Paweł's reference screenshot: deep charcoal surfaces, warm orange
+// accents, brown assistant bubbles, grey user bubbles, round send button.
 
 extension Color {
-    /// Page-level background and unified chrome (#14213D, deep navy — Pinterest palette).
-    static let kiwiMangoBackground = Color(hex: "14213D")
-    /// Title bars, sidebar header, elevated chrome — same navy for a single surface.
-    static let kiwiMangoChrome = Color(hex: "14213D")
-    /// Main content surface — same navy so the terminal and panel merge.
-    static let kiwiMangoSurface = Color(hex: "14213D")
-    /// Composer background — same navy; border/glow provides separation.
-    static let kiwiMangoComposerBg = Color(hex: "14213D")
-    /// Primary accent / buttons — muted dark orange, matte and understated.
-    static let kiwiMangoAccent = Color(hex: "C47A2C")
-    /// Text drawn on top of the accent color (light, so it reads on the dark orange).
-    static let kiwiMangoAccentText = Color(hex: "E5E5E5")
-    /// Secondary decorations share the same understated orange.
-    static let kiwiMangoPurple = Color(hex: "C47A2C")
-    /// Primary text, light gray (#E5E5E5 — Pinterest palette).
-    static let kiwiMangoTextPrimary = Color(hex: "E5E5E5")
-    /// Destructive/coral accent (#ff6a5c).
-    static let kiwiMangoDanger = Color(hex: "ff6a5c")
-    /// Deep recessed panel for embedded drawers (e.g. NOWY AGENT).
-    static let kiwiMangoPanelDeep = Color(hex: "0B1628")
-    /// Warm amber for numeric literals in the code block syntax highlighter.
+    /// Window-level background (deep charcoal, almost black).
+    static let kiwiMangoBackground = Color(hex: "141414")
+    /// Top bar and elevated chrome (slightly lighter than background).
+    static let kiwiMangoChrome = Color(hex: "1C1C1E")
+    /// Sidebar / drawer surface.
+    static let kiwiMangoSurface = Color(hex: "1A1A1D")
+    /// Composer and input fields.
+    static let kiwiMangoComposerBg = Color(hex: "1F1F23")
+    /// Primary accent / buttons / send — warm orange.
+    static let kiwiMangoAccent = Color(hex: "F2994A")
+    /// Text drawn on top of the accent color.
+    static let kiwiMangoAccentText = Color(hex: "FFFFFF")
+    /// Secondary warm highlight for active rows / amber details.
+    static let kiwiMangoPurple = Color(hex: "F5A623")
+    /// Primary text (soft white).
+    static let kiwiMangoTextPrimary = Color(hex: "F2F2F7")
+    /// Destructive/coral accent.
+    static let kiwiMangoDanger = Color(hex: "FF6A5C")
+    /// Deep recessed panel for popovers / modals.
+    static let kiwiMangoPanelDeep = Color(hex: "161618")
+    /// Warm amber for numeric literals in syntax highlighter.
     static let kiwiMangoSyntaxNumber = Color(hex: "FCA311")
+
+    // MARK: - Chat bubble colors
+    /// User message bubble background (muted grey).
+    static let kiwiMangoUserBubble = Color(hex: "3F3F46")
+    /// Assistant message bubble background (warm brown).
+    static let kiwiMangoAssistantBubble = Color(hex: "4A3428")
+    /// Assistant bubble text color.
+    static let kiwiMangoAssistantText = Color(hex: "F2F2F7")
+    /// Subtle border used on inactive inputs / cards.
+    static let kiwiMangoBorder = Color(hex: "3F3F46")
+    /// Sidebar surface — deeper than window/card background (redesign mono F1).
+    /// No divider line at the seam; the tone jump alone reads as separation.
+    static let kiwiMangoSidebarDeep = Color(hex: "101012")
+}
+
+// MARK: - Section label (redesign mono F1)
+
+/// The recurring "CONTROL PANEL" / "MODEL" / "SESJE DZIŚ" look from the mono
+/// reference: tiny uppercase caps, wide tracking, muted. One modifier so every
+/// section/eyebrow label across the app matches exactly.
+struct KiwiSectionLabelStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(KiwiMangoFont.mono(10.5, weight: .semibold))
+            .tracking(1.2)
+            .textCase(.uppercase)
+            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
+    }
+}
+
+extension View {
+    func kiwiSectionLabel() -> some View {
+        modifier(KiwiSectionLabelStyle())
+    }
 }
 
 // MARK: - Fonts
@@ -177,21 +213,18 @@ extension View {
     }
 }
 
-// MARK: - Neon effects
+// MARK: - Warm dark effects
 
 extension View {
-    /// Layered glow behind a view — 3 shadow passes at decreasing opacity/increasing
-    /// radius. Cheap (`.shadow`), but don't stack on many rows in a `LazyVStack` at
-    /// once; prefer toggling via `.opacity` on hover rather than adding/removing it.
+    /// Soft, warm shadow behind small elements (send button, active dots). Keeps the
+    /// same call sites as the old neonGlow but matches the screenshot's subtle depth.
     func neonGlow(_ color: Color, intensity: CGFloat = 1) -> some View {
         self
-            .shadow(color: color.opacity(0.9 * intensity), radius: 2)
-            .shadow(color: color.opacity(0.5 * intensity), radius: 6)
-            .shadow(color: color.opacity(0.25 * intensity), radius: 14)
+            .shadow(color: color.opacity(0.35 * intensity), radius: 4, x: 0, y: 2)
     }
 }
 
-/// 1px border + matching glow, with an `.active` variant for focus/hover states.
+/// Subtle border matching the warm dark theme. Active variant uses full accent color.
 struct NeonBorder: ViewModifier {
     var color: Color
     var cornerRadius: CGFloat = 4
@@ -202,9 +235,9 @@ struct NeonBorder: ViewModifier {
         content
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(color.opacity(active ? 0.95 : 0.55), lineWidth: lineWidth)
+                    .strokeBorder(color.opacity(active ? 0.8 : 0.35), lineWidth: lineWidth)
             )
-            .shadow(color: color.opacity(active ? 0.7 : 0.3), radius: active ? 12 : 4)
+            .shadow(color: color.opacity(active ? 0.25 : 0.10), radius: active ? 8 : 3, x: 0, y: 1)
     }
 }
 
@@ -214,11 +247,9 @@ extension View {
     }
 }
 
-// MARK: - Hover glow (F15.4, replaced per Paweł's feedback 2026-07-08)
+// MARK: - Hover glow
 
-/// Hover feedback for the sidebar's 4 action buttons: border brightens to
-/// full accent color + a soft outer glow, no motion. Fade in/out only —
-/// costs nothing at rest (no TimelineView, no repeating animation).
+/// Hover feedback for sidebar action buttons: border brightens to accent + soft shadow.
 struct HoverGlow: View {
     let active: Bool
     let glowColor: Color
@@ -226,8 +257,8 @@ struct HoverGlow: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius)
-            .strokeBorder(glowColor, lineWidth: 1.2)
-            .shadow(color: glowColor.opacity(0.7), radius: 4)
+            .strokeBorder(glowColor.opacity(0.85), lineWidth: 1)
+            .shadow(color: Color.black.opacity(0.20), radius: 4, x: 0, y: 2)
             .opacity(active ? 1 : 0)
             .allowsHitTesting(false)
             .animation(.easeInOut(duration: 0.15), value: active)

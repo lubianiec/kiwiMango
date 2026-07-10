@@ -8,15 +8,15 @@ struct RootView: View {
 
     @Environment(ChatState.self) private var chatState
     @Environment(AgentManager.self) private var agentManager
-    @Environment(HermesHUDManager.self) private var hudManager
 
-    @State private var selection: SidebarSelection?
+    // F1: Dashboard = HOME — apka startuje na widoku "Zużycie".
+    @State private var selection: SidebarSelection? = .dashboard
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showingNewAgentPopover = false
     @State private var searchText = ""
     @State private var searchResultIDs: Set<Int64> = []
     @FocusState private var searchFocused: Bool
-    @State private var topSection: TopSection = .chat
+    @State private var topSection: TopSection = .dashboard
 
     @State private var renameTarget: Conversation?
     @State private var renameText = ""
@@ -33,7 +33,7 @@ struct RootView: View {
         case chat = "Chat"
         case agent = "Agenci"
         case mission = "Aktywne zadania"
-        case hud = "Dashboard"
+        case dashboard = "Dashboard"
         var id: String { rawValue }
     }
 
@@ -94,8 +94,8 @@ struct RootView: View {
                 topSection = .agent
             case .missionControl:
                 topSection = .mission
-            case .hud:
-                topSection = .hud
+            case .dashboard:
+                topSection = .dashboard
             case nil:
                 break
             }
@@ -206,8 +206,8 @@ struct RootView: View {
                 onSelectAgent: { id in selection = .agent(id) },
                 onClose: { selection = nil }
             )
-        case .hud:
-            HermesHUDView(manager: hudManager)
+        case .dashboard:
+            DashboardView()
         case .conversation, nil:
             ChatView()
         }
@@ -230,31 +230,31 @@ struct RootView: View {
             drawer
         }
         .frame(maxHeight: .infinity)
-        .background(Color.kiwiMangoBackground)
-        .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(Color.white.opacity(0.04))
-                .frame(width: 1)
-        }
+        // F1: sidebar głębszy niż treść, szew bez linii — różnica tonu robi separację.
+        .background(Color.kiwiMangoSidebarDeep)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 380)
         .toolbar(removing: .sidebarToggle)
     }
 
     // MARK: - Control panel (left column)
 
+    // ponytail: referencja opisuje pionową listę nawigacji z 2px amber
+    // znacznikiem po lewej. Ten sidebar używa kafli (ControlButton) i pigułek
+    // (drawerHeader) zamiast listy — aktywny stan już sygnalizuje amber accent
+    // + border, więc dokładanie znacznika 2px byłoby drugim wskaźnikiem tej
+    // samej rzeczy (zakaz duplikowanych kontrolek, plan pkt. 7).
     private var controlPanel: some View {
         VStack(spacing: 10) {
-            Text("CONTROL PANEL")
-                .font(KiwiMangoFont.mono(9, weight: .bold))
-                .tracking(1)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+            Text("Control Panel")
+                .kiwiSectionLabel()
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 8) {
                 ControlButton(
                     title: "CHAT",
                     icon: "plus.bubble.fill",
-                    isAccent: true
+                    isAccent: true,
+                    isActive: topSection == .chat
                 ) {
                     topSection = .chat
                     selection = nil
@@ -264,7 +264,8 @@ struct RootView: View {
                 ControlButton(
                     title: "AGENT",
                     icon: "cpu.fill",
-                    isAccent: true
+                    isAccent: true,
+                    isActive: topSection == .agent
                 ) {
                     topSection = .agent
                     withAnimation(.easeInOut(duration: 0.22)) {
@@ -291,17 +292,19 @@ struct RootView: View {
             HStack(spacing: 8) {
                 ControlButton(
                     title: "HISTORIA",
-                    icon: "clock.arrow.circlepath"
+                    icon: "clock.arrow.circlepath",
+                    isActive: showingHistory
                 ) {
                     showingHistory = true
                 }
 
                 ControlButton(
                     title: "DASH",
-                    icon: "chart.bar.xaxis"
+                    icon: "chart.bar.xaxis",
+                    isActive: topSection == .dashboard
                 ) {
-                    selection = .hud
-                    topSection = .hud
+                    selection = .dashboard
+                    topSection = .dashboard
                 }
             }
         }
@@ -309,12 +312,7 @@ struct RootView: View {
         .padding(.top, 14)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity)
-        .background(Color.kiwiMangoBackground)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Color.white.opacity(0.06))
-                .frame(height: 1)
-        }
+        .background(Color.kiwiMangoSidebarDeep)
     }
 
     // MARK: - Drawer
@@ -333,12 +331,12 @@ struct RootView: View {
                 agentDrawer
             case .mission:
                 missionDrawer
-            case .hud:
+            case .dashboard:
                 hudDrawer
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.kiwiMangoBackground)
+        .background(Color.kiwiMangoSidebarDeep)
     }
 
     private var drawerHeader: some View {
@@ -353,8 +351,8 @@ struct RootView: View {
                         if case .agent = selection {} else { selection = nil }
                     case .mission:
                         selection = .missionControl
-                    case .hud:
-                        selection = .hud
+                    case .dashboard:
+                        selection = .dashboard
                     }
                 }
                 .font(KiwiMangoFont.mono(9, weight: topSection == section ? .bold : .semibold))
@@ -363,8 +361,12 @@ struct RootView: View {
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)
                 .background(
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.kiwiMangoAccent.opacity(topSection == section ? 0.12 : 0))
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(topSection == section ? Color.kiwiMangoAssistantBubble.opacity(0.70) : Color.clear)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(topSection == section ? Color.kiwiMangoAccent.opacity(0.40) : Color.clear, lineWidth: 1)
                 )
                 .buttonStyle(.plain)
             }
@@ -476,10 +478,10 @@ struct RootView: View {
 
     private var hudDrawer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Hermes HUD")
+            Text("Dashboard")
                 .font(KiwiMangoFont.mono(13, weight: .semibold))
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
-            Text("Podgląd pamięci, sesji, zadań cron, kosztów i zdrowia Hermesa — osadzony z lokalnego serwera hermes-hudui.")
+            Text("Podgląd pamięci, sesji, zadań cron i kosztów Hermesa — natywnie, bez WebView.")
                 .font(KiwiMangoFont.mono(10.5))
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
                 .lineLimit(nil)
@@ -540,10 +542,10 @@ struct RootView: View {
         .padding(.vertical, 6)
         .background(Color.kiwiMangoComposerBg)
         .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(Color.kiwiMangoBorder.opacity(0.45), lineWidth: 1)
         )
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .task(id: searchText) {
             let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !query.isEmpty else {
@@ -566,9 +568,7 @@ private struct SectionHeader: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(KiwiMangoFont.mono(9, weight: .bold))
-                .tracking(0.8)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.35))
+                .kiwiSectionLabel()
             Spacer()
             Text("\(count)")
                 .font(KiwiMangoFont.mono(9))
@@ -593,16 +593,16 @@ private struct ConversationRow: View {
         HStack(spacing: 0) {
             Rectangle()
                 .fill(isActive ? Color.kiwiMangoPurple : Color.clear)
-                .frame(width: 2)
+                .frame(width: 3)
                 .shadow(color: isActive ? Color.kiwiMangoPurple.opacity(0.6) : .clear, radius: 4)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(conversation.title)
-                    .font(KiwiMangoFont.sans(12, weight: isActive ? .bold : .medium))
+                    .font(KiwiMangoFont.sans(12, weight: isActive ? .semibold : .medium))
                     .foregroundStyle(
                         isActive
                             ? Color.kiwiMangoTextPrimary
-                            : Color.kiwiMangoTextPrimary.opacity(0.8)
+                            : Color.kiwiMangoTextPrimary.opacity(0.85)
                     )
                     .lineLimit(1)
                 Text(relativeDate(conversation.updatedAt))
@@ -610,7 +610,7 @@ private struct ConversationRow: View {
                     .foregroundStyle(
                         isActive
                             ? Color.kiwiMangoPurple
-                            : Color.kiwiMangoTextPrimary.opacity(0.66)
+                            : Color.kiwiMangoTextPrimary.opacity(0.55)
                     )
             }
             .padding(.leading, 12)
@@ -623,7 +623,6 @@ private struct ConversationRow: View {
                 Circle()
                     .fill(Color.kiwiMangoPurple)
                     .frame(width: 6, height: 6)
-                    .shadow(color: Color.kiwiMangoPurple.opacity(0.7), radius: 3)
                     .padding(.trailing, 12)
                     .help("Hermes dokończył coś w tle")
             }
@@ -641,13 +640,10 @@ private struct ConversationRow: View {
         }
         .background(
             isActive
-                ? AnyShapeStyle(LinearGradient(
-                    colors: [Color.kiwiMangoPurple.opacity(0.30), Color.clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                ))
+                ? AnyShapeStyle(Color.kiwiMangoAssistantBubble.opacity(0.55))
                 : AnyShapeStyle(isHovered ? Color.white.opacity(0.04) : Color.clear)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .onHover { isHovered = $0 }
     }
 
@@ -676,8 +672,8 @@ private struct ConversationRow: View {
 
 // MARK: - ControlButton
 
-/// Etched copper sidebar control: deep recessed tile with amber border and
-/// soft inner glow. Matches the generated Flow reference (V2).
+/// Warm-dark sidebar control: rounded tile with icon + label.
+/// Active state uses the assistant-bubble brown with amber text/icon.
 private struct ControlButton: View {
     let title: String
     let icon: String
@@ -692,21 +688,21 @@ private struct ControlButton: View {
             VStack(spacing: 6) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.kiwiMangoPanelDeep)
+                        .fill(isActive ? Color.kiwiMangoAssistantBubble.opacity(0.75) : Color.kiwiMangoComposerBg)
                         .overlay(
                             RoundedRectangle(cornerRadius: 10)
                                 .strokeBorder(
-                                    Color.kiwiMangoAccent.opacity(isAccent || hovering ? 0.55 : 0.22),
+                                    isActive ? Color.kiwiMangoAccent.opacity(0.45) : Color.kiwiMangoBorder.opacity(hovering ? 0.55 : 0.30),
                                     lineWidth: 1
                                 )
                         )
-                        .shadow(color: Color.kiwiMangoAccent.opacity(hovering ? 0.25 : 0), radius: 10)
 
                     Image(systemName: icon)
                         .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(foregroundColor)
                 }
                 .frame(height: 44)
+                .shadow(color: Color.black.opacity(hovering ? 0.15 : 0), radius: 5, x: 0, y: 2)
 
                 Text(title)
                     .font(KiwiMangoFont.mono(8, weight: isActive ? .bold : .medium))
@@ -718,9 +714,11 @@ private struct ControlButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .animation(.easeInOut(duration: 0.15), value: hovering)
     }
 
     private var foregroundColor: Color {
+        if isActive { return Color.kiwiMangoAccent }
         if isAccent { return Color.kiwiMangoAccent }
         return hovering ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.72)
     }
