@@ -4,7 +4,7 @@
 
 # kiwiMango
 
-**Natywny klient AI dla macOS — czaty lokalne i chmurowe oraz agenci kodujący w jednym oknie.**
+**Native macOS AI client — local and cloud chats plus coding agents in one window.**
 
 [![macOS](https://img.shields.io/badge/macOS-26+-000000?logo=apple&logoColor=white)](https://www.apple.com/macos)
 [![Swift](https://img.shields.io/badge/Swift-6-FA7343?logo=swift&logoColor=white)](https://swift.org)
@@ -13,243 +13,236 @@
 [![Release](https://img.shields.io/github/v/release/lubianiec/kiwiMango?color=green)](https://github.com/lubianiec/kiwiMango/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-*Deep Cyberpunk / Neon Noir UI — neonowa limonka i magenta na głębokiej ciemności.*
+*Deep navy terminal UI with muted amber/copper accents.*
 
 </div>
 
 ---
 
-## 📑 Spis treści
+## Table of contents
 
-- [Co to jest](#-co-to-jest)
-- [Dlaczego kiwiMango](#-dlaczego-kiwimango)
-- [Funkcje](#-główne-funkcje)
-- [Zrzuty ekranu](#-zrzuty-ekranu)
-- [Skróty klawiszowe](#-skróty-klawiszowe)
-- [Wymagania](#-wymagania)
-- [Szybki start](#-szybki-start)
-- [Architektura](#-architektura)
-- [Stack](#-stack)
-- [Makefile](#-makefile)
-- [Rozwiązywanie problemów](#-rozwiązywanie-problemów)
-- [Wkład](#-wkład)
-- [Prywatność](#-prywatność)
-- [Licencja](#-licencja)
-
----
-
-## 🚀 Co to jest
-
-**kiwiMango** to natywna aplikacja macOS do rozmów z modelami AI (Ollama) i równoległej pracy autonomicznych agentów kodujących. Żadnego Electrona, żadnej przeglądarki jako UI — czysty SwiftUI, lokalna baza SQLite i wbudowany terminal oparty na SwiftTerm.
-
-Działa z modelami lokalnymi poprzez Ollamę oraz z kontem cloud `ollama.com` — wszystko w jednym oknie.
+- [What it is](#what-it-is)
+- [Why kiwiMango](#why-kiwimango)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Architecture](#architecture)
+- [Stack](#stack)
+- [Makefile](#makefile)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Privacy](#privacy)
+- [License](#license)
 
 ---
 
-## 🎯 Dlaczego kiwiMango
+## What it is
 
-| Problem | Jak to rozwiązujemy |
-|---------|---------------------|
-| Electron pożera RAM i baterię | Natywny SwiftUI + Metal, zero przeglądarki w tle |
-| Historia czatów w chmurze obcej firmy | Lokalna baza SQLite (GRDB), wszystko na Twoim dysku |
-| Agenci kodujący w osobnych terminalach | Wbudowane sesje Claude Code / Hermes Agent / Codex w jednym oknie |
-| Skakanie między czatem a narzędziami | Sidebar + Centrum Dowodzenia + Hermes HUD w jednej aplikacji |
-| Brak prywatności przy modelach lokalnych | Bezpośrednie połączenie z Ollamą, bez pośrednika |
+**kiwiMango** is a native macOS app for chatting with AI models (Ollama) and running autonomous coding agents side by side. No Electron, no browser shell — pure SwiftUI, a local SQLite database, and a built-in terminal powered by SwiftTerm.
+
+It works with local models through Ollama and with an `ollama.com` cloud account, all in one window.
 
 ---
 
-## ✨ Główne funkcje
+## Why kiwiMango
 
-### 💬 Czat AI
-- **Streaming odpowiedzi** z pulsującym kursorem i statystykami tok/s
-- **Markdown** + kolorowanie składni z przyciskiem „kopiuj" dla każdego bloku kodu
-- **Historia w SQLite** (GRDB) — wszystkie rozmowy zostają na Twoim dysku
-- **Załączniki obrazów** do modeli vision (drag & drop, HEIC → JPEG)
-- **Fork rozmowy**, zmiana nazwy, duplikowanie, eksport do Markdown i Obsidian
-- **Wyszukiwarka** rozmów po tytułach i treści
-- **Persony** — profile modeli z własnym system promptem i temperaturą
-
-### 🤖 Agenci
-- Wbudowane sesje **Claude Code / Hermes Agent / Codex** poprzez `ollama launch`
-- **Równoległe sesje** — każdy agent ma swój model, katalog roboczy i terminal
-- Przełączanie czat ↔ agent nie ubija sesji
-- Czyste zamykanie — zero procesów-zombie po wyjściu z aplikacji
-- Historia agentów zapisywana w bazie
-
-### 🎛 Dashboard i status
-- **Centrum Dowodzenia** — podgląd wszystkich żywych agentów
-- **Hermes HUD** — osadzony lokalny dashboard pamięci, cronów i kosztów
-- **Status bar** z realnym pingiem Ollamy, latencją i licznikiem agentów
-- **Dyktowanie** po polsku przez `SFSpeechRecognizer`
-
-### 🎨 Wygląd
-- Neonowy interfejs inspirowany terminalami cyberpunk
-- Efekty Metal (żywe tło, bloom, materializowanie wiadomości)
-- Responsywny layout sidebar / detail
+| Problem | How kiwiMango solves it |
+|---------|------------------------|
+| Electron drains RAM and battery | Native SwiftUI + Metal, no browser background process |
+| Chat history in a stranger's cloud | Local SQLite (GRDB), everything stays on your disk |
+| Coding agents live in separate terminals | Built-in Claude Code / Hermes Agent / Codex sessions in one window |
+| Jumping between chat and tools | Sidebar + Mission Control + Hermes HUD in one app |
+| No privacy with local models | Direct connection to Ollama, no middleman |
 
 ---
 
-## 📸 Zrzuty ekranu
+## Features
 
-> *Zrzuty ekranu zostaną dodane w kolejnej iteracji. Tymczasem możesz zobaczyć UI uruchamiając aplikację lokalnie.*
+### Chat AI
+- **Streaming responses** with a pulsing cursor and live tok/s stats
+- **Markdown** + syntax-highlighted code blocks with a copy button
+- **SQLite history** (GRDB) — all conversations stay on your disk
+- **Image attachments** for vision models (drag & drop, HEIC → JPEG)
+- **Fork conversation**, rename, duplicate, export to Markdown and Obsidian
+- **Conversation search** across titles and content
+- **Personas** — model profiles with custom system prompts and temperature
+
+### Agents
+- Built-in **Claude Code / Hermes Agent / Codex** via `ollama launch`
+- **Parallel sessions** — each agent has its own model, working directory, and terminal
+- Switching chat ↔ agent does not kill sessions
+- Clean shutdown — zero zombie processes when you quit
+- Agent history stored in the local database
+
+### Dashboard and status
+- **Mission Control** — live overview of all running agents
+- **Hermes HUD** — embedded local dashboard for memory, cron jobs, and costs
+- **Status bar** with real Ollama ping, latency, and agent count
+- **Polish dictation** via `SFSpeechRecognizer`
+
+### Look and feel
+- Terminal-inspired interface with deep navy chrome
+- Metal effects (live backdrop, bloom, message materialization)
+- Responsive sidebar / detail layout
 
 ---
 
-## ⌨️ Skróty klawiszowe
+## Screenshots
 
-| Skrót | Akcja |
-|-------|-------|
-| `⌘N` | Nowa rozmowa |
-| `⌘T` | Nowy agent |
-| `⌘F` | Szukaj rozmów |
-| `⌃⌘S` | Schowaj / pokaż panel boczny |
-| `⇧⏎` | Nowa linia w polu wiadomości |
-| `⌘K` | Paleta komend |
-| `/` | Biblioteka promptów |
-| `⌘P` | Centrum Dowodzenia |
+> *Screenshots will be added in a future update. For now, run the app locally to see the UI.*
 
 ---
 
-## 🛠 Wymagania
+## Keyboard shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `⌘N` | New conversation |
+| `⌘T` | New agent |
+| `⌘F` | Search conversations |
+| `⌃⌘S` | Show / hide sidebar |
+| `⇧⏎` | New line in composer |
+| `⌘K` | Command palette |
+| `/` | Prompt library |
+| `⌘P` | Mission Control |
+
+---
+
+## Requirements
 
 - **macOS 26+** (Swift 6 / SwiftUI)
-- [Ollama](https://ollama.com/download) z co najmniej jednym modelem
+- [Ollama](https://ollama.com/download) with at least one model
 - Xcode Command Line Tools
-- Dla agentów: `ollama launch claude` (Claude Code przez Ollamę)
+- For agents: `ollama launch claude` (Claude Code through Ollama)
 
-## ⚙️ Co działa od razu, a co jest opcjonalne
+## What works out of the box vs optional
 
-| Funkcja | Wymagane do działania | Status |
-|---------|----------------------|--------|
-| Czat z Ollama | Tylko Ollama + model | ✅ działa zawsze |
-| Agenci Claude Code / Hermes / Codex | `ollama launch claude` itp. | ⚙️ opcjonalnie |
-| Hermes Gateway czat | Binarka `hermes` CLI | ⚙️ opcjonalnie |
-| Hermes HUD | Python 3.11+, npm, git | ⚙️ opcjonalnie |
-| Claude Pro modele | Subskrypcja + `claude` CLI z `/login` | ⚙️ opcjonalnie |
-| Synchronizacja Obsidian | Folder vault (wybierasz przy pierwszym uruchomieniu) | ⚙️ opcjonalnie |
+| Feature | Required to run | Status |
+|---------|-----------------|--------|
+| Ollama chat | Ollama + a model | ✅ always works |
+| Claude Code / Hermes / Codex agents | `ollama launch claude` etc. | ⚙️ optional |
+| Hermes Gateway chat | `hermes` CLI binary | ⚙️ optional |
+| Hermes HUD | Python 3.11+, npm, git | ⚙️ optional |
+| Claude Pro models | Subscription + `claude` CLI `/login` | ⚙️ optional |
+| Obsidian sync | Vault folder (chosen on first launch) | ⚙️ optional |
 
 ---
 
-## ⚡ Szybki start
+## Quick start
 
 ```bash
 git clone https://github.com/lubianiec/kiwiMango.git
 cd kiwiMango
-make run        # zbuduj i uruchom
-make install    # zainstaluj w /Applications
-make dmg        # utwórz obraz dystrybucyjny
+make run        # build and run
+make install    # install to /Applications
+make dmg        # create a distributable image
 ```
 
-Po pierwszym uruchomieniu aplikacja łączy się z lokalną Ollamą (domyślnie `http://localhost:11434`). Jeśli używasz konta cloud, ustawienia znajdziesz w oknie Preferencji.
+On first launch, kiwiMango asks you to pick the Ollama host, default model, agent working directory, and optional Obsidian vault. You can change all of this later in Preferences.
 
-Możesz też pobrać gotowy obraz dystrybucyjny z [GitHub Releases](https://github.com/lubianiec/kiwiMango/releases/latest).
+You can also download a ready-to-use DMG from [GitHub Releases](https://github.com/lubianiec/kiwiMango/releases/latest).
 
 ---
 
-## 🧱 Architektura
+## Architecture
 
 ```
 Sources/kiwiMango/
-├── App.swift                  # @main, sceny, skróty globalne
+├── App.swift                  # @main, scenes, global shortcuts
 ├── RootView.swift             # NavigationSplitView: sidebar + detail
-├── DesignSystem.swift         # paleta Neon Noir, efekty, czcionki
-├── Chat/                      # czat: stan, widoki, transport HTTP
-├── Agents/                    # sesje agentów, SwiftTerm, telemetry
-├── Database/                  # GRDB: migracje, Conversation, StoredMessage
-├── HUD/                       # osadzony Hermes HUD (WKWebView)
-├── Shaders/                   # efekty Metal
-└── Resources/                 # ikony, mermaid.js offline
+├── DesignSystem.swift         # palette, effects, fonts
+├── Chat/                      # chat state, views, HTTP transport
+├── Agents/                    # agent sessions, SwiftTerm, telemetry
+├── Database/                  # GRDB: migrations, Conversation, StoredMessage
+├── HUD/                       # embedded Hermes HUD (WKWebView)
+├── Shaders/                   # Metal effects
+└── Resources/                 # icons, offline mermaid.js
 ```
 
 ---
 
-## 🧩 Stack
+## Stack
 
-| Warstwa | Technologia |
-|---------|-------------|
-| UI | SwiftUI (natywne okno macOS, zero Electrona) |
-| Baza | [GRDB 7](https://github.com/groue/GRDB.swift) + SQLite |
+| Layer | Technology |
+|-------|------------|
+| UI | SwiftUI (native macOS window, zero Electron) |
+| Database | [GRDB 7](https://github.com/groue/GRDB.swift) + SQLite |
 | Terminal | [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) (PTY) |
 | AI | Ollama HTTP API (`/api/chat`, NDJSON streaming) |
-| Shadery | Metal + SwiftUI ShaderLibrary |
+| Shaders | Metal + SwiftUI ShaderLibrary |
 | Build | Swift Package Manager + Makefile |
 
 ---
 
-## 📦 Makefile
+## Makefile
 
-| Komenda | Opis |
-|---------|------|
-| `make build` | Zbuduj aplikację |
-| `make run` | Zbuduj i uruchom |
-| `make install` | Zainstaluj w `/Applications/kiwiMango.app` |
-| `make dmg` | Wygeneruj `kiwiMango.dmg` |
-| `make clean` | Wyczyść build |
+| Command | Description |
+|---------|-------------|
+| `make build` | Build the app |
+| `make run` | Build and run |
+| `make install` | Install to `/Applications/kiwiMango.app` |
+| `make dmg` | Generate `kiwiMango.dmg` |
+| `make clean` | Clean build artifacts |
 
 ---
 
-## 🔧 Rozwiązywanie problemów
+## Troubleshooting
 
-### Aplikacja się nie buduje
+### App won't build
 ```bash
 make clean
 make build
 ```
 
-### Aplikacja się nie uruchamia po pobraniu DMG
+### App won't open after downloading the DMG
 
-macOS Gatekeeper może zablokować aplikację podpisaną ad-hoc. Rozwiązania:
-1. Kliknij prawym na `/Applications/kiwiMango.app` → **Otwórz** (pierwszy raz).
-2. Albo w terminalu: `xattr -rd com.apple.quarantine /Applications/kiwiMango.app`.
+macOS Gatekeeper may block an ad-hoc signed app. Options:
+1. Right-click `/Applications/kiwiMango.app` → **Open** (the first time).
+2. Or run in Terminal: `xattr -rd com.apple.quarantine /Applications/kiwiMango.app`.
 
-W przyszłości aplikacja zostanie podpisana certyfikatem Apple Developer, żeby
-ominąć ten krok.
+A future release will be signed with an Apple Developer certificate to remove this step.
 
-### Ollama nie jest widoczna
-Sprawdź, czy Ollama działa:
+### Ollama is not detected
+Check that Ollama is running:
 ```bash
 curl http://localhost:11434/api/tags
 ```
 
-### Brak uprawnień do mikrofonu / dyktowania
-Przejdź do **Ustawienia systemowe → Prywatność i bezpieczeństwo → Mikrofon** i zezwól kiwiMango.
+### Microphone / dictation permission denied
+Go to **System Settings → Privacy & Security → Microphone** and allow kiwiMango.
 
-### Agenci nie startują
-Upewnij się, że masz zainstalowany `claude` przez Ollamę:
+### Agents won't start
+Make sure you have `claude` installed through Ollama:
 ```bash
 ollama launch claude --help
 ```
 
 ---
 
-## 🤝 Wkład
+## Contributing
 
-Pull requesty i issue są mile widziane. Zanim zaczniesz większy refactor, otwórz issue, żeby omówić kierunek.
+Pull requests and issues are welcome. If you're planning a larger refactor, open an issue first to discuss direction.
 
-1. Fork repo
-2. Stwórz branch: `git checkout -b feature/nazwa`
-3. Commituj zmiany
-4. Otwórz PR do `main`
-
----
-
-## 🔒 Prywatność
-
-- Cała historia czatów mieszka w lokalnej bazie SQLite
-- Brak pośrednika w chmurze dla modeli lokalnych
-- Obsługa modeli cloud odbywa się bezpośrednio przez API Ollamy / ollama.com
-- Żadnych trackerów, analityki ani CDN — wszystkie zasoby UI są bundlowane
+1. Fork the repo
+2. Create a branch: `git checkout -b feature/name`
+3. Commit your changes
+4. Open a PR to `main`
 
 ---
 
-## 📝 Licencja
+## Privacy
 
-[MIT](LICENSE) — używaj, modyfikuj i rozwijaj.
+- All chat history lives in a local SQLite database
+- No middleman in the cloud for local models
+- Cloud model access goes directly through Ollama / ollama.com APIs
+- No trackers, analytics, or CDN — all UI resources are bundled
 
 ---
 
-<div align="center">
+## License
 
-*Zbudowane w duecie człowiek + Claude. 🥝🥭*
+[MIT](LICENSE) — use, modify, and extend freely.
 
 </div>
