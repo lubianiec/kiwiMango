@@ -25,6 +25,7 @@ struct RootView: View {
     @State private var windowWidth: CGFloat = 900
 
     @State private var agentHistory: [AgentSessionRecord] = []
+    @State private var showingHistory = false
 
     private let db = DatabaseManager.shared
 
@@ -167,12 +168,13 @@ struct RootView: View {
                     }
             }
         }
+        .sheet(isPresented: $showingHistory) {
+            HistoryView()
+        }
         .task {
-            refreshAgentHistory()
             await chatState.loadModels()
             await chatState.refreshClaudeAvailability()
         }
-        .onChange(of: agentManager.sessions.count) { _, _ in refreshAgentHistory() }
     }
 
     private func refreshAgentHistory() {
@@ -197,12 +199,8 @@ struct RootView: View {
             } else {
                 ChatView()
             }
-        case .agentHistory(let id):
-            if let record = agentHistory.first(where: { $0.id == id }) {
-                AgentTranscriptView(record: record)
-            } else {
-                ChatView()
-            }
+        case .agentHistory:
+            ChatView()
         case .missionControl:
             MissionControlView(
                 onSelectAgent: { id in selection = .agent(id) },
@@ -245,16 +243,16 @@ struct RootView: View {
     // MARK: - Control panel (left column)
 
     private var controlPanel: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 10) {
             Text("CONTROL PANEL")
                 .font(KiwiMangoFont.mono(9, weight: .bold))
                 .tracking(1)
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(spacing: 6) {
+            HStack(spacing: 8) {
                 ControlButton(
-                    title: "NOWY CHAT",
+                    title: "CHAT",
                     icon: "plus.bubble.fill",
                     isAccent: true
                 ) {
@@ -264,7 +262,7 @@ struct RootView: View {
                 }
 
                 ControlButton(
-                    title: "NOWY AGENT",
+                    title: "AGENT",
                     icon: "cpu.fill",
                     isAccent: true
                 ) {
@@ -288,11 +286,19 @@ struct RootView: View {
                         showingNewAgentPopover = false
                     }
                 }
+            }
+
+            HStack(spacing: 8) {
+                ControlButton(
+                    title: "HISTORIA",
+                    icon: "clock.arrow.circlepath"
+                ) {
+                    showingHistory = true
+                }
 
                 ControlButton(
-                    title: "DASHBOARD",
-                    icon: "chart.bar.xaxis",
-                    isAccent: true
+                    title: "DASH",
+                    icon: "chart.bar.xaxis"
                 ) {
                     selection = .hud
                     topSection = .hud
@@ -442,25 +448,6 @@ struct RootView: View {
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 selection = .agent(session.id)
-                            }
-                        }
-                    }
-
-                    if !agentHistory.isEmpty {
-                        SectionHeader(title: "HISTORIA", count: agentHistory.count)
-                        ForEach(agentHistory) { record in
-                            AgentHistoryRow(
-                                record: record,
-                                isActive: selection == .agentHistory(record.id),
-                                onDelete: {
-                                    try? db.deleteAgentSession(record.id)
-                                    refreshAgentHistory()
-                                    if selection == .agentHistory(record.id) { selection = nil }
-                                }
-                            )
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                selection = .agentHistory(record.id)
                             }
                         }
                     }
@@ -689,53 +676,52 @@ private struct ConversationRow: View {
 
 // MARK: - ControlButton
 
-/// Text-only sidebar controls with a soft, deep hover glow. No button shapes.
+/// Etched copper sidebar control: deep recessed tile with amber border and
+/// soft inner glow. Matches the generated Flow reference (V2).
 private struct ControlButton: View {
     let title: String
     let icon: String
-    var isActive: Bool = false
     var isAccent: Bool = false
+    var isActive: Bool = false
     let action: () -> Void
 
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
+            VStack(spacing: 6) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.kiwiMangoPanelDeep)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(
+                                    Color.kiwiMangoAccent.opacity(isAccent || hovering ? 0.55 : 0.22),
+                                    lineWidth: 1
+                                )
+                        )
+                        .shadow(color: Color.kiwiMangoAccent.opacity(hovering ? 0.25 : 0), radius: 10)
+
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(foregroundColor)
+                }
+                .frame(height: 44)
+
                 Text(title)
-                    .font(KiwiMangoFont.sans(10.5, weight: isActive ? .bold : .semibold))
-                    .tracking(0.3)
-                Spacer()
+                    .font(KiwiMangoFont.mono(8, weight: isActive ? .bold : .medium))
+                    .tracking(0.6)
+                    .foregroundStyle(foregroundColor)
+                    .lineLimit(1)
             }
-            .foregroundStyle(foregroundColor)
-            .padding(.horizontal, 2)
-            .padding(.vertical, 5)
             .frame(maxWidth: .infinity)
-            .background { hoverBackground }
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
     }
 
     private var foregroundColor: Color {
-        if isActive || isAccent { return Color.kiwiMangoAccent }
+        if isAccent { return Color.kiwiMangoAccent }
         return hovering ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.72)
-    }
-
-    /// Deep, soft glow behind the text on hover; no box, no border.
-    private var hoverBackground: some View {
-        RoundedRectangle(cornerRadius: 4)
-            .fill(Color.kiwiMangoAccent.opacity(isActive ? 0.12 : (hovering ? 0.10 : 0)))
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(
-                        Color.kiwiMangoAccent.opacity(isActive ? 0.45 : (hovering ? 0.35 : 0)),
-                        lineWidth: 1
-                    )
-            )
-            .shadow(color: Color.kiwiMangoAccent.opacity(hovering ? 0.35 : 0), radius: 12)
-            .shadow(color: Color.kiwiMangoAccent.opacity(hovering ? 0.18 : 0), radius: 28)
     }
 }

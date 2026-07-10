@@ -675,6 +675,12 @@ final class DatabaseManager: Sendable {
         }
     }
 
+    func fetchAgentSession(id: Int64) throws -> AgentSessionRecord? {
+        try dbQueue.read { db in
+            try AgentSessionRecord.fetchOne(db, key: id)
+        }
+    }
+
     func fetchAgentSessions(limit: Int = 15) throws -> [AgentSessionRecord] {
         try dbQueue.read { db in
             try AgentSessionRecord
