@@ -10,6 +10,7 @@
 [![Swift](https://img.shields.io/badge/Swift-6-FA7343?logo=swift&logoColor=white)](https://swift.org)
 [![SwiftUI](https://img.shields.io/badge/SwiftUI-0D96F6?logo=swift&logoColor=white)](https://developer.apple.com/xcode/swiftui)
 [![Ollama](https://img.shields.io/badge/Ollama-ready-000000?logo=ollama&logoColor=white)](https://ollama.com)
+[![Release](https://img.shields.io/github/v/release/lubianiec/kiwiMango?color=green)](https://github.com/lubianiec/kiwiMango/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 *Deep Cyberpunk / Neon Noir UI — neonowa limonka i magenta na głębokiej ciemności.*
@@ -129,6 +130,8 @@ make dmg        # utwórz obraz dystrybucyjny
 ```
 
 Po pierwszym uruchomieniu aplikacja łączy się z lokalną Ollamą (domyślnie `http://localhost:11434`). Jeśli używasz konta cloud, ustawienia znajdziesz w oknie Preferencji.
+
+Możesz też pobrać gotowy obraz dystrybucyjny z [GitHub Releases](https://github.com/lubianiec/kiwiMango/releases/latest).
 
 ---
 
