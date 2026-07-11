@@ -49,8 +49,10 @@ enum SidebarSelection: Hashable {
     case agentHistory(Int64)
     /// Centrum Dowodzenia (Fala 18) — live dashboard of running agent sessions.
     case missionControl
-    /// Osadzony Hermes HUD (Web UI) jako pełna sekcja aplikacji.
-    case hud
+    /// Natywny Dashboard (Fala 3, PLAN-DASHBOARD.md) — replaces the old WebView-
+    /// embedded Hermes HUD (`.hud`, pre-Fala-3). `HUD/` files aren't deleted yet
+    /// (Fala 4), just no longer reachable from routing.
+    case dashboard
 }
 
 // MARK: - ChatMessage
@@ -1119,6 +1121,14 @@ final class ChatState {
                         feedSpeechIfEnabled(assistantID)
                     case .stats(let stats):
                         applyStats(stats, to: assistantID)
+                        // Fala 2: cloud-only token counter — TokenUsageRecorder
+                        // itself filters out local models, no gate needed here.
+                        Task.detached(priority: .background) {
+                            await TokenUsageRecorder.shared.record(
+                                model: model, source: "kiwi-chat",
+                                promptEvalCount: stats.promptEvalCount, evalCount: stats.evalCount
+                            )
+                        }
                     }
                 }
                 if Task.isCancelled {
@@ -1455,9 +1465,13 @@ final class ChatState {
             if isOnScreen(runtime), let liveID = runtime.liveAssistantID {
                 setPendingClarify(PendingClarify(question: question, choices: choices), to: liveID)
             }
-        case .messageComplete(let sid, let text, _, let inputTokens, let outputTokens):
+        case .messageComplete(let sid, let text, _, let inputTokens, let outputTokens, let model, let totalTokens, let calls, let contextUsed, let contextMax, let contextPercent):
             guard let runtime = hermesSessions[sid] else { return }
-            HermesTelemetry.shared.setUsage(sessionID: sid, input: inputTokens, output: outputTokens)
+            HermesTelemetry.shared.setUsage(
+                sessionID: sid, input: inputTokens, output: outputTokens,
+                model: model, total: totalTokens, calls: calls,
+                contextUsed: contextUsed, contextMax: contextMax, contextPercent: contextPercent
+            )
             finishHermesTurn(sessionID: sid, runtime: runtime, text: text, errorMessage: nil)
         case .turnError(let sid, let message):
             guard let sid, let runtime = hermesSessions[sid] else { return }

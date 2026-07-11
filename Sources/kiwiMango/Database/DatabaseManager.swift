@@ -410,6 +410,20 @@ final class DatabaseManager: Sendable {
             }
         }
 
+        migrator.registerMigration("addTokenUsage") { db in
+            // Fala 2: kiwiMango chat token counter (cloud models only — see
+            // TokenUsageRecorder). Composite primary key doubles as the UPSERT
+            // conflict target in `recordTokenUsage`.
+            try db.create(table: "token_usage") { t in
+                t.column("day", .text).notNull()
+                t.column("model", .text).notNull()
+                t.column("source", .text).notNull()
+                t.column("input", .integer).notNull().defaults(to: 0)
+                t.column("output", .integer).notNull().defaults(to: 0)
+                t.primaryKey(["day", "model", "source"])
+            }
+        }
+
         return migrator
     }
 
@@ -817,6 +831,61 @@ final class DatabaseManager: Sendable {
                 sql: "UPDATE memoryFact SET lastUsedAt = ?, useCount = useCount + 1 WHERE id = ?",
                 arguments: [Date(), id]
             )
+        }
+    }
+
+    // MARK: - Token usage (Fala 2)
+
+    /// Accumulates today's input/output token counts for one (model, source) pair.
+    /// UPSERT on the `token_usage` primary key — repeated calls for the same
+    /// day+model+source add rather than overwrite, so per-response counts from a
+    /// long chat session sum correctly over the day.
+    func recordTokenUsage(model: String, source: String, input: Int, output: Int) throws {
+        try dbQueue.write { db in
+            let day = Date().formatted(.iso8601.year().month().day())
+            try db.execute(
+                sql: """
+                INSERT INTO token_usage (day, model, source, input, output) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(day, model, source) DO UPDATE SET
+                    input = input + excluded.input,
+                    output = output + excluded.output
+                """,
+                arguments: [day, model, source, input, output]
+            )
+        }
+    }
+
+    /// One (model, source) aggregate from `token_usage` — read-side counterpart to
+    /// `recordTokenUsage`, same table/convention (Fala 3b Dashboard "Token-costs" panel:
+    /// kiwiMango's own chat usage shown next to Hermes' via `HermesStateReader`).
+    struct TokenUsageTotal: Sendable {
+        let model: String
+        let source: String
+        let input: Int
+        let output: Int
+        var total: Int { input + output }
+    }
+
+    /// Aggregated `token_usage` totals for the last `days` days. Day comparison is a
+    /// plain string `>=` against the `yyyy-MM-dd` keys `recordTokenUsage` writes —
+    /// works because ISO date strings sort lexicographically the same as chronologically.
+    func fetchTokenUsageTotals(days: Int) throws -> [TokenUsageTotal] {
+        try dbQueue.read { db in
+            let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+            let cutoffDay = cutoff.formatted(.iso8601.year().month().day())
+            return try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT model, source, SUM(input) AS input, SUM(output) AS output
+                    FROM token_usage
+                    WHERE day >= ?
+                    GROUP BY model, source
+                    ORDER BY (SUM(input) + SUM(output)) DESC
+                    """,
+                arguments: [cutoffDay]
+            ).map { row in
+                TokenUsageTotal(model: row["model"], source: row["source"], input: row["input"] ?? 0, output: row["output"] ?? 0)
+            }
         }
     }
 }

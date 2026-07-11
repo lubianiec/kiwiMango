@@ -36,6 +36,15 @@ final class HermesTelemetry {
         var currentActivity: String?
         var inputTokens: Int = 0
         var outputTokens: Int = 0
+        // Fala 1d: rest of `message.complete.usage` for the Dashboard's token/
+        // context panels (PLAN-DASHBOARD.md). Optional — older gateway events
+        // (or ones missing `usage` entirely) just leave these nil.
+        var model: String?
+        var totalTokens: Int?
+        var calls: Int?
+        var contextUsed: Int?
+        var contextMax: Int?
+        var contextPercent: Double?
         var subagents: [SubagentCard] = []
         var startedAt: Date = Date()
         var lastActivityAt: Date = Date()
@@ -81,10 +90,20 @@ final class HermesTelemetry {
     /// this is a plain overwrite, not an add — matches pułapka (b) in the
     /// plan: never zero the bar between turns, just replace with the latest
     /// known cumulative snapshot.
-    func setUsage(sessionID: String, input: Int, output: Int) {
+    func setUsage(
+        sessionID: String, input: Int, output: Int,
+        model: String? = nil, total: Int? = nil, calls: Int? = nil,
+        contextUsed: Int? = nil, contextMax: Int? = nil, contextPercent: Double? = nil
+    ) {
         guard let index = cards.firstIndex(where: { $0.id == sessionID }) else { return }
         cards[index].inputTokens = input
         cards[index].outputTokens = output
+        cards[index].model = model
+        cards[index].totalTokens = total
+        cards[index].calls = calls
+        cards[index].contextUsed = contextUsed
+        cards[index].contextMax = contextMax
+        cards[index].contextPercent = contextPercent
         cards[index].lastActivityAt = Date()
     }
 

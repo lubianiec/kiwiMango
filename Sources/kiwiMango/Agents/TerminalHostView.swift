@@ -48,9 +48,9 @@ extension LocalProcessTerminalView {
     /// background #14213D, text #E5E5E5, cursor orange #FCA311, mono 12.
     /// ANSI palette is left untouched — the agent TUI supplies its own colors.
     func applyKiwiMangoTheme() {
-        nativeBackgroundColor = NSColor(hex: "14213D")
-        nativeForegroundColor = NSColor(hex: "E5E5E5")
-        caretColor = NSColor(hex: "FCA311")
+        nativeBackgroundColor = NSColor(hex: "272729")
+        nativeForegroundColor = NSColor(hex: "F2F2F7")
+        caretColor = NSColor(hex: "F2994A")
         font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
     }
 }

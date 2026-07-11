@@ -15,9 +15,18 @@ struct KiwiMangoApp: App {
     /// environment access) can push updates directly; held here in `@State`
     /// only so SwiftUI observes it and injects it down the view tree.
     @State private var hermesTelemetry = HermesTelemetry.shared
-    /// HUD companion: local hermes-hudui server + web view.
-    @State private var hermesHUDManager = HermesHUDManager()
     @NSApplicationDelegateAdaptor(KiwiMangoAppDelegate.self) private var appDelegate
+
+    init() {
+        // Fala 2 dev check: `KIWI_SELFCHECK_TOKEN_USAGE=1 .build/debug/kiwiMango`
+        // exercises TokenUsageRecorder's real write path, then exits.
+        if ProcessInfo.processInfo.environment["KIWI_SELFCHECK_TOKEN_USAGE"] != nil {
+            Task {
+                await TokenUsageRecorder.runSelfCheck()
+                exit(0)
+            }
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -26,7 +35,6 @@ struct KiwiMangoApp: App {
                 .environment(agentManager)
                 .environment(agentTelemetry)
                 .environment(hermesTelemetry)
-                .environment(hermesHUDManager)
                 .frame(minWidth: 760, minHeight: 480)
                 .onAppear { appDelegate.agentManager = agentManager }
         }

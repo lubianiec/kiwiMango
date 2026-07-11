@@ -107,7 +107,7 @@ actor HermesGatewayClient {
         case subagentComplete(sessionID: String, id: String)
         case approvalRequest(sessionID: String, command: String?, description: String?, patternKey: String?, patternKeys: [String])
         case clarifyRequest(sessionID: String, question: String, choices: [String])
-        case messageComplete(sessionID: String, text: String, reasoning: String?, inputTokens: Int, outputTokens: Int)
+        case messageComplete(sessionID: String, text: String, reasoning: String?, inputTokens: Int, outputTokens: Int, model: String?, totalTokens: Int?, calls: Int?, contextUsed: Int?, contextMax: Int?, contextPercent: Double?)
         case sessionTitle(sessionID: String, title: String)
         case turnError(sessionID: String?, message: String)
     }
@@ -222,7 +222,10 @@ actor HermesGatewayClient {
 
             let stdout = Pipe()
             process.standardOutput = stdout
-            process.standardError = Pipe()
+            // ponytail: stderr is never inspected — a Pipe nobody drains fills its
+            // 64 KB kernel buffer and blocks `hermes serve` on write (K4). Discard
+            // straight to /dev/null instead of adding a reader we'd never use.
+            process.standardError = FileHandle.nullDevice
 
             let box = SpawnResultBox()
 
@@ -391,9 +394,20 @@ actor HermesGatewayClient {
             // context_max, context_percent, compressions, active_subagents}.
             let inputTokens = usage?["input"] as? Int ?? 0
             let outputTokens = usage?["output"] as? Int ?? 0
+            // ponytail: model/total/calls/context_* are optional — older gateway
+            // builds (or events missing `usage`) just leave the dashboard fields
+            // nil rather than breaking decoding. `compressions`/`active_subagents`
+            // stay undecoded: nothing in PLAN-DASHBOARD.md Fala 3/3b reads them
+            // (active subagent tracking already comes from subagent.* events).
             return .messageComplete(
                 sessionID: sessionID, text: text, reasoning: reasoning,
-                inputTokens: inputTokens, outputTokens: outputTokens
+                inputTokens: inputTokens, outputTokens: outputTokens,
+                model: usage?["model"] as? String,
+                totalTokens: usage?["total"] as? Int,
+                calls: usage?["calls"] as? Int,
+                contextUsed: usage?["context_used"] as? Int,
+                contextMax: usage?["context_max"] as? Int,
+                contextPercent: usage?["context_percent"] as? Double
             )
         case "session.title":
             let title = payload["title"] as? String ?? ""
@@ -642,8 +656,15 @@ final class HermesGatewayProcessBox: @unchecked Sendable {
 
     func set(_ process: Process?) {
         lock.lock()
-        defer { lock.unlock() }
+        let previous = self.process
         self.process = process
+        lock.unlock()
+        // K3: connectIfNeeded() reconnecting after a dropped socket spawns a new
+        // `hermes serve` and overwrites this reference — terminate the old one
+        // first or it leaks as a zombie until the Mac restarts.
+        if let previous, previous !== process, previous.isRunning {
+            previous.terminate()
+        }
     }
 
     func terminate() {
