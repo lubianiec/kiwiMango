@@ -36,10 +36,13 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 switch page {
                 case .dashboard: Text("Dashboard").font(KiwiMangoFont.sans(15))
-                case .agent: Text("Agent").font(KiwiMangoFont.sans(15))
-                case .chat: Text("Chat").font(KiwiMangoFont.sans(15))
+                case .agent: AgentPage()
+                case .chat: ChatPage()
                 }
             }
+            .padding(.horizontal, 22)
+            .padding(.top, 40)
+            .padding(.bottom, 20)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .foregroundStyle(Color.txt)
 
