@@ -26,6 +26,9 @@ final class HardwareMonitor {
     // MARK: CPU
 
     private(set) var cpuPercent: Double?
+    private(set) var cpuUserPercent: Double?
+    private(set) var cpuSystemPercent: Double?
+    private(set) var cpuIdlePercent: Double?
     /// Per logical core, in host_processor_info order.
     private(set) var perCorePercents: [Double] = []
     private(set) var eCoreCount: Int = 0
@@ -80,6 +83,19 @@ final class HardwareMonitor {
     }
     private(set) var topProcesses: [TopProcess] = []
 
+    // MARK: History (HardwareStrip sparklines + detail panels — §7.2, 60 samples = 2 min at 2s tick)
+
+    private(set) var cpuHistory: [Double] = []
+    private(set) var gpuHistory: [Double] = []
+    private(set) var netDownHistory: [Double] = []
+    private(set) var netUpHistory: [Double] = []
+    private static let historyLimit = 60
+
+    private func pushHistory(_ value: Double?, into array: inout [Double]) {
+        array.append(value ?? 0)
+        if array.count > Self.historyLimit { array.removeFirst(array.count - Self.historyLimit) }
+    }
+
     // MARK: Lifecycle
 
     private var timer: Timer?
@@ -123,6 +139,13 @@ final class HardwareMonitor {
             fetchPublicIP()
         }
         measureLatency()
+
+        pushHistory(cpuPercent, into: &cpuHistory)
+        pushHistory(gpuDevicePercent, into: &gpuHistory)
+        // ponytail: scale to 0-100-ish so the shared sparkline draw code (which
+        // normalizes against its own max) reads sensibly; MB/s rarely exceeds ~100.
+        pushHistory(netDownBytesPerSec.map { $0 / 1_000_000 }, into: &netDownHistory)
+        pushHistory(netUpBytesPerSec.map { $0 / 1_000_000 }, into: &netUpHistory)
     }
 
     // MARK: - CPU
@@ -180,24 +203,42 @@ final class HardwareMonitor {
             // Pułapka #4: first tick has no delta — publish nothing, not 0%.
             lastCPUTicks = ticksNow
             cpuPercent = nil
+            cpuUserPercent = nil
+            cpuSystemPercent = nil
+            cpuIdlePercent = nil
             perCorePercents = []
             return
         }
 
         var perCore: [Double] = []
-        var totalUsed: Double = 0
+        var totalUser: Double = 0
+        var totalSystem: Double = 0
+        var totalIdle: Double = 0
         var totalAll: Double = 0
         for (prev, now) in zip(previous, ticksNow) {
-            let used = Double(diff(now.user, prev.user) + diff(now.system, prev.system) + diff(now.nice, prev.nice))
+            let user = Double(diff(now.user, prev.user) + diff(now.nice, prev.nice))
+            let system = Double(diff(now.system, prev.system))
             let idle = Double(diff(now.idle, prev.idle))
-            let total = used + idle
-            perCore.append(total > 0 ? (used / total) * 100 : 0)
-            totalUsed += used
+            let total = user + system + idle
+            perCore.append(total > 0 ? ((user + system) / total) * 100 : 0)
+            totalUser += user
+            totalSystem += system
+            totalIdle += idle
             totalAll += total
         }
         lastCPUTicks = ticksNow
         perCorePercents = perCore
-        cpuPercent = totalAll > 0 ? (totalUsed / totalAll) * 100 : nil
+        if totalAll > 0 {
+            cpuUserPercent = totalUser / totalAll * 100
+            cpuSystemPercent = totalSystem / totalAll * 100
+            cpuIdlePercent = totalIdle / totalAll * 100
+            cpuPercent = cpuUserPercent! + cpuSystemPercent!
+        } else {
+            cpuUserPercent = nil
+            cpuSystemPercent = nil
+            cpuIdlePercent = nil
+            cpuPercent = nil
+        }
     }
 
     private func diff(_ now: UInt32, _ prev: UInt32) -> UInt32 {

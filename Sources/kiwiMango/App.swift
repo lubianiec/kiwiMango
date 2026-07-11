@@ -35,7 +35,7 @@ struct ContentView: View {
 
             VStack(spacing: 0) {
                 switch page {
-                case .dashboard: Text("Dashboard").font(KiwiMangoFont.sans(15))
+                case .dashboard: DashboardView(page: $page)
                 case .agent: AgentPage()
                 case .chat: ChatPage()
                 }
