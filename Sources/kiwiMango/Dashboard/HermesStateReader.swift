@@ -160,6 +160,12 @@ enum HermesStateReader {
         let id: String
         let title: String?
         let model: String?
+        /// Project working directory, when Hermes recorded one (verified 2026-07-12:
+        /// populated on ~54% of sessions in the last 7 days — CLI/cron/Telegram
+        /// sessions often leave it blank). Used to group the Agenci window by
+        /// project; sessions without it fall into an "Inne" bucket rather than
+        /// being force-matched to a project they didn't report.
+        let cwd: String?
         let startedAt: Date
         let endedAt: Date?
         let inputTokens: Int
@@ -176,7 +182,7 @@ enum HermesStateReader {
             try Row.fetchAll(
                 db,
                 sql: """
-                    SELECT id, title, model, started_at, ended_at, input_tokens, output_tokens, tool_call_count
+                    SELECT id, title, model, cwd, started_at, ended_at, input_tokens, output_tokens, tool_call_count
                     FROM sessions
                     WHERE started_at >= ? OR ended_at IS NULL
                     ORDER BY started_at DESC
@@ -190,6 +196,7 @@ enum HermesStateReader {
                     id: row["id"] ?? "",
                     title: row["title"],
                     model: row["model"],
+                    cwd: row["cwd"],
                     startedAt: Date(timeIntervalSince1970: startedAt),
                     endedAt: endedAt.map { Date(timeIntervalSince1970: $0) },
                     inputTokens: row["input_tokens"] ?? 0,

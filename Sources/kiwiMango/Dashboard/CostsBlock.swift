@@ -1,5 +1,39 @@
 import SwiftUI
 
+// MARK: - SectionHead (PLAN-V2 §7.2 — "01 AGENCI ───" header, shared by
+// CostsBlock/ProcessSection/AgentsWindow; one definition, reused across the
+// target. Moved here from the deleted AgentsSection.swift 2026-07-12 when the
+// full agent list left the Dashboard.)
+
+struct SectionHead: View {
+    let number: String
+    let label: String
+    var trailing: AnyView?
+
+    init(_ number: String, _ label: String, @ViewBuilder trailing: () -> some View = { EmptyView() }) {
+        self.number = number
+        self.label = label
+        self.trailing = AnyView(trailing())
+    }
+
+    var body: some View {
+        HStack(alignment: .lastTextBaseline, spacing: 8) {
+            Text(number)
+                .font(KiwiMangoFont.sans(8.5, weight: .semibold))
+                .tracking(1.2)
+                .foregroundStyle(Color.ink.opacity(0.28))
+            Text(label)
+                .font(KiwiMangoFont.sans(8.5, weight: .semibold))
+                .tracking(1.2)
+                .textCase(.uppercase)
+                .foregroundStyle(Color.ink.opacity(0.65))
+            Rectangle().fill(Color.ink.opacity(0.08)).frame(height: 1)
+            trailing
+        }
+        .padding(.vertical, 10)
+    }
+}
+
 // MARK: - ModelPricing (PLAN-V2 §7.2 pt.4)
 //
 // ponytail: static approximate $/1M in-out table, no Settings UI yet (plan

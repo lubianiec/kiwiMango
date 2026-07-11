@@ -13,16 +13,16 @@ struct DashboardView: View {
     @State private var monitor = HardwareMonitor()
     @State private var store = DashboardStore()
     @State private var services = ServiceStatus()
+    @State private var agents = AgentsMonitor()
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HeroSection(page: $page, store: store, services: services)
+                HeroSection(page: $page, store: store, services: services, agents: agents)
 
                 HardwareStrip(monitor: monitor)
                     .padding(.top, 12)
 
-                AgentsSection()
                 CostsBlock(store: store)
                 ProcessSection(hardware: monitor)
             }
@@ -39,6 +39,16 @@ struct DashboardView: View {
             monitor.stop() // pułapka #5 — must go silent off Dashboard
             services.stop()
         }
+        // Full agent list moved out of the main view 2026-07-12 (it dominated
+        // the first screen) — the status line's "Agenci N" opens it in a
+        // sheet instead. Polling lives here so the count is live even before
+        // the sheet is ever opened.
+        .task {
+            while !Task.isCancelled {
+                await agents.poll()
+                try? await Task.sleep(for: .seconds(4))
+            }
+        }
     }
 }
 
@@ -48,6 +58,7 @@ private struct HeroSection: View {
     @Binding var page: Page
     let store: DashboardStore
     let services: ServiceStatus
+    let agents: AgentsMonitor
 
     var body: some View {
         HStack(alignment: .top) {
@@ -55,7 +66,7 @@ private struct HeroSection: View {
                 Text("Witaj, Paweł!")
                     .font(.system(size: 19, weight: .light))
 
-                StatusLine(page: $page, store: store, services: services)
+                StatusLine(page: $page, store: store, services: services, agents: agents)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -74,6 +85,8 @@ private struct StatusLine: View {
     @Binding var page: Page
     let store: DashboardStore
     let services: ServiceStatus
+    let agents: AgentsMonitor
+    @State private var showAgents = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -95,10 +108,8 @@ private struct StatusLine: View {
             if let model = store.configSummary?.activeModel {
                 Text("· \(model)")
             }
-            // ponytail: "N agentów" needs a live gateway session count — no
-            // module in this wave exposes one (HermesGatewayClient tracks a
-            // single active session, not a roster). Omitted rather than
-            // faked; wire it here once Fala 3 exposes a real count.
+
+            QuickAction(title: "Agenci \(agents.activeCount)") { showAgents = true }
 
             QuickAction(title: "＋ agent") { page = .agent }
             QuickAction(title: "＋ chat") { page = .chat }
@@ -107,6 +118,9 @@ private struct StatusLine: View {
         .foregroundStyle(Color.ink.opacity(0.55))
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: false)
+        .sheet(isPresented: $showAgents) {
+            AgentsWindow(monitor: agents)
+        }
     }
 }
 
