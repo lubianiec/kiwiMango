@@ -1,10 +1,8 @@
 import Foundation
 
-// ponytail: minimal mock-backed models for Fala 2/B3. Real Hermes/Claude wiring
-// (Fala 3 / C1) replaces `ConversationSession.mock*` factories and the
-// `ConversationStore` mutating methods with actual gateway/CLI event streams —
-// the view layer above (ConversationView) is written against these shapes so
-// that swap is additive, not a rewrite.
+// Fala 3/C1: real backends now drive `items` (see `ConversationBackends.swift` —
+// `AgentSessionController`/`ChatSessionController`). The mock factories from
+// Fala 2/B3 are gone; new tabs start empty (PLAN-V2 §7.3: "✦ Nowa sesja").
 
 // ponytail: these three are reference types (not structs) so a nested toggle
 // (thinking expand, permission decision) mutates in place and every view
@@ -53,6 +51,11 @@ final class PermissionRequest: Identifiable {
     var command: String
     var decision: Decision = .pending
     var resultLine: String?
+    /// Wired by the backend controller that created this request — carries the
+    /// decision back to `HermesGatewayClient.respondApproval`. `nil` means no
+    /// live backend is listening (shouldn't happen in practice: Chat never
+    /// creates a `PermissionRequest` today, see `ChatSessionController`).
+    var onDecide: ((Bool) -> Void)?
 
     enum Decision { case pending, allowed, allowedForSession, denied }
 
@@ -100,6 +103,26 @@ final class ConversationSession: Identifiable {
     /// Set true whenever ≥1 thinking block in THIS session is expanded.
     var autoscrollPaused: Bool = false
 
+    /// Real `@State`/`@Bindable` draft per session (was a dead `Binding` stub
+    /// in Fala 2/B3) — lives on the session so switching tabs preserves it.
+    var draft: String = ""
+
+    // MARK: Backend bookkeeping (Fala 3/C1)
+
+    /// Hermes gateway `session_id` for this tab, once created — `nil` until
+    /// the first `send()`. Reset whenever `model` changes so the next send
+    /// opens a fresh gateway session with the new model (PLAN-V2: model
+    /// is fixed per `session.create`, not switchable mid-session).
+    var gatewaySessionID: String?
+    /// `claude -p --resume <id>` continuity for Chat's Claude route.
+    var claudeResumeSessionID: String?
+    /// Agent's "kontekst: X / Y tok." — from the gateway's `message.complete` usage.
+    var contextUsed: Int?
+    var contextMax: Int?
+    /// Chat's "model · X tok. · koszt" — accumulated across turns in this tab.
+    var totalTokens: Int = 0
+    var totalCostUSD: Double = 0
+
     init(title: String, model: String, items: [ConversationItem] = []) {
         self.title = title
         self.model = model
@@ -116,61 +139,4 @@ final class ConversationSession: Identifiable {
         }
     }
 
-    // MARK: - Mock factories (Fala 2/B3 — replaced by real backend in Fala 3/C1)
-
-    static func mockAgent() -> ConversationSession {
-        let thinking = ThinkingBlockModel(
-            text: "Health endpoint najpierw — jeśli disconnected, muszę otworzyć kartę Flow w tle zanim odpalę generację.",
-            seconds: 2.8
-        )
-        return ConversationSession(
-            title: "Obraz kiwi — flow",
-            model: "kimi-k2.7-code:cloud",
-            items: [
-                .userMessage(id: UUID(), text: "sprawdź czy flow-agent działa i zrób obraz kiwi w stylu manga"),
-                .thinking(thinking),
-                .toolCall(ToolCall(
-                    name: "exec", argument: "curl 127.0.0.1:8765/health",
-                    output: "{\"status\":\"connected\",\"browser\":\"chrome\",\"queue\":0}",
-                    seconds: 0.3, isRunning: false
-                )),
-                .toolCall(ToolCall(
-                    name: "flow-agent", argument: "image \"kiwi bird, dark manga style\"",
-                    output: "▸ hermes_flow.py image — czekam na render… (12 s)",
-                    seconds: nil, isRunning: true
-                )),
-                .aiMessage(
-                    id: UUID(), senderLabel: "HERMES · KIMI-K2.7",
-                    text: "Flow-agent **połączony** ✅ — kolejka pusta. Generuję obraz przez `hermes_flow.py`, zapiszę do `~/Kazik/Downloads/`. Nano Banana = zero kredytów",
-                    isStreaming: true
-                ),
-            ]
-        )
-    }
-
-    static func mockChat() -> ConversationSession {
-        let thinking = ThinkingBlockModel(
-            text: "Plik ma 872 linie — za duży. Widzę trzy naturalne granice podziału: KPI, wykresy, tabele.",
-            seconds: 4.2
-        )
-        return ConversationSession(
-            title: "Refactor Dashboard",
-            model: "claude — Fable 5",
-            items: [
-                .userMessage(id: UUID(), text: "przeanalizuj DashboardView.swift i zaproponuj refactor"),
-                .thinking(thinking),
-                .toolCall(ToolCall(
-                    name: "read", argument: "DashboardView.swift",
-                    output: "struct DashboardView: View {\n    @State private var store = DashboardStore()\n    …",
-                    seconds: nil, isRunning: false
-                )),
-                .permission(PermissionRequest(command: "$ swift build 2>&1 | tail -5")),
-                .aiMessage(
-                    id: UUID(), senderLabel: "CLAUDE · FABLE 5",
-                    text: "Plik do podziału na 3: `DashboardKPI.swift`, `DashboardCharts.swift`, `DashboardTables.swift`. Wspólny wzorzec ViewThatFits → jeden `AdaptiveRow`. Zaczynam?",
-                    isStreaming: true
-                ),
-            ]
-        )
-    }
 }

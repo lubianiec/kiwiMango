@@ -100,11 +100,9 @@ struct MarkdownText: View {
                 .font(KiwiMangoFont.sans(13))
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
         case .code(let language, let codeContent):
-            if language?.lowercased() == "mermaid" {
-                MermaidBlockView(code: codeContent)
-            } else {
-                CodeBlockView(language: language, content: codeContent)
-            }
+            // ponytail: PLAN-V2 §4 drops MermaidRenderer from V2 — a mermaid
+            // fence just renders as a plain code block now, never a blank bubble.
+            CodeBlockView(language: language, content: codeContent)
         }
     }
 
@@ -194,57 +192,3 @@ private struct CodeBlockView: View {
     }
 }
 
-// MARK: - MermaidBlockView
-
-/// F26.9: ```mermaid renders to a static image via `MermaidRenderer`. Falls
-/// back to the raw source in a `CodeBlockView` on any failure — never a blank
-/// bubble (spec). No `ScrollView(.horizontal)` here either (same F26.3 finding).
-private struct MermaidBlockView: View {
-    let code: String
-
-    @State private var image: NSImage?
-    @State private var failed = false
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: 700)
-                    .padding(10)
-                    .background(Color.kiwiMangoPanelDeep)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.3), lineWidth: 1)
-                    )
-            } else if failed {
-                CodeBlockView(language: "mermaid", content: code)
-            } else {
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("renderuję diagram…")
-                        .font(KiwiMangoFont.mono(11))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
-                }
-                .padding(10)
-                .background(Color.kiwiMangoPanelDeep)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.3), lineWidth: 1)
-                )
-            }
-        }
-        .task(id: code) {
-            let result = await MermaidRenderer.shared.render(code: code)
-            if let result {
-                image = result
-            } else {
-                failed = true
-            }
-        }
-    }
-}

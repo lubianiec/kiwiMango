@@ -7,9 +7,23 @@ import SwiftUI
 // which backend feeds `session.items` (mocked here; Fala 3/C1 wires
 // HermesGatewayClient for Agent and ClaudeCodeService/Ollama for Chat).
 
+/// One quick-action capsule (Agent only). `action == nil` renders dimmed and
+/// inert — PLAN-V2 §7.3/§9 C1: only "Kontekst z vaulta" has a real backend
+/// this wave (`AgentSessionController.insertVaultContext`); the other three
+/// have no wired service yet (flow-agent image gen, dziennik summarizer, a
+/// cron-creation form are new infra, out of scope for an integration pass).
+struct QuickActionItem: Identifiable {
+    let id = UUID()
+    let label: String
+    let action: (() -> Void)?
+}
+
 struct ConversationView: View {
     @Bindable var session: ConversationSession
     var kind: ConversationKind
+    var modelOptions: [String] = []
+    var quickActionItems: [QuickActionItem] = []
+    var onSend: (String) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,22 +40,37 @@ struct ConversationView: View {
             }
 
             Composer(
-                draft: Binding(get: { "" }, set: { _ in }), // ponytail: draft persists per-session in Fala 3 alongside real send()
+                draft: $session.draft,
                 placeholder: kind == .agent ? "Napisz do Hermesa…" : "Napisz wiadomość… (⇧⏎ nowa linia)",
                 counterText: counterText,
                 thirdIcon: kind == .agent ? "mic" : "slash.circle",
-                onSend: {} // ponytail: no-op until Fala 3/C1 wires a real send()
+                onSend: {
+                    let text = session.draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !text.isEmpty else { return }
+                    session.draft = ""
+                    onSend(text)
+                }
             )
         }
         .padding(.top, 2)
     }
 
     private var emptyText: String {
-        kind == .agent ? "Nowa sesja agenta — opisz zadanie, Hermes rusza" : "Nowy chat — Fable 5 czeka"
+        kind == .agent ? "Nowa sesja agenta — opisz zadanie, Hermes rusza" : "Nowy chat — opisz o co pytasz"
     }
 
     private var counterText: String {
-        kind == .agent ? "kontekst: 18,4k / 976k tok." : "Fable 5 · 12,1k tok. · $0,00 (Pro)"
+        if kind == .agent {
+            guard let used = session.contextUsed, let max = session.contextMax else { return "kontekst: — / — tok." }
+            return "kontekst: \(Self.formatK(used)) / \(Self.formatK(max)) tok."
+        } else {
+            let cost = session.totalCostUSD > 0 ? String(format: "$%.2f", session.totalCostUSD) : "$0,00 (Pro)"
+            return "\(session.model) · \(Self.formatK(session.totalTokens)) tok. · \(cost)"
+        }
+    }
+
+    private static func formatK(_ value: Int) -> String {
+        value >= 1000 ? String(format: "%.1fk", Double(value) / 1000) : "\(value)"
     }
 
     // MARK: Header
@@ -54,13 +83,20 @@ struct ConversationView: View {
             Text(kind == .agent ? "Hermes" : "Chat")
                 .font(KiwiMangoFont.sans(16, weight: .light))
             Picker("", selection: $session.model) {
-                Text(session.model).tag(session.model)
+                ForEach(modelOptions, id: \.self) { model in
+                    Text(model).tag(model)
+                }
             }
             .labelsHidden()
             .frame(maxWidth: 160)
             Spacer()
+            // ponytail: cosmetic only — real permission-mode switching needs
+            // `claude -p --permission-mode`/interactive approval streaming,
+            // which `ClaudeCodeService` doesn't implement yet (see
+            // `ChatSessionController`). Left visible per PLAN-V2 §7.3 layout,
+            // not wired to any backend this wave.
             Picker("", selection: .constant(0)) {
-                Text(kind == .agent ? "Sesja: dzisiaj 19:42" : "Uprawnienia: pytaj").tag(0)
+                Text(kind == .agent ? "Sesja: aktywna" : "Uprawnienia: pytaj").tag(0)
             }
             .labelsHidden()
             .frame(maxWidth: 160)
@@ -70,8 +106,8 @@ struct ConversationView: View {
 
     private var quickActions: some View {
         HStack(spacing: 6) {
-            ForEach(["📖 Kontekst z vaulta", "🖼 Wygeneruj obraz", "📋 Podsumuj dziennik", "⏰ Nowy cron"], id: \.self) { label in
-                QuickActionChip(label: label)
+            ForEach(quickActionItems) { item in
+                QuickActionChip(label: item.label, action: item.action)
             }
         }
     }
@@ -192,17 +228,22 @@ private struct StreamingCursor: View {
 
 private struct QuickActionChip: View {
     let label: String
+    let action: (() -> Void)?
     @State private var isHovering = false
+
+    private var isActive: Bool { action != nil }
 
     var body: some View {
         Text(label)
             .font(KiwiMangoFont.sans(9))
-            .foregroundStyle(isHovering ? Color.accent : Color.ink.opacity(0.6))
+            .foregroundStyle(isActive ? (isHovering ? Color.accent : Color.ink.opacity(0.6)) : Color.ink.opacity(0.25))
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
-            .overlay(Capsule().strokeBorder(isHovering ? Color.accent.opacity(0.5) : Color.ink.opacity(0.14), lineWidth: 1))
+            .overlay(Capsule().strokeBorder(isActive && isHovering ? Color.accent.opacity(0.5) : Color.ink.opacity(0.14), lineWidth: 1))
             .animation(.easeInOut(duration: 0.2), value: isHovering)
-            .onHover { isHovering = $0 }
+            .contentShape(Capsule())
+            .onTapGesture { action?() }
+            .onHover { isHovering = isActive && $0 }
     }
 }
 

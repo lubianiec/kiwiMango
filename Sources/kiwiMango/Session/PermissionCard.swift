@@ -50,6 +50,7 @@ struct PermissionCard: View {
     private func decide(_ decision: PermissionRequest.Decision, result: String?) {
         request.decision = decision
         request.resultLine = result
+        request.onDecide?(decision != .denied)
     }
 
     private func decisionButton(_ title: String, filled: Bool, action: @escaping () -> Void) -> some View {
