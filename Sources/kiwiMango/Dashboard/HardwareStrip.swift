@@ -12,6 +12,7 @@ struct HardwareStrip: View {
 
     enum Cell: String { case cpu, gpu, ram, ssd, net }
     @State private var open: Cell?
+    @State private var moleEngine = MoleEngine()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -134,10 +135,7 @@ struct HardwareStrip: View {
         case .ram: RAMDetailPanel(monitor: monitor)
         case .net: NetDetailPanel(monitor: monitor)
         case .ssd:
-            Text("Mole — wkrótce")
-                .font(KiwiMangoFont.sans(11))
-                .foregroundStyle(Color.ink.opacity(0.45))
-                .frame(maxWidth: .infinity, alignment: .center)
+            MoleView(engine: moleEngine, monitor: monitor) { open = nil }
         }
     }
 }
