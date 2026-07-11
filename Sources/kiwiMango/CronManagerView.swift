@@ -39,7 +39,7 @@ struct CronManagerView: View {
         HStack {
             HStack(spacing: 6) {
                 Rectangle()
-                    .fill(Color.kiwiMangoAccent)
+                    .fill(Color.kiwiMangoTextPrimary)
                     .frame(width: 7, height: 7)
                 Text("kiwiMango — automaty (cron)")
                     .font(KiwiMangoFont.mono(10.5, weight: .medium))
@@ -72,7 +72,7 @@ struct CronManagerView: View {
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
             Text("zadania cykliczne Hermesa — działają nawet gdy appka jest zamknięta")
                 .font(KiwiMangoFont.mono(11.5))
-                .foregroundStyle(Color.kiwiMangoAccent.opacity(0.8))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -108,7 +108,7 @@ struct CronManagerView: View {
                 .foregroundStyle(Color.kiwiMangoAccentText)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(Color.kiwiMangoAccent, in: RoundedRectangle(cornerRadius: 4))
+                .background(Color.kiwiMangoTextPrimary, in: RoundedRectangle(cornerRadius: 4))
                 .disabled(isCreating || newSchedule.trimmingCharacters(in: .whitespaces).isEmpty || newPrompt.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
@@ -124,7 +124,7 @@ struct CronManagerView: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(Color.kiwiMangoComposerBg)
-            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.kiwiMangoBorder.opacity(0.40), lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
@@ -132,7 +132,7 @@ struct CronManagerView: View {
 
     @ViewBuilder
     private var content: some View {
-        Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+        Rectangle().fill(Color.kiwiMangoBorder.opacity(0.35)).frame(height: 1)
         if isLoading, jobs.isEmpty {
             Spacer()
             ProgressView().controlSize(.small)
@@ -178,7 +178,7 @@ struct CronManagerView: View {
                 }
                 Text(job.schedule)
                     .font(KiwiMangoFont.mono(10.5))
-                    .foregroundStyle(Color.kiwiMangoAccent.opacity(0.8))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
                 if !job.promptPreview.isEmpty {
                     Text(job.promptPreview)
                         .font(KiwiMangoFont.mono(10.5))

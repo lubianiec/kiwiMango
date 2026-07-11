@@ -37,7 +37,7 @@ struct MissionControlView: View {
         VStack(spacing: 0) {
             header
             metricsBar
-            Divider().overlay(Color.white.opacity(0.08))
+            Divider().overlay(Color.kiwiMangoBorder.opacity(0.35))
 
             if visibleSessions.isEmpty && hermesTelemetry.cards.isEmpty {
                 emptyState
@@ -98,7 +98,7 @@ struct MissionControlView: View {
 
             Text(summaryLine)
                 .font(KiwiMangoFont.mono(10.5, weight: .medium))
-                .foregroundStyle(Color.kiwiMangoAccent)
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
@@ -258,7 +258,7 @@ private struct AgentMissionCard: View {
             if degraded {
                 Text(telemetry == nil ? "brak telemetrii" : "telemetria niedostępna dla tej sesji")
                     .font(KiwiMangoFont.mono(10))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
             } else if let telemetry {
                 activityBlock(telemetry)
 
@@ -277,7 +277,7 @@ private struct AgentMissionCard: View {
     private var statusDot: some View {
         Text("●")
             .font(.system(size: 9))
-            .foregroundStyle(isRunning ? Color.kiwiMangoAccent : Color.gray)
+            .foregroundStyle(isRunning ? Color.kiwiMangoTextPrimary : Color.gray)
             .symbolEffect(.pulse, isActive: isRunning)
             .opacity(isRunning ? 1 : 0.5)
             .realBloom(strength: 1.6, radius: 2)
@@ -302,7 +302,7 @@ private struct AgentMissionCard: View {
                 let tick = Int(context.date.timeIntervalSince(session.startedAt) / 0.08)
                 Text(Self.spinnerFrames[tick % Self.spinnerFrames.count])
                     .font(KiwiMangoFont.mono(15, weight: .bold))
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
         } else {
             Text("✓")
@@ -361,7 +361,7 @@ private struct AgentMissionCard: View {
                 ZStack(alignment: .leading) {
                     Rectangle().fill(Color.white.opacity(0.08))
                     Rectangle()
-                        .fill(Color.kiwiMangoAccent)
+                        .fill(Color.kiwiMangoTextPrimary)
                         .frame(width: proxy.size.width * fraction)
                 }
             }
@@ -397,7 +397,7 @@ private struct AgentMissionCard: View {
 
     private func taskColor(_ task: AgentTaskItem) -> Color {
         if task.isCompleted { return Color.kiwiMangoTextPrimary.opacity(0.4) }
-        if task.isInProgress { return Color.kiwiMangoAccent }
+        if task.isInProgress { return Color.kiwiMangoTextPrimary }
         return Color.kiwiMangoTextPrimary.opacity(0.5)
     }
 
@@ -410,51 +410,20 @@ private struct AgentMissionCard: View {
         let total = max(input + output + cache, 1)
         let cachePercent = Int((Double(cache) / Double(total)) * 100)
 
-        return VStack(alignment: .leading, spacing: 4) {
-            GeometryReader { proxy in
-                HStack(spacing: 0) {
-                    Rectangle().fill(Color.kiwiMangoAccent)
-                        .frame(width: proxy.size.width * CGFloat(input) / CGFloat(total))
-                    Rectangle().fill(Color.white.opacity(0.18))
-                        .frame(width: proxy.size.width * CGFloat(cache) / CGFloat(total))
-                    Rectangle().fill(Color.kiwiMangoPurple)
-                        .frame(width: proxy.size.width * CGFloat(output) / CGFloat(total))
-                }
-            }
-            .frame(height: 5)
-
-            Text("IN \(formatTokens(input)) / OUT \(formatTokens(output)) / cache \(cachePercent)%")
-                .font(KiwiMangoFont.mono(9.5))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
-        }
+        return TokenBar(
+            segments: [
+                .init(value: input, color: Color.kiwiMangoTextPrimary),
+                .init(value: cache, color: Color.white.opacity(0.18)),
+                .init(value: output, color: Color.kiwiMangoTextPrimary.opacity(0.55))
+            ],
+            caption: "IN \(formatTokens(input)) / OUT \(formatTokens(output)) / cache \(cachePercent)%"
+        )
     }
 
     // MARK: Sparkline (reuse F6.2 pattern)
 
-    @ViewBuilder
     private func sparkline(_ telemetry: SessionTelemetry) -> some View {
-        let values = telemetry.tokenRateSamples.map { Double($0.1) }
-        if values.count > 1 {
-            Canvas { context, size in
-                let maxValue = values.max() ?? 1
-                let minValue = min(values.min() ?? 0, maxValue - 0.001)
-                let range = max(maxValue - minValue, 0.001)
-
-                var path = Path()
-                for (index, value) in values.enumerated() {
-                    let x = size.width * CGFloat(index) / CGFloat(values.count - 1)
-                    let normalized = (value - minValue) / range
-                    let y = size.height - CGFloat(normalized) * size.height
-                    if index == 0 {
-                        path.move(to: CGPoint(x: x, y: y))
-                    } else {
-                        path.addLine(to: CGPoint(x: x, y: y))
-                    }
-                }
-                context.stroke(path, with: .color(Color.kiwiMangoAccent), lineWidth: 1)
-            }
-            .frame(height: 18)
-        }
+        Sparkline(values: telemetry.tokenRateSamples.map { Double($0.1) })
     }
 }
 
@@ -469,7 +438,7 @@ private struct SubagentRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Rectangle()
-                .fill(Color.kiwiMangoPurple)
+                .fill(Color.kiwiMangoTextPrimary)
                 .frame(width: 2)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -542,7 +511,7 @@ private struct HermesMissionCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Text("●")
                     .font(.system(size: 9))
-                    .foregroundStyle(card.isActive ? Color.kiwiMangoAccent : Color.gray)
+                    .foregroundStyle(card.isActive ? Color.kiwiMangoTextPrimary : Color.gray)
                     .symbolEffect(.pulse, isActive: card.isActive)
                     .opacity(card.isActive ? 1 : 0.5)
                     .realBloom(strength: 1.6, radius: 2)
@@ -584,7 +553,7 @@ private struct HermesMissionCard: View {
                 let tick = Int(context.date.timeIntervalSince(card.startedAt) / 0.08)
                 Text(Self.spinnerFrames[tick % Self.spinnerFrames.count])
                     .font(KiwiMangoFont.mono(15, weight: .bold))
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
         } else {
             Text("✓")
@@ -608,25 +577,13 @@ private struct HermesMissionCard: View {
     }
 
     private var tokenBar: some View {
-        let input = card.inputTokens
-        let output = card.outputTokens
-        let total = max(input + output, 1)
-
-        return VStack(alignment: .leading, spacing: 4) {
-            GeometryReader { proxy in
-                HStack(spacing: 0) {
-                    Rectangle().fill(Color.kiwiMangoAccent)
-                        .frame(width: proxy.size.width * CGFloat(input) / CGFloat(total))
-                    Rectangle().fill(Color.kiwiMangoPurple)
-                        .frame(width: proxy.size.width * CGFloat(output) / CGFloat(total))
-                }
-            }
-            .frame(height: 5)
-
-            Text("IN \(formatTokens(input)) / OUT \(formatTokens(output))")
-                .font(KiwiMangoFont.mono(9.5))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
-        }
+        TokenBar(
+            segments: [
+                .init(value: card.inputTokens, color: Color.kiwiMangoTextPrimary),
+                .init(value: card.outputTokens, color: Color.kiwiMangoTextPrimary.opacity(0.55))
+            ],
+            caption: "IN \(formatTokens(card.inputTokens)) / OUT \(formatTokens(card.outputTokens))"
+        )
     }
 }
 
@@ -636,7 +593,7 @@ private struct HermesSubagentRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Rectangle()
-                .fill(Color.kiwiMangoPurple)
+                .fill(Color.kiwiMangoTextPrimary)
                 .frame(width: 2)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -659,29 +616,6 @@ private struct HermesSubagentRow: View {
 }
 
 // MARK: - Formatting helpers
-
-private func formatTokens(_ count: Int) -> String {
-    if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
-    if count >= 1_000 { return String(format: "%.1fk", Double(count) / 1_000) }
-    return "\(count)"
-}
-
-// MARK: - Metric item
-
-private struct MetricItem: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(KiwiMangoFont.mono(8, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
-            Text(value)
-                .font(KiwiMangoFont.mono(11, weight: .semibold))
-                .foregroundStyle(Color.kiwiMangoTextPrimary)
-                .lineLimit(1)
-        }
-    }
-}
+//
+// `formatTokens` and `MetricItem` moved to Components/DashboardComponents.swift
+// (Fala 3, PLAN-DASHBOARD.md) — shared with DashboardView, no change in behavior here.

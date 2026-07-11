@@ -19,7 +19,6 @@ struct PreferencesSheet: View {
     @AppStorage("kiwiMangoAgentTelemetry") private var telemetryEnabled = true
     @AppStorage("kiwiMangoStartAtLogin") private var startAtLogin = false
 
-    @AppStorage("kiwiMangoDefaultAgentKind") private var defaultAgentKind: String = AgentKind.claude.rawValue
     @AppStorage("kiwiMangoDefaultAgentModel") private var defaultAgentModel: String = ""
     @AppStorage("kiwiMangoDefaultAgentWorkDir") private var defaultAgentWorkDir: String = ""
 
@@ -41,6 +40,10 @@ struct PreferencesSheet: View {
         }
         .frame(width: 520, height: 420)
         .background(Color.kiwiMangoBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.kiwiMangoBorder.opacity(0.35), lineWidth: 1)
+        )
     }
 
     private var header: some View {
@@ -52,7 +55,7 @@ struct PreferencesSheet: View {
             Button("Gotowe") { }
                 .buttonStyle(.plain)
                 .font(KiwiMangoFont.mono(12, weight: .semibold))
-                .foregroundStyle(Color.kiwiMangoAccent)
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
                 .disabled(true)
                 .opacity(0)
         }
@@ -74,7 +77,7 @@ struct PreferencesSheet: View {
                         .padding(.vertical, 6)
                         .frame(maxWidth: .infinity)
                         .background(
-                            selectedTab == tab ? Color.kiwiMangoAccent : Color.clear,
+                            selectedTab == tab ? Color.kiwiMangoTextPrimary : Color.clear,
                             in: RoundedRectangle(cornerRadius: 4)
                         )
                 }
@@ -108,17 +111,9 @@ struct PreferencesSheet: View {
 
     private var agentsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Domyślne ustawienia nowego agenta")
+            Text("Domyślne ustawienia nowego Hermesa")
                 .font(KiwiMangoFont.sans(12, weight: .semibold))
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
-
-            Picker("Agent", selection: $defaultAgentKind) {
-                ForEach(AgentKind.allCases.filter { $0 != .claudePro || chatState.claudeAvailability.isInstalled }) { kind in
-                    Text(kind.displayName).tag(kind.rawValue)
-                }
-            }
-            .font(KiwiMangoFont.mono(12))
-            .foregroundStyle(Color.kiwiMangoTextPrimary)
 
             HStack(spacing: 8) {
                 Text("Model")
@@ -130,7 +125,7 @@ struct PreferencesSheet: View {
                     .font(KiwiMangoFont.mono(11))
                     .padding(8)
                     .background(Color.kiwiMangoComposerBg)
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.12)))
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.kiwiMangoBorder.opacity(0.40)))
             }
 
             HStack(spacing: 8) {
@@ -140,16 +135,16 @@ struct PreferencesSheet: View {
                     .frame(width: 70, alignment: .leading)
                 Text(defaultAgentWorkDir.isEmpty ? "~/Kazik" : defaultAgentWorkDir)
                     .font(KiwiMangoFont.mono(11))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                     .lineLimit(1)
                 Spacer()
                 Button("Wybierz…") { pickDefaultWorkDir() }
                     .buttonStyle(.plain)
                     .font(KiwiMangoFont.mono(11, weight: .semibold))
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
 
-            Divider().overlay(Color.white.opacity(0.10))
+            Divider().overlay(Color.kiwiMangoBorder.opacity(0.35))
 
             Toggle("Pokazuj telemetryczne statusy agentów", isOn: $telemetryEnabled)
                 .font(KiwiMangoFont.sans(12))
@@ -157,7 +152,7 @@ struct PreferencesSheet: View {
 
             Text("Telemetry wymaga restartu uruchomionych agentów, żeby zacząć/ przestać zbierać metryki.")
                 .font(KiwiMangoFont.mono(10.5))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
         }
     }
 
@@ -179,11 +174,11 @@ struct PreferencesSheet: View {
                     .font(KiwiMangoFont.mono(11))
                     .padding(8)
                     .background(Color.kiwiMangoComposerBg)
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.12)))
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.kiwiMangoBorder.opacity(0.40)))
                 Button("…") { pickVault() }
                     .buttonStyle(.plain)
                     .font(KiwiMangoFont.mono(14, weight: .bold))
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
 
             HStack(spacing: 8) {
@@ -196,7 +191,7 @@ struct PreferencesSheet: View {
                     .font(KiwiMangoFont.mono(11))
                     .padding(8)
                     .background(Color.kiwiMangoComposerBg)
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.12)))
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.kiwiMangoBorder.opacity(0.40)))
             }
         }
     }
@@ -211,7 +206,7 @@ struct PreferencesSheet: View {
 
             Text("kiwiMango sam zapamiętuje ważne fakty z rozmów i przywraca je w nowych czatach.")
                 .font(KiwiMangoFont.mono(10.5))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -235,7 +230,7 @@ struct PreferencesSheet: View {
                 Spacer()
                 Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—")
                     .font(KiwiMangoFont.mono(11))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
             }
         }
     }

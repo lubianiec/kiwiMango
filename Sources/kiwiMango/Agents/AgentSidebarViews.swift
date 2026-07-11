@@ -19,7 +19,7 @@ struct AgentRow: View {
         HStack(spacing: 0) {
             Rectangle()
                 .fill(isActive ? Color.kiwiMangoPurple : Color.clear)
-                .frame(width: 2)
+                .frame(width: 3)
                 .shadow(color: isActive ? Color.kiwiMangoPurple.opacity(0.6) : .clear, radius: 4)
 
             HStack(spacing: 8) {
@@ -27,14 +27,14 @@ struct AgentRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.title)
-                        .font(KiwiMangoFont.mono(12, weight: isActive ? .bold : .medium))
+                        .font(KiwiMangoFont.mono(12, weight: isActive ? .semibold : .medium))
                         .foregroundStyle(
-                            isActive ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.8)
+                            isActive ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.85)
                         )
                         .lineLimit(1)
                     Text(elapsed)
                         .font(KiwiMangoFont.mono(10))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.66))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                 }
             }
             .padding(.leading, 12)
@@ -62,13 +62,10 @@ struct AgentRow: View {
         }
         .background(
             isActive
-                ? AnyShapeStyle(LinearGradient(
-                    colors: [Color.kiwiMangoPurple.opacity(0.30), Color.clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                ))
+                ? AnyShapeStyle(Color.kiwiMangoAssistantBubble.opacity(0.55))
                 : AnyShapeStyle(isHovered ? Color.white.opacity(0.04) : Color.clear)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .onHover { isHovered = $0 }
         .onReceive(ticker) { now = $0 }
         .confirmationDialog(
@@ -84,7 +81,7 @@ struct AgentRow: View {
     private var statusDot: some View {
         Text("●")
             .font(.system(size: 8))
-            .foregroundStyle(session.status == .running ? Color.kiwiMangoAccent : Color.gray)
+            .foregroundStyle(session.status == .running ? Color.kiwiMangoTextPrimary : Color.gray)
             .symbolEffect(.pulse, isActive: session.status == .running)
             .opacity(session.status == .running ? 1 : 0.5)
             .realBloom(strength: 1.6, radius: 2)
@@ -127,12 +124,12 @@ struct AgentHistoryRow: View {
 
                     Text("\(folderName) · \(durationLabel)")
                         .font(KiwiMangoFont.mono(10))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                         .lineLimit(1)
 
                     Text(firstLine)
                         .font(KiwiMangoFont.mono(10))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
                         .lineLimit(1)
                 }
 
@@ -159,13 +156,10 @@ struct AgentHistoryRow: View {
         }
         .background(
             isActive
-                ? AnyShapeStyle(LinearGradient(
-                    colors: [Color.kiwiMangoPurple.opacity(0.25), Color.clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                ))
+                ? AnyShapeStyle(Color.kiwiMangoAssistantBubble.opacity(0.55))
                 : AnyShapeStyle(isHovered ? Color.white.opacity(0.04) : Color.clear)
         )
+        .clipShape(RoundedRectangle(cornerRadius: 6))
         .onHover { isHovered = $0 }
     }
 
@@ -213,24 +207,24 @@ struct AgentHistoryRow: View {
 // MARK: - NewAgentPopover
 
 /// Minimalist bubble for spawning a new agent. Shown as a system popover
-/// attached to the "NOWY AGENT" button; the chrome is left to the popover,
+/// attached to the "NOWY HERMES" button; the chrome is left to the popover,
 /// so this view is just the content.
+/// ponytail: agent-kind picker removed 2026-07-11 — Hermes is the only
+/// spawnable agent now (Paweł: "chce tylko hermes miec"). Kind selection
+/// UI + Claude Pro model list deleted rather than hidden; AgentKind cases
+/// stay in AgentManager so past sessions of other kinds still render.
 struct NewAgentPopover: View {
     let onSpawn: (AgentKind, OllamaService.ModelInfo, URL) -> Void
     var onClose: () -> Void = {}
 
     @Environment(ChatState.self) private var chatState
-    @AppStorage("kiwiMangoDefaultAgentKind") private var defaultAgentKind: String = AgentKind.claude.rawValue
     @AppStorage("kiwiMangoDefaultAgentModel") private var defaultAgentModel: String = ""
     @AppStorage("kiwiMangoDefaultAgentWorkDir") private var defaultAgentWorkDir: String = ""
     @AppStorage("agentLastWorkDir") private var lastWorkDirPath = ""
-    @AppStorage("agentLastKind") private var lastKindRaw = AgentKind.claude.rawValue
     @State private var workDirPath = ""
     @State private var preferredModel: String = ""
 
-    private var selectedKind: AgentKind {
-        AgentKind(rawValue: lastKindRaw) ?? AgentKind(rawValue: defaultAgentKind) ?? .claude
-    }
+    private let selectedKind: AgentKind = .hermes
 
     /// Last-used model per kind, falling back to the global default.
     private var lastModelStorageKey: String { "agentLastModel_\(selectedKind.rawValue)" }
@@ -239,68 +233,66 @@ struct NewAgentPopover: View {
             ?? defaultAgentModel
     }
 
+    // ponytail: przeprojektowany dla czytelności (zadanie Pawła) — model
+    // teraz TYLKO wybiera (nie spawnuje od razu), wyraźny przycisk startu
+    // na dole. Większe fonty/odstępy, hover na wierszach modeli, szerszy
+    // popover (300px zamiast 220px, było za ciasno).
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("NOWY AGENT")
-                    .font(KiwiMangoFont.mono(11, weight: .bold))
-                    .tracking(1)
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                Text("NOWY HERMES")
+                    .font(.system(size: 13, weight: .semibold))
+                    .tracking(0.5)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
 
                 Spacer()
 
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
                 }
                 .buttonStyle(.plain)
                 .help("Zamknij")
             }
-            .padding(.bottom, 10)
+            .padding(.bottom, 16)
 
-            VStack(alignment: .leading, spacing: 10) {
-                kindPicker
-
-                Text("MODEL")
-                    .font(KiwiMangoFont.mono(9, weight: .semibold))
-                    .tracking(1)
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
-
-                modelList
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("MODEL")
+                        .kiwiSectionLabel()
+                    ollamaModelList
+                }
 
                 Divider().overlay(Color.white.opacity(0.10))
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("KATALOG ROBOCZY")
-                        .font(KiwiMangoFont.mono(9, weight: .semibold))
-                        .tracking(1)
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
-                    HStack(spacing: 6) {
+                        .kiwiSectionLabel()
+                    HStack(spacing: 8) {
                         Text(displayWorkDir)
-                            .font(KiwiMangoFont.mono(10.5))
-                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.7))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.75))
                             .lineLimit(1)
                             .truncationMode(.head)
                         Spacer()
                         Button("Wybierz…") { pickWorkDir() }
-                            .font(KiwiMangoFont.mono(10))
+                            .font(.system(size: 11, weight: .medium))
                             .buttonStyle(.plain)
-                            .foregroundStyle(Color.kiwiMangoAccent.opacity(0.85))
+                            .foregroundStyle(Color.kiwiMangoAccent)
                     }
                 }
+
+                startButton
             }
         }
-        .padding(12)
-        .frame(width: 220)
+        .padding(18)
+        .frame(width: 300)
         .background(Color.kiwiMangoPanelDeep)
         .onAppear {
             workDirPath = lastWorkDirPath.isEmpty
                 ? (defaultAgentWorkDir.isEmpty ? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Kazik").path : defaultAgentWorkDir)
                 : lastWorkDirPath
-            if lastKindRaw.isEmpty {
-                lastKindRaw = defaultAgentKind
-            }
             preferredModel = resolvedDefaultModel
             Task {
                 await chatState.loadModels()
@@ -313,97 +305,36 @@ struct NewAgentPopover: View {
         workDirPath.isEmpty ? "~/Kazik" : workDirPath
     }
 
-    /// `.claudePro` shows up once `claude` is installed; it is disabled (not
-    /// hidden) when Anthropic is unavailable, with a tooltip explaining why.
-    private var visibleKinds: [AgentKind] {
-        AgentKind.allCases.filter { $0 != .claudePro || chatState.claudeAvailability.isInstalled }
-    }
-
-    private var kindPicker: some View {
-        HStack(spacing: 6) {
-            ForEach(visibleKinds) { kind in
-                Button {
-                    lastKindRaw = kind.rawValue
-                } label: {
-                    Text(kind.displayName)
-                        .font(KiwiMangoFont.mono(10, weight: .bold))
-                        .foregroundStyle(
-                            selectedKind == kind
-                                ? Color.kiwiMangoAccent
-                                : Color.kiwiMangoTextPrimary.opacity(0.72)
-                        )
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .neonBorder(
-                            selectedKind == kind ? Color.kiwiMangoAccent : Color.white.opacity(0.25),
-                            cornerRadius: 2,
-                            active: selectedKind == kind
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
+    /// Currently selected model, falling back to the first available one so
+    /// the start button always has something to launch.
+    private var selectedModel: OllamaService.ModelInfo? {
+        chatState.availableModels.first { $0.name == preferredModel }
+            ?? chatState.availableModels.first
     }
 
     @ViewBuilder
-    private var modelList: some View {
-        if selectedKind == .claudePro {
-            claudeProModelList
-        } else {
-            ollamaModelList
-        }
-    }
-
-    /// Claude Pro doesn't pick from the Ollama model list — just Sonnet/Opus.
-    private var claudeProModelList: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            let isAvailable = chatState.claudeAvailability.isAvailable
-            claudeProModelButton(id: "claude:sonnet", label: "Sonnet", isAvailable: isAvailable)
-            claudeProModelButton(id: "claude:opus", label: "Opus", isAvailable: isAvailable)
-        }
-    }
-
-    private func claudeProModelButton(id: String, label: String, isAvailable: Bool) -> some View {
-        let selected = preferredModel == id || (preferredModel.isEmpty && id == "claude:sonnet")
-        return Button {
-            guard isAvailable else { return }
-            spawnClaudePro(id: id)
+    private var startButton: some View {
+        Button {
+            guard let model = selectedModel else { return }
+            let url = URL(fileURLWithPath: displayWorkDir)
+            lastWorkDirPath = displayWorkDir
+            UserDefaults.standard.set(model.name, forKey: lastModelStorageKey)
+            onSpawn(selectedKind, model, url)
         } label: {
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(KiwiMangoFont.mono(11, weight: .medium))
-                    .foregroundStyle(isAvailable ? (selected ? Color.kiwiMangoAccentText : Color.kiwiMangoAccent) : Color.kiwiMangoAccent.opacity(0.42))
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.kiwiMangoAccentText)
-                }
-                if !isAvailable {
-                    Text(chatState.claudeAvailability.reason)
-                        .font(KiwiMangoFont.mono(9, weight: .medium))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
-                }
+            HStack(spacing: 8) {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                Text("Uruchom Hermesa")
+                    .font(.system(size: 13, weight: .semibold))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(selected ? Color.kiwiMangoAccent.opacity(0.85) : Color.clear)
-            .neonBorder(isAvailable ? Color.kiwiMangoAccent : Color.white.opacity(0.16), cornerRadius: 2)
-            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .foregroundStyle(Color.kiwiMangoAccentText)
+            .background(Color.kiwiMangoAccent, in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        .disabled(!isAvailable)
-        .help(isAvailable ? label : chatState.claudeAvailability.reason)
-    }
-
-    private func spawnClaudePro(id: String) {
-        let url = URL(fileURLWithPath: displayWorkDir)
-        lastWorkDirPath = displayWorkDir
-        UserDefaults.standard.set(id, forKey: lastModelStorageKey)
-        let model = OllamaService.ModelInfo(name: id, capabilities: [], size: 0, isCloud: true)
-        onSpawn(selectedKind, model, url)
+        .disabled(selectedModel == nil)
+        .opacity(selectedModel == nil ? 0.4 : 1)
     }
 
     @ViewBuilder
@@ -413,63 +344,40 @@ struct NewAgentPopover: View {
 
         if local.isEmpty && cloud.isEmpty {
             Text("Brak modeli — Ollama offline?")
-                .font(KiwiMangoFont.mono(10))
+                .font(.system(size: 11.5))
                 .foregroundStyle(Color.kiwiMangoDanger)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
                     if !local.isEmpty {
-                        sectionHeader("💻 LOKALNE")
+                        sectionHeader("LOKALNE")
                         ForEach(local, id: \.name) { modelButton($0) }
                     }
                     if !cloud.isEmpty {
-                        sectionHeader("☁️ CLOUD")
-                            .padding(.top, local.isEmpty ? 0 : 6)
+                        sectionHeader("CLOUD")
+                            .padding(.top, local.isEmpty ? 0 : 8)
                         ForEach(cloud, id: \.name) { modelButton($0) }
                     }
                 }
             }
-            .frame(maxHeight: 260)
+            .frame(maxHeight: 220)
         }
     }
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(KiwiMangoFont.mono(9, weight: .semibold))
+            .font(.system(size: 9.5, weight: .semibold))
             .tracking(1)
-            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.63))
+            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
     }
 
     private func modelButton(_ model: OllamaService.ModelInfo) -> some View {
         let selected = preferredModel == model.name || (preferredModel.isEmpty && chatState.availableModels.first?.name == model.name)
-        return Button {
-            let url = URL(fileURLWithPath: displayWorkDir)
-            lastWorkDirPath = displayWorkDir
-            UserDefaults.standard.set(model.name, forKey: lastModelStorageKey)
-            onSpawn(selectedKind, model, url)
-        } label: {
-            HStack(spacing: 6) {
-                Text(model.name)
-                    .font(KiwiMangoFont.mono(11, weight: .medium))
-                    .foregroundStyle(selected ? Color.kiwiMangoAccentText : Color.kiwiMangoAccent)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.kiwiMangoAccentText)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(selected ? Color.kiwiMangoAccent.opacity(0.85) : Color.clear)
-            .neonBorder(Color.kiwiMangoAccent, cornerRadius: 2)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(model.name)
+        return ModelRowButton(
+            name: model.name,
+            selected: selected,
+            action: { preferredModel = model.name }
+        )
     }
 
     private func pickWorkDir() {
@@ -487,6 +395,51 @@ struct NewAgentPopover: View {
         // runModal zamyka popover (transient) i niszczy jego @State —
         // bez natychmiastowego zapisu wybór ginie przed kliknięciem presetu.
         lastWorkDirPath = url.path
+    }
+}
+
+/// One selectable model row in `NewAgentPopover` — hover highlight so the
+/// list reads as clickable, not just a static log.
+private struct ModelRowButton: View {
+    let name: String
+    let selected: Bool
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(name)
+                    .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                    .foregroundStyle(selected ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.75))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Color.kiwiMangoAccent)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                rowBackground,
+                in: RoundedRectangle(cornerRadius: 6)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .help(name)
+    }
+
+    private var rowBackground: Color {
+        if selected { return Color.kiwiMangoAccent.opacity(0.14) }
+        return hovering ? Color.white.opacity(0.06) : Color.clear
     }
 }
 
@@ -515,13 +468,13 @@ struct AgentDetailView: View {
             HStack(spacing: 4) {
                 Text("⊕ \(session.model)")
                 Text(session.isCloud ? "[Cloud]" : "[Local]")
-                    .foregroundStyle(Color.kiwiMangoPurple)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
             .font(KiwiMangoFont.mono(11, weight: .medium))
-            .foregroundStyle(Color.kiwiMangoAccent)
+            .foregroundStyle(Color.kiwiMangoTextPrimary)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .neonBorder(Color.kiwiMangoAccent, cornerRadius: 4)
+            .neonBorder(Color.kiwiMangoTextPrimary, cornerRadius: 4)
 
             Spacer()
 
@@ -535,7 +488,7 @@ struct AgentDetailView: View {
         .frame(height: 44)
         .background(Color.kiwiMangoChrome)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.kiwiMangoAccent.opacity(0.15)).frame(height: 1)
+            Rectangle().fill(Color.kiwiMangoTextPrimary.opacity(0.15)).frame(height: 1)
         }
     }
 }
@@ -605,13 +558,13 @@ struct AgentTranscriptView: View {
             HStack(spacing: 4) {
                 Text("⊕ \(record.model)")
                 Text(record.isCloud ? "[Cloud]" : "[Local]")
-                    .foregroundStyle(Color.kiwiMangoPurple)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
             .font(KiwiMangoFont.mono(11, weight: .medium))
-            .foregroundStyle(Color.kiwiMangoAccent)
+            .foregroundStyle(Color.kiwiMangoTextPrimary)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .neonBorder(Color.kiwiMangoAccent, cornerRadius: 4)
+            .neonBorder(Color.kiwiMangoTextPrimary, cornerRadius: 4)
 
             Text(record.workDir)
                 .font(KiwiMangoFont.mono(10))
@@ -632,7 +585,7 @@ struct AgentTranscriptView: View {
             }
             .font(KiwiMangoFont.mono(10, weight: .semibold))
             .buttonStyle(.plain)
-            .foregroundStyle(Color.kiwiMangoAccent)
+            .foregroundStyle(Color.kiwiMangoTextPrimary)
 
             Button("→ OBSIDIAN") {
                 if chatState.sendAgentTranscriptToObsidian(title: "\(kindLabel) · \(URL(fileURLWithPath: record.workDir).lastPathComponent)", content: record.transcript) != nil {
@@ -641,13 +594,13 @@ struct AgentTranscriptView: View {
             }
             .font(KiwiMangoFont.mono(10, weight: .semibold))
             .buttonStyle(.plain)
-            .foregroundStyle(Color.kiwiMangoPurple)
+            .foregroundStyle(Color.kiwiMangoTextPrimary)
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
         .background(Color.kiwiMangoChrome)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.kiwiMangoAccent.opacity(0.15)).frame(height: 1)
+            Rectangle().fill(Color.kiwiMangoTextPrimary.opacity(0.15)).frame(height: 1)
         }
     }
 }

@@ -13,6 +13,10 @@ struct RootView: View {
     @State private var selection: SidebarSelection? = .dashboard
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showingNewAgentPopover = false
+    // ponytail: druga flaga zamiast dzielenia jednej między dwa przyciski
+    // (header "+" i duży pusty-stan) — dwa .popover na tym samym Bool
+    // konfliktowałyby o punkt zaczepienia w SwiftUI.
+    @State private var showingNewAgentPopoverFromEmptyState = false
     @State private var searchText = ""
     @State private var searchResultIDs: Set<Int64> = []
     @FocusState private var searchFocused: Bool
@@ -22,10 +26,11 @@ struct RootView: View {
     @State private var renameText = ""
     @State private var toastMessage: String?
     @State private var showingCommandPalette = false
-    @State private var windowWidth: CGFloat = 900
 
+    @Namespace private var navMarkerNS
     @State private var agentHistory: [AgentSessionRecord] = []
     @State private var showingHistory = false
+    @State private var showingSettings = false
 
     private let db = DatabaseManager.shared
 
@@ -69,22 +74,10 @@ struct RootView: View {
         )) {
             FirstLaunchSetupView()
         }
-        .background {
-            GeometryReader { proxy in
-                Color.clear
-                    .onAppear { windowWidth = proxy.size.width }
-                    .onChange(of: proxy.size.width) { _, newWidth in
-                        windowWidth = newWidth
-                    }
-            }
-        }
-        .onChange(of: windowWidth) { _, newWidth in
-            if newWidth < 680, columnVisibility != .detailOnly {
-                columnVisibility = .detailOnly
-            } else if newWidth > 760, columnVisibility != .all {
-                columnVisibility = .all
-            }
-        }
+        // F4 fix: auto-chowanie sidebara po szerokości okna USUNIĘTE — GeometryReader
+        // mierzył widok już po zwinięciu kolumny i pętla zostawiała sidebar widoczny
+        // tylko w wąskim zakresie szerokości. Sidebar jest stały; chowa go wyłącznie
+        // ręczny toggle (⌃⌘S / przycisk).
         .onChange(of: selection) { _, newValue in
             switch newValue {
             case .conversation(let id):
@@ -171,6 +164,9 @@ struct RootView: View {
         .sheet(isPresented: $showingHistory) {
             HistoryView()
         }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+        }
         .task {
             await chatState.loadModels()
             await chatState.refreshClaudeAvailability()
@@ -179,6 +175,19 @@ struct RootView: View {
 
     private func refreshAgentHistory() {
         agentHistory = (try? db.fetchAgentSessions(limit: 15)) ?? []
+    }
+
+    /// Shared spawn path — header "+" and the empty-state button both call
+    /// this after closing their own popover flag.
+    private func spawnAgent(kind: AgentKind, model: OllamaService.ModelInfo, workDir: URL) {
+        let session = agentManager.spawn(
+            kind: kind,
+            model: model.name,
+            isCloud: model.isCloud,
+            workDir: workDir
+        )
+        selection = .agent(session.id)
+        topSection = .agent
     }
 
     private var renameBinding: Binding<Bool> {
@@ -228,90 +237,87 @@ struct RootView: View {
         VStack(spacing: 0) {
             controlPanel
             drawer
+            settingsFooter
         }
         .frame(maxHeight: .infinity)
         // F1: sidebar głębszy niż treść, szew bez linii — różnica tonu robi separację.
         .background(Color.kiwiMangoSidebarDeep)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 380)
+        // F4: sztywna szerokość ~230px jak w referencji — koniec z rozjazdem
+        // szerokości kolumny przy resize okna.
+        .navigationSplitViewColumnWidth(230)
         .toolbar(removing: .sidebarToggle)
     }
 
     // MARK: - Control panel (left column)
 
-    // ponytail: referencja opisuje pionową listę nawigacji z 2px amber
-    // znacznikiem po lewej. Ten sidebar używa kafli (ControlButton) i pigułek
-    // (drawerHeader) zamiast listy — aktywny stan już sygnalizuje amber accent
-    // + border, więc dokładanie znacznika 2px byłoby drugim wskaźnikiem tej
-    // samej rzeczy (zakaz duplikowanych kontrolek, plan pkt. 7).
+    // F4 (referencja "Ali Sayed"): pionowa lista nawigacji zamiast kafli —
+    // avatar+nazwa na górze, potem NavRow na pozycję, aktywna = jaśniejsza
+    // biel + 2px amber znacznik po lewej (jedyny wskaźnik aktywności).
     private var controlPanel: some View {
-        VStack(spacing: 10) {
-            Text("Control Panel")
-                .kiwiSectionLabel()
-                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(Color.kiwiMangoComposerBg)
+                    .frame(width: 28, height: 28)
+                    .overlay(
+                        Text("P")
+                            .font(KiwiMangoFont.mono(12, weight: .semibold))
+                            .foregroundStyle(Color.kiwiMangoTextPrimary)
+                    )
+                Text("Paweł")
+                    .font(KiwiMangoFont.mono(13))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.85))
+            }
+            .padding(.bottom, 28)
 
-            HStack(spacing: 8) {
-                ControlButton(
-                    title: "CHAT",
-                    icon: "plus.bubble.fill",
-                    isAccent: true,
-                    isActive: topSection == .chat
-                ) {
-                    topSection = .chat
-                    selection = nil
-                    Task { await chatState.startNewConversation() }
-                }
-
-                ControlButton(
-                    title: "AGENT",
-                    icon: "cpu.fill",
-                    isAccent: true,
-                    isActive: topSection == .agent
-                ) {
-                    topSection = .agent
-                    withAnimation(.easeInOut(duration: 0.22)) {
-                        showingNewAgentPopover.toggle()
-                    }
-                }
-                .popover(isPresented: $showingNewAgentPopover) {
-                    NewAgentPopover { kind, model, workDir in
-                        showingNewAgentPopover = false
-                        let session = agentManager.spawn(
-                            kind: kind,
-                            model: model.name,
-                            isCloud: model.isCloud,
-                            workDir: workDir
-                        )
-                        selection = .agent(session.id)
-                        topSection = .agent
-                    } onClose: {
-                        showingNewAgentPopover = false
-                    }
-                }
+            // Zakładki drawera (CHAT/AGENCI/AKTYWNE ZADANIA) scalone z menu —
+            // dublowały topSection (pułapka 7). Chat/Agenci tylko przełączają
+            // sekcję; nowa rozmowa i nowy Hermes = "+" w nagłówku drawera.
+            NavRow(title: "Chat", icon: "bubble.left.fill", isActive: topSection == .chat, markerNamespace: navMarkerNS) {
+                topSection = .chat
+                if case .conversation = selection {} else { selection = nil }
             }
 
-            HStack(spacing: 8) {
-                ControlButton(
-                    title: "HISTORIA",
-                    icon: "clock.arrow.circlepath",
-                    isActive: showingHistory
-                ) {
-                    showingHistory = true
-                }
+            NavRow(title: "Agenci", icon: "cpu.fill", isActive: topSection == .agent, markerNamespace: navMarkerNS) {
+                topSection = .agent
+                if case .agent = selection {} else { selection = nil }
+            }
 
-                ControlButton(
-                    title: "DASH",
-                    icon: "chart.bar.xaxis",
-                    isActive: topSection == .dashboard
-                ) {
-                    selection = .dashboard
-                    topSection = .dashboard
-                }
+            NavRow(title: "Zadania", icon: "list.bullet.rectangle.fill", isActive: topSection == .mission, markerNamespace: navMarkerNS) {
+                selection = .missionControl
+                topSection = .mission
+            }
+
+            NavRow(title: "Historia", icon: "clock.arrow.circlepath", isActive: showingHistory) {
+                showingHistory = true
+            }
+
+            NavRow(title: "Dashboard", icon: "chart.bar.xaxis", isActive: topSection == .dashboard, markerNamespace: navMarkerNS) {
+                selection = .dashboard
+                topSection = .dashboard
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 14)
-        .padding(.bottom, 12)
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .padding(.top, 18)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.kiwiMangoSidebarDeep)
+        // Napędza przesuwanie się amber znacznika między pozycjami.
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: topSection)
+    }
+
+    // MARK: - Settings footer
+
+    /// "Na dole Ustawienia" z referencji — jedyna pozycja przypięta do dołu
+    /// całego sidebara (poza scrollowalnym drawerem). SettingsView już
+    /// istniała w projekcie, nigdzie niepodpięta — tylko dopięcie prezentacji.
+    private var settingsFooter: some View {
+        NavRow(title: "Ustawienia", icon: "gearshape.fill", isActive: showingSettings) {
+            showingSettings = true
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 14)
         .background(Color.kiwiMangoSidebarDeep)
     }
 
@@ -339,47 +345,52 @@ struct RootView: View {
         .background(Color.kiwiMangoSidebarDeep)
     }
 
+    // Rząd zakładek zastąpiony nagłówkiem sekcji w stylu referencji:
+    // UPPERCASE 9px / 40% bieli + kontekstowe "+" (nowa rozmowa / nowy
+    // Hermes) + toggle panelu. Sekcję przełącza menu główne wyżej.
     private var drawerHeader: some View {
-        HStack(spacing: 4) {
-            ForEach([TopSection.chat, .agent, .mission], id: \.self) { section in
-                Button(section.rawValue.uppercased()) {
-                    topSection = section
-                    switch section {
-                    case .chat:
-                        if case .conversation = selection {} else { selection = nil }
-                    case .agent:
-                        if case .agent = selection {} else { selection = nil }
-                    case .mission:
-                        selection = .missionControl
-                    case .dashboard:
-                        selection = .dashboard
-                    }
-                }
-                .font(KiwiMangoFont.mono(9, weight: topSection == section ? .bold : .semibold))
-                .tracking(0.6)
-                .foregroundStyle(topSection == section ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.55))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(topSection == section ? Color.kiwiMangoAssistantBubble.opacity(0.70) : Color.clear)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(topSection == section ? Color.kiwiMangoAccent.opacity(0.40) : Color.clear, lineWidth: 1)
-                )
-                .buttonStyle(.plain)
-            }
+        HStack(spacing: 10) {
+            Text(drawerTitle)
+                .font(KiwiMangoFont.mono(9, weight: .semibold))
+                .tracking(1.5)
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.40))
 
             Spacer()
 
-            Button { toggleSidebar() } label: {
-                Image(systemName: "sidebar.left")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+            switch topSection {
+            case .chat:
+                DrawerIconButton(icon: "plus", help: "Nowa rozmowa") {
+                    selection = nil
+                    Task { await chatState.startNewConversation() }
+                }
+            case .agent:
+                DrawerIconButton(icon: "plus", help: "Nowy Hermes") {
+                    showingNewAgentPopover = true
+                }
+                .popover(isPresented: $showingNewAgentPopover) {
+                    NewAgentPopover { kind, model, workDir in
+                        showingNewAgentPopover = false
+                        spawnAgent(kind: kind, model: model, workDir: workDir)
+                    } onClose: {
+                        showingNewAgentPopover = false
+                    }
+                }
+            case .mission, .dashboard:
+                EmptyView()
             }
-            .buttonStyle(.plain)
-            .help("Schowaj panel (⌃⌘S)")
+
+            DrawerIconButton(icon: "sidebar.left", help: "Schowaj panel (⌃⌘S)") {
+                toggleSidebar()
+            }
+        }
+    }
+
+    private var drawerTitle: String {
+        switch topSection {
+        case .chat: "ROZMOWY"
+        case .agent: "AGENCI"
+        case .mission: "ZADANIA"
+        case .dashboard: "DASHBOARD"
         }
     }
 
@@ -437,9 +448,11 @@ struct RootView: View {
 
     private var agentDrawer: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    if !agentManager.sessions.isEmpty {
+            if agentManager.sessions.isEmpty {
+                emptyAgentState
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
                         SectionHeader(title: "NA ŻYWO", count: agentManager.sessions.count)
                         ForEach(agentManager.sessions) { session in
                             AgentRow(
@@ -453,10 +466,46 @@ struct RootView: View {
                             }
                         }
                     }
+                    .padding(.horizontal, 14)
                 }
-                .padding(.horizontal, 14)
             }
         }
+    }
+
+    // Odkrywalność (zadanie Pawła): "+" w nagłówku drawera samo w sobie jest
+    // za mało widoczne — pusty stan agentów dostaje duży, wyraźny przycisk.
+    private var emptyAgentState: some View {
+        VStack(spacing: 14) {
+            Spacer(minLength: 20)
+            Image(systemName: "cpu.fill")
+                .font(.system(size: 26, weight: .light))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.3))
+            Text("Brak agentów")
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.7))
+            Button {
+                showingNewAgentPopoverFromEmptyState = true
+            } label: {
+                Text("+  Nowy Hermes")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.kiwiMangoAccentText)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .background(Color.kiwiMangoAccent, in: RoundedRectangle(cornerRadius: 8))
+            }
+            .buttonStyle(.plain)
+            .popover(isPresented: $showingNewAgentPopoverFromEmptyState) {
+                NewAgentPopover { kind, model, workDir in
+                    showingNewAgentPopoverFromEmptyState = false
+                    spawnAgent(kind: kind, model: model, workDir: workDir)
+                } onClose: {
+                    showingNewAgentPopoverFromEmptyState = false
+                }
+            }
+            Spacer(minLength: 20)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
     }
 
     private var missionDrawer: some View {
@@ -467,7 +516,7 @@ struct RootView: View {
                     .foregroundStyle(Color.kiwiMangoTextPrimary)
                 Text("Podgląd wszystkich żywych agentów, ich modeli, katalogów roboczych i ostatniej aktywności.")
                     .font(KiwiMangoFont.mono(10.5))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                     .lineLimit(nil)
                 Spacer()
             }
@@ -476,19 +525,10 @@ struct RootView: View {
         }
     }
 
+    // F4: referencja nie ma tekstów-opisów w sidebarze — sekcja Dashboard
+    // zostawia drawer pusty (sierota "…natywnie, bez WebView" usunięta).
     private var hudDrawer: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Dashboard")
-                .font(KiwiMangoFont.mono(13, weight: .semibold))
-                .foregroundStyle(Color.kiwiMangoTextPrimary)
-            Text("Podgląd pamięci, sesji, zadań cron i kosztów Hermesa — natywnie, bez WebView.")
-                .font(KiwiMangoFont.mono(10.5))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
-                .lineLimit(nil)
-            Spacer()
-        }
-        .padding(.horizontal, 14)
-        .padding(.top, 4)
+        Spacer()
     }
 
     // MARK: - Sidebar toggle
@@ -505,7 +545,7 @@ struct RootView: View {
             Button { toggleSidebar() } label: {
                 Image(systemName: "sidebar.left")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
             }
             .buttonStyle(.plain)
             .help("Pokaż panel (⌃⌘S)")
@@ -609,8 +649,8 @@ private struct ConversationRow: View {
                     .font(KiwiMangoFont.mono(10.5))
                     .foregroundStyle(
                         isActive
-                            ? Color.kiwiMangoPurple
-                            : Color.kiwiMangoTextPrimary.opacity(0.55)
+                            ? Color.kiwiMangoTextPrimary
+                            : Color.kiwiMangoTextPrimary.opacity(0.65)
                     )
             }
             .padding(.leading, 12)
@@ -621,7 +661,7 @@ private struct ConversationRow: View {
 
             if hasUnread, !isHovered {
                 Circle()
-                    .fill(Color.kiwiMangoPurple)
+                    .fill(Color.kiwiMangoTextPrimary)
                     .frame(width: 6, height: 6)
                     .padding(.trailing, 12)
                     .help("Hermes dokończył coś w tle")
@@ -670,56 +710,104 @@ private struct ConversationRow: View {
     }()
 }
 
-// MARK: - ControlButton
+// MARK: - NavRow
 
-/// Warm-dark sidebar control: rounded tile with icon + label.
-/// Active state uses the assistant-bubble brown with amber text/icon.
-private struct ControlButton: View {
+/// Pionowa pozycja nawigacji ze stylu referencji: ikona 15px + UPPERCASE
+/// label 11.5px, wiersz 40px. Hover = jaśniejsze tło + tekst (~150ms),
+/// aktywna = pełna biel + amber znacznik, który przesuwa się między
+/// pozycjami sekcji przez matchedGeometryEffect (namespace z RootView).
+private struct NavRow: View {
     let title: String
     let icon: String
-    var isAccent: Bool = false
     var isActive: Bool = false
+    /// Wiersze sekcji (Chat/Agenci/Zadania/Dashboard) dostają wspólny
+    /// namespace → znacznik płynnie jeździ; wiersze-sheety (Historia,
+    /// Ustawienia) bez namespace → statyczny znacznik, zero konfliktu ID.
+    var markerNamespace: Namespace.ID? = nil
     let action: () -> Void
 
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(isActive ? Color.kiwiMangoAssistantBubble.opacity(0.75) : Color.kiwiMangoComposerBg)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .strokeBorder(
-                                    isActive ? Color.kiwiMangoAccent.opacity(0.45) : Color.kiwiMangoBorder.opacity(hovering ? 0.55 : 0.30),
-                                    lineWidth: 1
-                                )
-                        )
-
-                    Image(systemName: icon)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(foregroundColor)
-                }
-                .frame(height: 44)
-                .shadow(color: Color.black.opacity(hovering ? 0.15 : 0), radius: 5, x: 0, y: 2)
-
-                Text(title)
-                    .font(KiwiMangoFont.mono(8, weight: isActive ? .bold : .medium))
-                    .tracking(0.6)
-                    .foregroundStyle(foregroundColor)
+            HStack(spacing: 12) {
+                marker
+                    .frame(width: 2, height: 16)
+                Image(systemName: icon)
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 20)
+                    .offset(x: hovering && !isActive ? 1.5 : 0)
+                Text(title.uppercased())
+                    .font(KiwiMangoFont.mono(11.5, weight: .semibold))
+                    .tracking(1.5)
                     .lineLimit(1)
+                Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity)
+            .padding(.trailing, 8)
+            .foregroundStyle(
+                isActive
+                    ? Color.kiwiMangoTextPrimary
+                    : Color.kiwiMangoTextPrimary.opacity(hovering ? 0.85 : 0.55)
+            )
+            .frame(height: 40)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.white.opacity(hovering && !isActive ? 0.05 : 0))
+            )
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NavRowPressStyle())
         .onHover { hovering = $0 }
-        .animation(.easeInOut(duration: 0.15), value: hovering)
+        .animation(.easeOut(duration: 0.15), value: hovering)
     }
 
-    private var foregroundColor: Color {
-        if isActive { return Color.kiwiMangoAccent }
-        if isAccent { return Color.kiwiMangoAccent }
-        return hovering ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.72)
+    @ViewBuilder
+    private var marker: some View {
+        if isActive, let ns = markerNamespace {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.kiwiMangoAccent)
+                .matchedGeometryEffect(id: "navMarker", in: ns)
+        } else if isActive {
+            RoundedRectangle(cornerRadius: 1)
+                .fill(Color.kiwiMangoAccent)
+        } else {
+            Color.clear
+        }
+    }
+}
+
+/// Mała ikonka akcji w nagłówku drawera — hover rozjaśnia jak w NavRow.
+private struct DrawerIconButton: View {
+    let icon: String
+    let help: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(hovering ? 0.95 : 0.55))
+                .frame(width: 22, height: 22)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(Color.white.opacity(hovering ? 0.07 : 0))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(NavRowPressStyle())
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.15), value: hovering)
+        .help(help)
+    }
+}
+
+/// Krótki spring/scale feedback na klik.
+private struct NavRowPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }

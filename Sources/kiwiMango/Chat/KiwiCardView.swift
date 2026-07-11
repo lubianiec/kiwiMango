@@ -16,7 +16,7 @@ struct KiwiCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                .strokeBorder(Color.kiwiMangoBorder.opacity(0.35), lineWidth: 1)
         )
     }
 
@@ -25,7 +25,7 @@ struct KiwiCardView: View {
             if let icon = card.icon {
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
             Text(card.title)
                 .font(KiwiMangoFont.mono(12, weight: .bold))
@@ -63,7 +63,7 @@ struct KiwiCardView: View {
                     if let icon = row.icon {
                         Image(systemName: icon)
                             .font(.system(size: 11))
-                            .foregroundStyle(Color.kiwiMangoAccent.opacity(0.9))
+                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.9))
                     }
                     VStack(alignment: .leading, spacing: 2) {
                         Text(row.label)
@@ -86,7 +86,7 @@ struct KiwiCardView: View {
                         .font(KiwiMangoFont.mono(10, weight: .bold))
                         .foregroundStyle(Color.kiwiMangoAccentText)
                         .frame(width: 20, height: 20)
-                        .background(Color.kiwiMangoAccent)
+                        .background(Color.kiwiMangoTextPrimary)
                         .clipShape(Circle())
                     Text(step)
                         .font(KiwiMangoFont.sans(12))
@@ -104,11 +104,11 @@ struct KiwiCardView: View {
                 HStack {
                     Text(leftTitle)
                         .font(KiwiMangoFont.mono(10, weight: .bold))
-                        .foregroundStyle(Color.kiwiMangoAccent)
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
                     Spacer()
                     Text(rightTitle)
                         .font(KiwiMangoFont.mono(10, weight: .bold))
-                        .foregroundStyle(Color.kiwiMangoPurple)
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
                 }
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
@@ -139,14 +139,14 @@ struct KiwiCardView: View {
                             x: .value("x", point.x),
                             y: .value("y", point.y)
                         )
-                        .foregroundStyle(Color.kiwiMangoAccent)
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
                         .lineStyle(StrokeStyle(lineWidth: 2))
                     } else {
                         BarMark(
                             x: .value("x", point.x),
                             y: .value("y", point.y)
                         )
-                        .foregroundStyle(Color.kiwiMangoAccent)
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
                     }
                 }
             }

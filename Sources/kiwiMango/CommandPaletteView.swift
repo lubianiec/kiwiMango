@@ -112,7 +112,7 @@ struct CommandPaletteView: View {
 
             VStack(spacing: 0) {
                 searchField
-                Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+                Rectangle().fill(Color.kiwiMangoBorder.opacity(0.35)).frame(height: 1)
                 if flatItems.isEmpty {
                     Text("Brak wyników")
                         .font(KiwiMangoFont.mono(11))
@@ -152,7 +152,7 @@ struct CommandPaletteView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color.kiwiMangoAccent.opacity(0.35), lineWidth: 1)
+                    .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.35), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.5), radius: 24)
         }
@@ -203,7 +203,7 @@ struct CommandPaletteView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 7)
-        .background(isSelected ? Color.kiwiMangoAccent.opacity(0.85) : Color.clear)
+        .background(isSelected ? Color.kiwiMangoTextPrimary.opacity(0.85) : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture { perform(item) }
     }

@@ -199,8 +199,8 @@ enum SyntaxHighlighter {
     private static func color(for kind: TokenKind) -> Color {
         switch kind {
         case .plain: .kiwiMangoTextPrimary
-        case .keyword: .kiwiMangoPurple
-        case .string: .kiwiMangoAccent
+        case .keyword: .kiwiMangoTextPrimary
+        case .string: .kiwiMangoTextPrimary
         case .comment: .kiwiMangoTextPrimary.opacity(0.4)
         case .number: .kiwiMangoSyntaxNumber
         }

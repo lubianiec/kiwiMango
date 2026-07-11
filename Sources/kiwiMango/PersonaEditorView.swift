@@ -39,7 +39,7 @@ struct PersonaEditorView: View {
                     .foregroundStyle(Color.kiwiMangoAccentText)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Color.kiwiMangoAccent, in: RoundedRectangle(cornerRadius: 4))
+                    .background(Color.kiwiMangoTextPrimary, in: RoundedRectangle(cornerRadius: 4))
             }
             .buttonStyle(.plain)
 
@@ -56,10 +56,10 @@ struct PersonaEditorView: View {
     private var content: some View {
         ScrollView {
             VStack(spacing: 0) {
-                Divider().overlay(Color.white.opacity(0.1))
+                Divider().overlay(Color.kiwiMangoBorder.opacity(0.35))
                 ForEach(chatState.personas) { persona in
                     personaRow(persona)
-                    Divider().overlay(Color.white.opacity(0.1))
+                    Divider().overlay(Color.kiwiMangoBorder.opacity(0.35))
                 }
             }
         }
@@ -79,7 +79,7 @@ struct PersonaEditorView: View {
             Spacer()
             Text(String(format: "%.1f", persona.temperature))
                 .font(KiwiMangoFont.mono(10.5))
-                .foregroundStyle(Color.kiwiMangoAccent.opacity(0.8))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
             Button {
                 editingPersona = persona
                 showingForm = true

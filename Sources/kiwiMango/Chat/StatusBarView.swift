@@ -96,7 +96,7 @@ struct StatusBarView: View {
         .background(Color.kiwiMangoChrome)
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(Color.kiwiMangoAccent.opacity(0.25))
+                .fill(Color.kiwiMangoTextPrimary.opacity(0.25))
                 .frame(height: 1)
         }
         .task {
@@ -115,7 +115,7 @@ struct StatusBarView: View {
 
             Text("●")
                 .font(.system(size: 7))
-                .foregroundStyle(monitor.isOnline ? Color.kiwiMangoAccent : Color.kiwiMangoDanger)
+                .foregroundStyle(monitor.isOnline ? Color.kiwiMangoTextPrimary : Color.kiwiMangoDanger)
                 .realBloom(strength: 1.4, radius: 2)
 
             Text(monitor.isOnline ? "Ollama" : "offline")
@@ -138,7 +138,7 @@ struct StatusBarView: View {
                 Image(systemName: "circle.hexagongrid.fill")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
         }
     }
@@ -170,7 +170,7 @@ struct StatusBarView: View {
             Text("AVG")
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
             Text("\(tokPerMinute)/min")
-                .foregroundStyle(chatState.isStreaming ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary)
+                .foregroundStyle(chatState.isStreaming ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary)
                 .monospacedDigit()
             if chatState.isStreaming {
                 StreamingPulse()
@@ -199,7 +199,7 @@ struct StatusBarView: View {
 
     private var percentColor: Color {
         if contextPercent >= 0.8 { return Color.kiwiMangoDanger }
-        if contextPercent >= 0.6 { return Color.kiwiMangoAccent }
+        if contextPercent >= 0.6 { return Color.kiwiMangoTextPrimary }
         return Color.kiwiMangoTextPrimary
     }
 
@@ -222,7 +222,7 @@ struct StatusBarView: View {
         }
         .buttonStyle(.plain)
         .disabled(isCompressing || chatState.isStreaming)
-        .foregroundStyle(contextPercent >= 0.75 ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.45))
+        .foregroundStyle(contextPercent >= 0.75 ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.55))
         .help("Kompresuj kontekst (model podsumowuje starszą część rozmowy)")
     }
 
@@ -241,7 +241,7 @@ struct StatusBarView: View {
             } label: {
                 let total = agentManager.sessions.count + hermesTelemetry.activeCount
                 Text("Agenci \(total)")
-                    .foregroundStyle(total == 0 ? Color.kiwiMangoTextPrimary.opacity(0.45) : Color.kiwiMangoAccent)
+                    .foregroundStyle(total == 0 ? Color.kiwiMangoTextPrimary.opacity(0.55) : Color.kiwiMangoTextPrimary)
             }
             .buttonStyle(.plain)
             .help("Otwórz Centrum Dowodzenia")
@@ -250,7 +250,7 @@ struct StatusBarView: View {
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
 
             Text("v\(appVersion)")
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
         }
     }
 
@@ -288,7 +288,7 @@ private struct MiniBar: View {
 
     private var barColor: Color {
         if fill >= 0.8 { return Color.kiwiMangoDanger }
-        if fill >= 0.6 { return Color.kiwiMangoAccent }
+        if fill >= 0.6 { return Color.kiwiMangoTextPrimary }
         return Color.kiwiMangoTextPrimary
     }
 
@@ -309,7 +309,7 @@ private struct StreamingPulse: View {
         HStack(spacing: 2) {
             ForEach(0..<3) { i in
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.kiwiMangoAccent)
+                    .fill(Color.kiwiMangoTextPrimary)
                     .frame(width: 2, height: 6)
                     .opacity(opacity(for: i))
             }
@@ -352,7 +352,7 @@ private struct TokRateSparkline: View {
                     path.addLine(to: CGPoint(x: x, y: y))
                 }
             }
-            context.stroke(path, with: .color(Color.kiwiMangoAccent), lineWidth: 1)
+            context.stroke(path, with: .color(Color.kiwiMangoTextPrimary), lineWidth: 1)
         }
     }
 }

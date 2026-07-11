@@ -116,7 +116,7 @@ struct ModelManagerView: View {
         HStack {
             HStack(spacing: 6) {
                 Rectangle()
-                    .fill(Color.kiwiMangoAccent)
+                    .fill(Color.kiwiMangoTextPrimary)
                     .frame(width: 7, height: 7)
                 Text("kiwiMango — modele")
                     .font(KiwiMangoFont.mono(10.5, weight: .medium))
@@ -152,7 +152,7 @@ struct ModelManagerView: View {
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
             Text("łącznie \(Self.formattedSize(totalSize)) na dysku")
                 .font(KiwiMangoFont.mono(11.5))
-                .foregroundStyle(Color.kiwiMangoAccent.opacity(0.8))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -168,7 +168,7 @@ struct ModelManagerView: View {
 
     private var webSearchSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Divider().overlay(Color.white.opacity(0.1))
+            Divider().overlay(Color.kiwiMangoBorder.opacity(0.35))
 
             Text("WEB SEARCH")
                 .font(KiwiMangoFont.mono(10, weight: .semibold))
@@ -188,20 +188,20 @@ struct ModelManagerView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
                     .background(Color.kiwiMangoComposerBg)
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.kiwiMangoBorder.opacity(0.40), lineWidth: 1))
 
                 Button("[TESTUJ]") { testWebSearch() }
                     .buttonStyle(.plain)
                     .font(KiwiMangoFont.mono(11, weight: .bold))
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
                     .disabled(webSearchKey.trimmingCharacters(in: .whitespaces).isEmpty || isTestingWebSearch)
 
                 if isTestingWebSearch {
-                    ProgressView().controlSize(.small).tint(Color.kiwiMangoAccent)
+                    ProgressView().controlSize(.small).tint(Color.kiwiMangoTextPrimary)
                 } else if let result = webSearchTestResult {
                     Text(result ? "✓" : "✗")
                         .font(KiwiMangoFont.mono(14, weight: .bold))
-                        .foregroundStyle(result ? Color.kiwiMangoAccent : Color.kiwiMangoDanger)
+                        .foregroundStyle(result ? Color.kiwiMangoTextPrimary : Color.kiwiMangoDanger)
                 }
             }
 
@@ -248,7 +248,7 @@ struct ModelManagerView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 6)
                     .background(Color.kiwiMangoComposerBg)
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.kiwiMangoBorder.opacity(0.40), lineWidth: 1))
                     .disabled(pullTask != nil)
 
                 if pullTask != nil {
@@ -260,14 +260,14 @@ struct ModelManagerView: View {
                     Button("[POBIERZ]") { startPull(pullText) }
                         .buttonStyle(.plain)
                         .font(KiwiMangoFont.mono(11, weight: .bold))
-                        .foregroundStyle(Color.kiwiMangoAccent)
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
                         .disabled(pullText.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
 
                 Button("[IMPORT .GGUF]") { pickGGUFFile() }
                     .buttonStyle(.plain)
                     .font(KiwiMangoFont.mono(11, weight: .bold))
-                    .foregroundStyle(Color.kiwiMangoPurple)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
                     .disabled(pullTask != nil || isImporting)
             }
 
@@ -307,12 +307,12 @@ struct ModelManagerView: View {
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 3).fill(Color.white.opacity(0.08))
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.kiwiMangoAccent)
+                        .fill(Color.kiwiMangoTextPrimary)
                         .frame(width: proxy.size.width * fraction)
                 }
             }
             .frame(height: 6)
-            .neonBorder(Color.kiwiMangoAccent, cornerRadius: 3)
+            .neonBorder(Color.kiwiMangoTextPrimary, cornerRadius: 3)
 
             HStack {
                 Text(pullStatus)
@@ -468,7 +468,7 @@ struct ModelManagerView: View {
     private var content: some View {
         if isLoading && models.isEmpty {
             ProgressView("Wczytywanie modeli…")
-                .tint(Color.kiwiMangoAccent)
+                .tint(Color.kiwiMangoTextPrimary)
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let loadError, models.isEmpty {
@@ -489,18 +489,18 @@ struct ModelManagerView: View {
                 VStack(spacing: 0) {
                     if !localOnlyModels.isEmpty {
                         sectionHeader("💻 LOKALNE")
-                        Divider().overlay(Color.white.opacity(0.1))
+                        Divider().overlay(Color.kiwiMangoBorder.opacity(0.35))
                         ForEach(localOnlyModels, id: \.name) { model in
                             modelRow(model)
-                            Divider().overlay(Color.white.opacity(0.1))
+                            Divider().overlay(Color.kiwiMangoBorder.opacity(0.35))
                         }
                     }
                     if !cloudOnlyModels.isEmpty {
                         sectionHeader("☁️ CLOUD")
-                        Divider().overlay(Color.white.opacity(0.1))
+                        Divider().overlay(Color.kiwiMangoBorder.opacity(0.35))
                         ForEach(cloudOnlyModels, id: \.name) { model in
                             modelRow(model)
-                            Divider().overlay(Color.white.opacity(0.1))
+                            Divider().overlay(Color.kiwiMangoBorder.opacity(0.35))
                         }
                     }
                 }

@@ -44,7 +44,7 @@ struct HistoryView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Zamknij") { dismiss() }
-                        .foregroundStyle(Color.kiwiMangoAccent)
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
                 }
             }
         }
@@ -63,7 +63,7 @@ struct HistoryView: View {
             Text("HISTORIA")
                 .font(KiwiMangoFont.mono(10, weight: .bold))
                 .tracking(1.2)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
             Text("\(entries.count) wpisów · ostatnia aktywność \(lastActivityText)")
                 .font(KiwiMangoFont.mono(10))
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.4))
@@ -100,13 +100,13 @@ struct HistoryView: View {
         VStack(spacing: 10) {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 32))
-                .foregroundStyle(Color.kiwiMangoAccent.opacity(0.5))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
             Text("Brak historii")
                 .font(KiwiMangoFont.mono(13, weight: .semibold))
                 .foregroundStyle(Color.kiwiMangoTextPrimary)
             Text("Rozpocznij czat lub agenta, żeby pojawiły się tu wpisy.")
                 .font(KiwiMangoFont.mono(11))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -163,9 +163,9 @@ private struct HistoryRow: View {
     var body: some View {
         HStack(spacing: 0) {
             Rectangle()
-                .fill(Color.kiwiMangoAccent.opacity(isHovered ? 0.6 : 0))
+                .fill(Color.kiwiMangoTextPrimary.opacity(isHovered ? 0.6 : 0))
                 .frame(width: 2)
-                .shadow(color: Color.kiwiMangoAccent.opacity(isHovered ? 0.6 : 0), radius: 3)
+                .shadow(color: Color.kiwiMangoTextPrimary.opacity(isHovered ? 0.6 : 0), radius: 3)
 
             HStack(spacing: 10) {
                 kindIcon
@@ -179,11 +179,11 @@ private struct HistoryRow: View {
                     HStack(spacing: 6) {
                         Text(entry.subtitle)
                             .font(KiwiMangoFont.mono(10))
-                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                         Spacer()
                         Text(dateTimeString(entry.timestamp))
                             .font(KiwiMangoFont.mono(10))
-                            .foregroundStyle(Color.kiwiMangoAccent)
+                            .foregroundStyle(Color.kiwiMangoTextPrimary)
                     }
                 }
             }
@@ -195,7 +195,7 @@ private struct HistoryRow: View {
         }
         .background(
             isHovered
-                ? Color.kiwiMangoAccent.opacity(0.08)
+                ? Color.kiwiMangoTextPrimary.opacity(0.08)
                 : Color.clear
         )
         .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -205,11 +205,11 @@ private struct HistoryRow: View {
     private var kindIcon: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 5)
-                .fill(Color.kiwiMangoAccent.opacity(0.12))
+                .fill(Color.kiwiMangoTextPrimary.opacity(0.12))
                 .frame(width: 28, height: 28)
             Image(systemName: entry.kind == .chat ? "bubble.left.fill" : "cpu.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.kiwiMangoAccent)
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
         }
     }
 
@@ -257,7 +257,7 @@ private struct HistoryDetailSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Zamknij") { dismiss() }
-                        .foregroundStyle(Color.kiwiMangoAccent)
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
                 }
             }
         }
@@ -277,7 +277,7 @@ private struct ChatHistoryDetail: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(message.role == "user" ? "Użytkownik" : "Asystent")
                             .font(KiwiMangoFont.mono(9, weight: .bold))
-                            .foregroundStyle(message.role == "user" ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.7))
+                            .foregroundStyle(message.role == "user" ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.7))
                         Text(message.content)
                             .font(KiwiMangoFont.mono(12))
                             .foregroundStyle(Color.kiwiMangoTextPrimary)
@@ -314,7 +314,7 @@ private struct AgentHistoryDetail: View {
                         Spacer()
                         Text(record.endedAt, style: .date)
                             .font(KiwiMangoFont.mono(10))
-                            .foregroundStyle(Color.kiwiMangoAccent)
+                            .foregroundStyle(Color.kiwiMangoTextPrimary)
                     }
                     Text(record.transcript)
                         .font(KiwiMangoFont.mono(11))

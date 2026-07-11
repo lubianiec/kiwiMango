@@ -139,7 +139,7 @@ private struct CodeBlockView: View {
             HStack {
                 Text((language ?? "code").uppercased())
                     .font(KiwiMangoFont.mono(10, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoPurple.opacity(0.8))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
                 Spacer()
                 Button(action: copy) {
                     Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
@@ -153,7 +153,7 @@ private struct CodeBlockView: View {
             .padding(.vertical, 6)
 
             Rectangle()
-                .fill(Color.kiwiMangoAccent.opacity(0.15))
+                .fill(Color.kiwiMangoTextPrimary.opacity(0.15))
                 .frame(height: 1)
 
             let lines = content.components(separatedBy: "\n")
@@ -170,11 +170,11 @@ private struct CodeBlockView: View {
             }
             .padding(10)
         }
-        .background(Color(hex: "050507"))
+        .background(Color.kiwiMangoPanelDeep)
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(Color.kiwiMangoAccent.opacity(0.3), lineWidth: 1)
+                .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.3), lineWidth: 1)
         )
     }
 
@@ -213,11 +213,11 @@ private struct MermaidBlockView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(maxWidth: 700)
                     .padding(10)
-                    .background(Color(hex: "050507"))
+                    .background(Color.kiwiMangoPanelDeep)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
                     .overlay(
                         RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(Color.kiwiMangoAccent.opacity(0.3), lineWidth: 1)
+                            .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.3), lineWidth: 1)
                     )
             } else if failed {
                 CodeBlockView(language: "mermaid", content: code)
@@ -230,11 +230,11 @@ private struct MermaidBlockView: View {
                         .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
                 }
                 .padding(10)
-                .background(Color(hex: "050507"))
+                .background(Color.kiwiMangoPanelDeep)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(Color.kiwiMangoAccent.opacity(0.3), lineWidth: 1)
+                        .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.3), lineWidth: 1)
                 )
             }
         }

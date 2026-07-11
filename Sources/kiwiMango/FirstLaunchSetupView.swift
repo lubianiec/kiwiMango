@@ -75,7 +75,7 @@ struct FirstLaunchSetupView: View {
             Text("POŁĄCZENIE Z OLLAMA")
                 .font(KiwiMangoFont.mono(10, weight: .bold))
                 .tracking(0.8)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
 
             HStack(spacing: 8) {
                 TextField("http://localhost:11434", text: $ollamaHost)
@@ -91,7 +91,7 @@ struct FirstLaunchSetupView: View {
                         .font(KiwiMangoFont.mono(11, weight: .semibold))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.kiwiMangoAccent)
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
                 .disabled(isTesting)
             }
 
@@ -113,7 +113,7 @@ struct FirstLaunchSetupView: View {
             Text("DOMYŚLNY MODEL")
                 .font(KiwiMangoFont.mono(10, weight: .bold))
                 .tracking(0.8)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
 
             if models.isEmpty {
                 Text("Wybierz dostępny model po podłączeniu do Ollamy.")
@@ -139,7 +139,7 @@ struct FirstLaunchSetupView: View {
             Text("KATALOG ROBOCZY AGENTÓW")
                 .font(KiwiMangoFont.mono(10, weight: .bold))
                 .tracking(0.8)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
 
             HStack(spacing: 8) {
                 Text(agentWorkDir.isEmpty ? "Brak" : agentWorkDir)
@@ -150,11 +150,11 @@ struct FirstLaunchSetupView: View {
                 Button("Wybierz…") { pickWorkDir() }
                     .buttonStyle(.plain)
                     .font(KiwiMangoFont.mono(11, weight: .semibold))
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
             .padding(10)
             .background(Color.kiwiMangoComposerBg)
-            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.12)))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.kiwiMangoBorder.opacity(0.40)))
 
             Text("Agentowie będą tu domyślnie uruchamiać terminal. Możesz zmienić to przy każdym agencie.")
                 .font(KiwiMangoFont.mono(10))
@@ -169,7 +169,7 @@ struct FirstLaunchSetupView: View {
             Text("VAULT OBSIDIAN (opcjonalnie)")
                 .font(KiwiMangoFont.mono(10, weight: .bold))
                 .tracking(0.8)
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
 
             HStack(spacing: 8) {
                 Text(vaultPath.isEmpty ? "Wyłączone" : vaultPath)
@@ -180,11 +180,11 @@ struct FirstLaunchSetupView: View {
                 Button("Wybierz…") { pickVault() }
                     .buttonStyle(.plain)
                     .font(KiwiMangoFont.mono(11, weight: .semibold))
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
             .padding(10)
             .background(Color.kiwiMangoComposerBg)
-            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.white.opacity(0.12)))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.kiwiMangoBorder.opacity(0.40)))
 
             Text("Jeśli nie używasz Obsidiana, zostaw to pole puste — synchronizacja zostanie wyłączona.")
                 .font(KiwiMangoFont.mono(10))
@@ -199,7 +199,7 @@ struct FirstLaunchSetupView: View {
             Button("Pomiń") { finish() }
                 .buttonStyle(.plain)
                 .font(KiwiMangoFont.mono(12))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
 
             Spacer()
 
@@ -210,7 +210,7 @@ struct FirstLaunchSetupView: View {
                     .font(KiwiMangoFont.mono(12, weight: .semibold))
                     .padding(.horizontal, 18)
                     .padding(.vertical, 7)
-                    .background(canFinish ? Color.kiwiMangoAccent : Color.kiwiMangoAccent.opacity(0.35))
+                    .background(canFinish ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.35))
                     .foregroundStyle(Color.kiwiMangoAccentText)
                     .clipShape(.rect(cornerRadius: 4))
             }
@@ -308,8 +308,8 @@ struct FirstLaunchSetupView: View {
     private var statusColor: Color {
         switch connectionState {
         case .idle: return Color.kiwiMangoTextPrimary.opacity(0.4)
-        case .checking: return Color.kiwiMangoTextPrimary.opacity(0.55)
-        case .ok: return Color.kiwiMangoAccent
+        case .checking: return Color.kiwiMangoTextPrimary.opacity(0.65)
+        case .ok: return Color.kiwiMangoTextPrimary
         case .error: return Color.kiwiMangoDanger
         }
     }

@@ -38,14 +38,15 @@ extension Color {
 // accents, brown assistant bubbles, grey user bubbles, round send button.
 
 extension Color {
-    /// Window-level background (deep charcoal, almost black).
-    static let kiwiMangoBackground = Color(hex: "141414")
+    // F4: paleta rozjaśniona z czerni do ciepłego grafitu (referencja Ali Sayed).
+    /// Window-level background (warm graphite).
+    static let kiwiMangoBackground = Color(hex: "2C2C2E")
     /// Top bar and elevated chrome (slightly lighter than background).
-    static let kiwiMangoChrome = Color(hex: "1C1C1E")
+    static let kiwiMangoChrome = Color(hex: "29292B")
     /// Sidebar / drawer surface.
-    static let kiwiMangoSurface = Color(hex: "1A1A1D")
+    static let kiwiMangoSurface = Color(hex: "313134")
     /// Composer and input fields.
-    static let kiwiMangoComposerBg = Color(hex: "1F1F23")
+    static let kiwiMangoComposerBg = Color(hex: "323235")
     /// Primary accent / buttons / send — warm orange.
     static let kiwiMangoAccent = Color(hex: "F2994A")
     /// Text drawn on top of the accent color.
@@ -60,22 +61,22 @@ extension Color {
     /// Destructive/coral accent.
     static let kiwiMangoDanger = Color(hex: "FF6A5C")
     /// Deep recessed panel for popovers / modals.
-    static let kiwiMangoPanelDeep = Color(hex: "161618")
+    static let kiwiMangoPanelDeep = Color(hex: "272729")
     /// Warm amber for numeric literals in syntax highlighter.
     static let kiwiMangoSyntaxNumber = Color(hex: "FCA311")
 
     // MARK: - Chat bubble colors (F3 redesign mono: monochrom, kolor tylko w Dashboardzie)
     /// User message bubble background — lighter graphite tone (hover tone from tokens).
-    static let kiwiMangoUserBubble = Color(hex: "232326")
+    static let kiwiMangoUserBubble = Color(hex: "3A3A3D")
     /// Assistant message bubble background — same tone as a Dashboard card, mono.
-    static let kiwiMangoAssistantBubble = Color(hex: "1A1A1D")
+    static let kiwiMangoAssistantBubble = Color(hex: "313134")
     /// Assistant bubble text color.
     static let kiwiMangoAssistantText = Color(hex: "F2F2F7")
     /// Subtle border used on inactive inputs / cards.
-    static let kiwiMangoBorder = Color(hex: "3F3F46")
+    static let kiwiMangoBorder = Color(hex: "4A4A50")
     /// Sidebar surface — deeper than window/card background (redesign mono F1).
     /// No divider line at the seam; the tone jump alone reads as separation.
-    static let kiwiMangoSidebarDeep = Color(hex: "101012")
+    static let kiwiMangoSidebarDeep = Color(hex: "232325")
 }
 
 // MARK: - Section label (redesign mono F1)
@@ -89,7 +90,7 @@ struct KiwiSectionLabelStyle: ViewModifier {
             .font(KiwiMangoFont.mono(10.5, weight: .semibold))
             .tracking(1.2)
             .textCase(.uppercase)
-            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.45))
+            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
     }
 }
 

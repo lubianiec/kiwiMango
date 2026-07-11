@@ -31,7 +31,7 @@ struct TopSystemBar: View {
 
                     Text("●")
                         .font(.system(size: 7))
-                        .foregroundStyle(monitor.isOnline ? Color.kiwiMangoAccent : Color.kiwiMangoDanger)
+                        .foregroundStyle(monitor.isOnline ? Color.kiwiMangoTextPrimary : Color.kiwiMangoDanger)
                         .realBloom(strength: 1.4, radius: 2)
 
                     Text(monitor.isOnline ? "Ollama" : "offline")
@@ -48,7 +48,7 @@ struct TopSystemBar: View {
 
                 Text(sessionTimeLabel)
                     .monospacedDigit()
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
             }
         }
         .font(KiwiMangoFont.mono(10))
@@ -71,16 +71,14 @@ struct TopSystemBar: View {
         .onReceive(ticker) { _ in now = Date() }
     }
 
+    // Realna ikona apki zamiast białego kwadratu z "K" — NSApp zawsze coś zwraca
+    // (AppIcon.icns z bundle'a, generyczna gdy brak).
     private var logoMark: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.kiwiMangoAccent)
-                .frame(width: 22, height: 22)
-                .shadow(color: Color.kiwiMangoAccent.opacity(0.25), radius: 6)
-            Text("K")
-                .font(KiwiMangoFont.mono(10, weight: .black))
-                .foregroundStyle(Color.kiwiMangoAccentText)
-        }
+        Image(nsImage: NSApp.applicationIconImage)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 20, height: 20)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
     }
 
     private var ollamaIcon: some View {
@@ -93,7 +91,7 @@ struct TopSystemBar: View {
                 Image(systemName: "circle.hexagongrid.fill")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .foregroundStyle(Color.kiwiMangoAccent)
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
             }
         }
     }

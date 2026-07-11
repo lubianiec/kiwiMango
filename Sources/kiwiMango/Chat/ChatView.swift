@@ -60,7 +60,10 @@ struct ChatView: View {
                 .frame(minWidth: 380, minHeight: 420)
                 .safeAreaInset(edge: .bottom, spacing: 0) { composerArea }
         }
-        .kiwiMangoNoirBackground()
+        // ponytail: chat dociągnięty do Dashboardu (zadanie Pawła) — jeden
+        // płaski ton zamiast fioletowego noir shadera, żeby paleta była
+        // identyczna w całej apce (DesignSystem token, zero osobnych teł).
+        .background(Color.kiwiMangoBackground)
         .task { await chatState.loadModels() }
         .task { await chatState.refreshClaudeAvailability() }
         .onAppear {
@@ -105,12 +108,18 @@ struct ChatView: View {
 
     // MARK: - Top bar
 
+    // ponytail: bar dociągnięty do Dashboardu — bez odrębnego tła/linii pod
+    // spodem (płasko), tytuł jako eyebrow + light zamiast bold mono.
     private var topBar: some View {
-        HStack {
-            Text("Chat: \(currentTitle)")
-                .font(KiwiMangoFont.mono(13, weight: .bold))
-                .foregroundStyle(Color.kiwiMangoTextPrimary)
-                .lineLimit(1)
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("CHAT")
+                    .kiwiSectionLabel()
+                Text(currentTitle)
+                    .font(.system(size: 17, weight: .light))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary)
+                    .lineLimit(1)
+            }
 
             Spacer()
 
@@ -122,18 +131,15 @@ struct ChatView: View {
             } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
             }
             .buttonStyle(.plain)
             .help("Wyczyść rozmowę")
             .disabled(chatState.messages.isEmpty)
         }
-        .padding(.horizontal, 16)
-        .frame(height: 44)
-        .background(Color.kiwiMangoChrome)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.kiwiMangoAccent.opacity(0.15)).frame(height: 1)
-        }
+        .padding(.horizontal, 28)
+        .padding(.top, 20)
+        .padding(.bottom, 14)
     }
 
     private var currentTitle: String {
@@ -254,14 +260,11 @@ struct ChatView: View {
                 Text((chatState.activePersona?.name ?? "kiwiMango").uppercased())
                 Text("▾")
             }
-            .font(KiwiMangoFont.mono(11, weight: .medium))
-            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
-            .padding(.horizontal, 10)
+            .font(.system(size: 10.5, weight: .semibold))
+            .tracking(1.2)
+            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+            .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .overlay(
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-            )
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -338,16 +341,16 @@ struct ChatView: View {
             }
         } label: {
             HStack(spacing: 4) {
-                Text("⊕ \(displayName(for: chatState.selectedModel))")
-                Text(isHermesModelSelected ? "[Hermes]" : (selectedModelIsCloud ? "[Cloud]" : "[Local]"))
-                    .foregroundStyle(Color.kiwiMangoPurple)
+                Text(displayName(for: chatState.selectedModel).uppercased())
+                Text(isHermesModelSelected ? "· HERMES" : (selectedModelIsCloud ? "· CLOUD" : "· LOCAL"))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
                 Text("▾")
             }
-            .font(KiwiMangoFont.mono(11, weight: .medium))
-            .foregroundStyle(Color.kiwiMangoAccent)
-            .padding(.horizontal, 10)
+            .font(.system(size: 10.5, weight: .semibold))
+            .tracking(1.2)
+            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+            .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .neonBorder(Color.kiwiMangoAccent, cornerRadius: 4)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
@@ -447,7 +450,7 @@ struct ChatView: View {
                     Text("SZUKAM W SIECI…")
                         .font(KiwiMangoFont.mono(10, weight: .semibold))
                         .tracking(1)
-                        .foregroundStyle(Color.kiwiMangoAccent)
+                        .foregroundStyle(Color.kiwiMangoTextPrimary)
                         .padding(.horizontal, 16)
                 }
                 if let webSearchWarning = chatState.webSearchWarning {
@@ -458,15 +461,20 @@ struct ChatView: View {
                 }
                 composer
                     .padding(.horizontal, 16)
-                    .padding(.top, 6)
-                    .padding(.bottom, 10)
+                    .padding(.top, 14)
+                    .padding(.bottom, 20)
             }
         }
         // F26.13: same cap-then-center trick as the transcript, so the composer
         // stays visually aligned under it instead of stretching wider.
         .frame(maxWidth: 760)
         .frame(maxWidth: .infinity)
-        .background(Color.clear)
+        .background(Color.kiwiMangoBackground)
+        // ponytail: cienka linia zamiast pełnej ramki wokół composera —
+        // ten sam separator co reszta apki (StatusBarView, karty), płasko.
+        .overlay(alignment: .top) {
+            Rectangle().fill(Color.kiwiMangoTextPrimary.opacity(0.10)).frame(height: 1)
+        }
         .onChange(of: chatState.draft) { snippetPopoverDismissed = false }
     }
 
@@ -491,17 +499,14 @@ struct ChatView: View {
             Button {
                 loop.stop()
             } label: {
-                Text("[■ STOP]")
-                    .font(KiwiMangoFont.mono(12, weight: .bold))
+                Text("■ STOP")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Color.kiwiMangoDanger)
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color.kiwiMangoComposerBg)
-        .neonBorder(Color.kiwiMangoPurple, cornerRadius: 4, active: true)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
     private func voiceStateLabel(_ state: VoiceLoopController.State) -> String {
@@ -515,8 +520,8 @@ struct ChatView: View {
 
     private func voiceStateColor(_ state: VoiceLoopController.State) -> Color {
         switch state {
-        case .listening: return Color.kiwiMangoAccent
-        case .speaking: return Color.kiwiMangoPurple
+        case .listening: return Color.kiwiMangoTextPrimary
+        case .speaking: return Color.kiwiMangoTextPrimary
         default: return Color.kiwiMangoTextPrimary.opacity(0.7)
         }
     }
@@ -539,7 +544,7 @@ struct ChatView: View {
                     HStack {
                         Text("/\(snippet.trigger)")
                             .font(KiwiMangoFont.mono(11, weight: .medium))
-                            .foregroundStyle(Color.kiwiMangoAccent)
+                            .foregroundStyle(Color.kiwiMangoTextPrimary)
                         Text(snippet.content)
                             .font(KiwiMangoFont.sans(11))
                             .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.6))
@@ -587,7 +592,7 @@ struct ChatView: View {
             // bloom tylko na kropce hero Dashboardu, nigdzie indziej).
             Text(">>")
                 .font(KiwiMangoFont.mono(12.5, weight: .bold))
-                .foregroundStyle(Color.kiwiMangoAccent.opacity(0.7))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.7))
 
             ZStack(alignment: .leading) {
                 if state.draft.isEmpty {
@@ -635,12 +640,9 @@ struct ChatView: View {
 
             sendOrStopButton
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
-        .padding(.vertical, 8)
-        .background(Color.kiwiMangoComposerBg)
-        .neonBorder(Color.kiwiMangoAccent, cornerRadius: 4, active: composerFocused)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        .padding(.leading, 4)
+        .padding(.trailing, 4)
+        .padding(.vertical, 4)
     }
 
     private var sendOrStopButton: some View {
@@ -651,18 +653,20 @@ struct ChatView: View {
                 submit()
             }
         } label: {
-            Text(chatState.isStreaming ? "[STOP]" : "[SEND]")
-                .font(KiwiMangoFont.mono(11, weight: .bold))
-                .foregroundStyle(Color.kiwiMangoAccentText)
-                .frame(height: 30)
-                .padding(.horizontal, 10)
-                .background(Color.kiwiMangoAccent, in: RoundedRectangle(cornerRadius: 4))
-                .contentShape(Rectangle())
+            ZStack {
+                Circle()
+                    .fill(chatState.isStreaming ? Color.kiwiMangoDanger : Color.kiwiMangoTextPrimary)
+                    .frame(width: 34, height: 34)
+                Image(systemName: chatState.isStreaming ? "xmark" : "paperplane.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.kiwiMangoAccentText)
+            }
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!chatState.isStreaming && !canSend)
-        .opacity((!chatState.isStreaming && !canSend) ? 0.4 : 1)
-        .shadow(color: Color.kiwiMangoAccent.opacity(sendButtonHovered ? 0.7 : 0), radius: sendButtonHovered ? 10 : 0)
+        .opacity((!chatState.isStreaming && !canSend) ? 0.45 : 1)
+        .neonGlow(Color.kiwiMangoTextPrimary, intensity: sendButtonHovered ? 1 : 0)
         .onHover { sendButtonHovered = $0 }
         .animation(.easeInOut(duration: 0.15), value: sendButtonHovered)
         .help(chatState.isStreaming ? "Zatrzymaj" : "Wyślij")
@@ -712,7 +716,7 @@ struct ChatView: View {
                 .symbolEffect(.pulse, isActive: speech.isRecording)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(speech.isRecording ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
+        .foregroundStyle(speech.isRecording ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.72))
         .help(speech.isRecording ? "Zatrzymaj dyktowanie" : "Dyktuj wiadomość")
         .onChange(of: speech.transcript) {
             let separator = draftBeforeDictation.isEmpty ? "" : " "
@@ -741,7 +745,7 @@ struct ChatView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(ttsEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
+        .foregroundStyle(ttsEnabled ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.72))
         .help(ttsEnabled ? "Wyłącz czytanie odpowiedzi" : "Czytaj odpowiedzi na głos")
     }
 
@@ -769,8 +773,9 @@ struct ChatView: View {
             }
             webSearchEnabled.toggle()
         } label: {
-            Text("[WEB]")
-                .font(KiwiMangoFont.mono(11, weight: .bold))
+            Text("WEB")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(1)
                 .frame(height: 26)
                 .padding(.horizontal, 4)
                 .contentShape(Rectangle())
@@ -780,7 +785,7 @@ struct ChatView: View {
         .foregroundStyle(
             (isClaudeModelSelected || isHermesModelSelected)
                 ? Color.kiwiMangoTextPrimary.opacity(0.3)
-                : (webSearchEnabled ? Color.kiwiMangoAccent : Color.kiwiMangoTextPrimary.opacity(0.72))
+                : (webSearchEnabled ? Color.kiwiMangoTextPrimary : Color.kiwiMangoTextPrimary.opacity(0.72))
         )
         .help(
             (isClaudeModelSelected || isHermesModelSelected)
@@ -793,12 +798,12 @@ struct ChatView: View {
         Button {
             voiceLoop?.start()
         } label: {
-            Text("[ROZMOWA]")
-                .font(KiwiMangoFont.mono(10.5, weight: .bold))
-                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.7))
+            Text("ROZMOWA")
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(1)
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
-                .neonBorder(Color.kiwiMangoPurple, cornerRadius: 3)
         }
         .buttonStyle(.plain)
         .help("Tryb rozmowy głosowej — mówisz, kiwiMango odpowiada głosem")
@@ -965,20 +970,15 @@ private struct MessageBubble: View {
                                 .textSelection(.enabled)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(Color.kiwiMangoPurple.opacity(0.22), in: UserBubbleShape())
-                                .overlay(
-                                    UserBubbleShape()
-                                        .stroke(Color.kiwiMangoPurple.opacity(0.7), lineWidth: 1)
-                                )
-                                .shadow(color: Color.kiwiMangoPurple.opacity(0.3), radius: 8)
-                                .modifier(HoloTilt(isActive: !isStreamingReply))
+                                .background(Color.kiwiMangoUserBubble, in: UserBubbleShape())
                         } else {
                             HStack(alignment: .bottom, spacing: 0) {
                                 MarkdownText(content: renderedText)
+                                    .foregroundStyle(Color.kiwiMangoAssistantText)
                                 if isStreamingReply {
                                     Text("▌")
                                         .font(KiwiMangoFont.mono(13))
-                                        .foregroundStyle(Color.kiwiMangoAccent)
+                                        .foregroundStyle(Color.kiwiMangoTextPrimary)
                                         .opacity(cursorVisible ? 1 : 0)
                                         .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: cursorVisible)
                                         .onAppear { cursorVisible = false }
@@ -986,13 +986,7 @@ private struct MessageBubble: View {
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(Color.kiwiMangoAccent.opacity(0.16), in: AssistantBubbleShape())
-                            .overlay(
-                                AssistantBubbleShape()
-                                    .stroke(Color.kiwiMangoAccent.opacity(0.6), lineWidth: 1)
-                            )
-                            .shadow(color: Color.kiwiMangoAccent.opacity(0.18), radius: 8)
-                            .modifier(HoloTilt(isActive: !isStreamingReply))
+                            .background(Color.kiwiMangoAssistantBubble, in: AssistantBubbleShape())
                         }
                     }
                 }
@@ -1028,7 +1022,7 @@ private struct MessageBubble: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("REASONING")
                 .font(KiwiMangoFont.mono(10, weight: .medium))
-                .foregroundStyle(Color.kiwiMangoPurple.opacity(0.8))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
             Text(reasoning)
                 .font(KiwiMangoFont.mono(11))
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.75))
@@ -1036,11 +1030,11 @@ private struct MessageBubble: View {
         }
         .padding(10)
         .frame(maxWidth: 420, alignment: .leading)
-        .background(Color(hex: "050507"))
+        .background(Color.kiwiMangoPanelDeep)
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(Color.kiwiMangoPurple.opacity(0.3), lineWidth: 1)
+                .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.3), lineWidth: 1)
         )
     }
 
@@ -1064,7 +1058,7 @@ private struct MessageBubble: View {
                     Text("MYŚLI…")
                 }
                 .font(KiwiMangoFont.mono(10, weight: .medium))
-                .foregroundStyle(Color.kiwiMangoPurple.opacity(0.8))
+                .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -1078,11 +1072,11 @@ private struct MessageBubble: View {
         }
         .padding(10)
         .frame(maxWidth: 420, alignment: .leading)
-        .background(Color(hex: "050507"))
+        .background(Color.kiwiMangoPanelDeep)
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(Color.kiwiMangoPurple.opacity(0.3), lineWidth: 1)
+                .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.3), lineWidth: 1)
         )
     }
 
@@ -1094,7 +1088,7 @@ private struct MessageBubble: View {
             ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                 Text(line)
                     .font(KiwiMangoFont.mono(11))
-                    .foregroundStyle(Color.kiwiMangoAccent.opacity(0.75))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.75))
             }
         }
         .frame(maxWidth: 420, alignment: .leading)
@@ -1112,14 +1106,14 @@ private struct MessageBubble: View {
             HStack {
                 Text(fileLabel ?? "DIFF")
                     .font(KiwiMangoFont.mono(10, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoPurple.opacity(0.8))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
                 Spacer()
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
 
             Rectangle()
-                .fill(Color.kiwiMangoAccent.opacity(0.15))
+                .fill(Color.kiwiMangoTextPrimary.opacity(0.15))
                 .frame(height: 1)
 
             VStack(alignment: .leading, spacing: 1) {
@@ -1130,11 +1124,11 @@ private struct MessageBubble: View {
             .padding(10)
         }
         .frame(maxWidth: 420, alignment: .leading)
-        .background(Color(hex: "050507"))
+        .background(Color.kiwiMangoPanelDeep)
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(Color.kiwiMangoAccent.opacity(0.3), lineWidth: 1)
+                .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.3), lineWidth: 1)
         )
     }
 
@@ -1144,17 +1138,17 @@ private struct MessageBubble: View {
         if line.hasPrefix("--- ") || line.hasPrefix("+++ ") {
             Text(line).font(font).foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.5))
         } else if line.hasPrefix("@@") {
-            Text(line).font(font).foregroundStyle(Color.kiwiMangoPurple.opacity(0.8))
+            Text(line).font(font).foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.8))
         } else if line.hasPrefix("+") {
-            Text(line).font(font).foregroundStyle(Color.kiwiMangoAccent)
+            Text(line).font(font).foregroundStyle(Color.kiwiMangoTextPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.kiwiMangoAccent.opacity(0.08))
+                .background(Color.kiwiMangoTextPrimary.opacity(0.08))
         } else if line.hasPrefix("-") {
             Text(line).font(font).foregroundStyle(Color.kiwiMangoDanger)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.kiwiMangoDanger.opacity(0.08))
         } else {
-            Text(line.isEmpty ? " " : line).font(font).foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+            Text(line.isEmpty ? " " : line).font(font).foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
         }
     }
 
@@ -1168,7 +1162,7 @@ private struct MessageBubble: View {
             Text("subagenci pracują w tle… [\(count)]")
         }
         .font(KiwiMangoFont.mono(10.5, weight: .medium))
-        .foregroundStyle(Color.kiwiMangoPurple.opacity(0.85))
+        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.85))
     }
 
     private func gatewayApprovalBlock(_ approval: PendingApproval) -> some View {
@@ -1186,7 +1180,7 @@ private struct MessageBubble: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Komenda")
                         .font(KiwiMangoFont.mono(9, weight: .medium))
-                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                        .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                         .textCase(.uppercase)
                     Text(command)
                         .font(KiwiMangoFont.mono(12))
@@ -1198,7 +1192,7 @@ private struct MessageBubble: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Dlaczego to oznaczono")
                     .font(KiwiMangoFont.mono(9, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                     .textCase(.uppercase)
                 Text(approval.description?.isEmpty == false
                     ? approval.description!
@@ -1210,7 +1204,7 @@ private struct MessageBubble: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Co może pójść źle")
                     .font(KiwiMangoFont.mono(9, weight: .medium))
-                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+                    .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.65))
                     .textCase(.uppercase)
                 Text(potentialRisk(for: approval))
                     .font(KiwiMangoFont.sans(12))
@@ -1220,7 +1214,7 @@ private struct MessageBubble: View {
             HStack(spacing: 12) {
                 Button("ZATWIERDŹ RAZ") { chatState.respondApproval(approve: true) }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color.kiwiMangoAccent)
+                    .tint(Color.kiwiMangoTextPrimary.opacity(0.35))
                 Button("ODRZUĆ") { chatState.respondApproval(approve: false) }
                     .buttonStyle(.borderedProminent)
                     .tint(Color.kiwiMangoDanger)
@@ -1294,7 +1288,7 @@ private struct MessageBubble: View {
                     ForEach(clarify.choices, id: \.self) { choice in
                         Button(choice) { chatState.respondClarify(answer: choice) }
                             .buttonStyle(.plain)
-                            .foregroundStyle(Color.kiwiMangoAccent)
+                            .foregroundStyle(Color.kiwiMangoTextPrimary)
                     }
                 }
                 .font(KiwiMangoFont.mono(11, weight: .bold))
@@ -1302,11 +1296,11 @@ private struct MessageBubble: View {
         }
         .padding(10)
         .frame(maxWidth: 420, alignment: .leading)
-        .background(Color.kiwiMangoPurple.opacity(0.08))
+        .background(Color.kiwiMangoTextPrimary.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .strokeBorder(Color.kiwiMangoPurple.opacity(0.4), lineWidth: 1)
+                .strokeBorder(Color.kiwiMangoTextPrimary.opacity(0.4), lineWidth: 1)
         )
     }
 
@@ -1373,7 +1367,7 @@ private struct ClarifyTextField: View {
                 .onSubmit(submit)
             Button("WYŚLIJ", action: submit)
                 .buttonStyle(.plain)
-                .foregroundStyle(Color.kiwiMangoAccent)
+                .foregroundStyle(Color.kiwiMangoTextPrimary)
                 .font(KiwiMangoFont.mono(11, weight: .bold))
                 .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
@@ -1384,53 +1378,6 @@ private struct ClarifyTextField: View {
         guard !trimmed.isEmpty else { return }
         onSubmit(trimmed)
         text = ""
-    }
-}
-
-// MARK: - HoloTilt (F9.5)
-
-/// Subtle hologram-style tilt following the cursor — max ±7°, only on the
-/// bubble under the mouse. `isActive` is `false` while a reply is still
-/// streaming/growing, so the tilt transform doesn't fight the relayout.
-private struct HoloTilt: ViewModifier {
-    let isActive: Bool
-
-    @State private var hover: CGPoint?
-    @State private var size: CGSize = .zero
-
-    func body(content: Content) -> some View {
-        content
-            .onGeometryChange(for: CGSize.self, of: { $0.size }) { size = $0 }
-            .rotation3DEffect(
-                .degrees(tiltX),
-                axis: (x: 0, y: 1, z: 0),
-                anchor: .center,
-                perspective: 0.3
-            )
-            .rotation3DEffect(
-                .degrees(tiltY),
-                axis: (x: 1, y: 0, z: 0),
-                anchor: .center,
-                perspective: 0.3
-            )
-            .animation(.interactiveSpring(response: 0.25), value: hover)
-            .onContinuousHover { phase in
-                guard isActive else { hover = nil; return }
-                switch phase {
-                case .active(let location): hover = location
-                case .ended: hover = nil
-                }
-            }
-    }
-
-    private var tiltX: Double {
-        guard let hover, size.width > 0 else { return 0 }
-        return (hover.x / size.width - 0.5) * 7
-    }
-
-    private var tiltY: Double {
-        guard let hover, size.height > 0 else { return 0 }
-        return -(hover.y / size.height - 0.5) * 5
     }
 }
 
