@@ -1,19 +1,5 @@
 import SwiftUI
 
-// MARK: - Live shaders (Fala 9)
-
-/// `swift build` (what the Makefile drives) doesn't reliably compile `.metal`
-/// into SwiftPM's own `default.metallib` the way Xcode does — verified
-/// empirically (see PLAN.md F9.0). `MetalCompilerPlugin` compiles our shaders
-/// into `debug.metallib` instead, which `ShaderLibrary.bundle(.module)` can't
-/// find (it only ever looks for `default.metallib`) — load it by URL instead.
-let kiwiShaders: ShaderLibrary = {
-    guard let url = Bundle.module.url(forResource: "debug", withExtension: "metallib") else {
-        fatalError("[KiwiMango] debug.metallib not found in Bundle.module — check MetalCompilerPlugin output")
-    }
-    return ShaderLibrary(url: url)
-}()
-
 // MARK: - Color(hex:)
 
 extension Color {
@@ -33,64 +19,82 @@ extension Color {
     }
 }
 
-// MARK: - KiwiMango palette (v3 — warm dark, unified)
-// Based on Paweł's reference screenshot: deep charcoal surfaces, warm orange
-// accents, brown assistant bubbles, grey user bubbles, round send button.
+// MARK: - Theme (PLAN-V2 §2)
 
-extension Color {
-    // F4: paleta rozjaśniona z czerni do ciepłego grafitu (referencja Ali Sayed).
-    /// Window-level background (warm graphite).
-    static let kiwiMangoBackground = Color(hex: "2C2C2E")
-    /// Top bar and elevated chrome (slightly lighter than background).
-    static let kiwiMangoChrome = Color(hex: "29292B")
-    /// Sidebar / drawer surface.
-    static let kiwiMangoSurface = Color(hex: "313134")
-    /// Composer and input fields.
-    static let kiwiMangoComposerBg = Color(hex: "323235")
-    /// Primary accent / buttons / send — warm orange.
-    static let kiwiMangoAccent = Color(hex: "F2994A")
-    /// Text drawn on top of the accent color.
-    static let kiwiMangoAccentText = Color(hex: "FFFFFF")
-    // F4: kolejny amber usunięty — plan chce JEDEN bursztynowy akcent w całej
-    // apce ("aktywny element nawigacji, fokus, kursor czatu"), nie dwa różne
-    // odcienie. Nazwa zostaje (38 call site'ów poza scope tej fali), wartość
-    // wskazuje teraz na ten sam token co kiwiMangoAccent.
-    static let kiwiMangoPurple = kiwiMangoAccent
-    /// Primary text (soft white).
-    static let kiwiMangoTextPrimary = Color(hex: "F2F2F7")
-    /// Destructive/coral accent.
-    static let kiwiMangoDanger = Color(hex: "FF6A5C")
-    /// Deep recessed panel for popovers / modals.
-    static let kiwiMangoPanelDeep = Color(hex: "272729")
-    /// Warm amber for numeric literals in syntax highlighter.
-    static let kiwiMangoSyntaxNumber = Color(hex: "FCA311")
-
-    // MARK: - Chat bubble colors (F3 redesign mono: monochrom, kolor tylko w Dashboardzie)
-    /// User message bubble background — lighter graphite tone (hover tone from tokens).
-    static let kiwiMangoUserBubble = Color(hex: "3A3A3D")
-    /// Assistant message bubble background — same tone as a Dashboard card, mono.
-    static let kiwiMangoAssistantBubble = Color(hex: "313134")
-    /// Assistant bubble text color.
-    static let kiwiMangoAssistantText = Color(hex: "F2F2F7")
-    /// Subtle border used on inactive inputs / cards.
-    static let kiwiMangoBorder = Color(hex: "4A4A50")
-    /// Sidebar surface — deeper than window/card background (redesign mono F1).
-    /// No divider line at the seam; the tone jump alone reads as separation.
-    static let kiwiMangoSidebarDeep = Color(hex: "232325")
+enum Theme: String, CaseIterable {
+    case dark, light
 }
 
-// MARK: - Section label (redesign mono F1)
+/// Single source of truth for the active theme. Read from anywhere (view body,
+/// Canvas draw closure, etc.) via `Color.ink`/`Color.bg`/... below — each of
+/// those computed vars reads `ThemeStore.shared.mode`, and since `ThemeStore`
+/// is `@Observable`, SwiftUI's body-access tracking picks up the dependency
+/// even through the indirection, so views repaint on toggle without needing
+/// `@Environment` plumbing everywhere.
+@Observable
+final class ThemeStore {
+    static let shared = ThemeStore()
 
-/// The recurring "CONTROL PANEL" / "MODEL" / "SESJE DZIŚ" look from the mono
-/// reference: tiny uppercase caps, wide tracking, muted. One modifier so every
-/// section/eyebrow label across the app matches exactly.
+    var mode: Theme {
+        didSet { UserDefaults.standard.set(mode.rawValue, forKey: "theme") }
+    }
+
+    private init() {
+        let raw = UserDefaults.standard.string(forKey: "theme") ?? ""
+        mode = Theme(rawValue: raw) ?? .dark
+    }
+
+    func toggle() {
+        mode = (mode == .dark) ? .light : .dark
+    }
+}
+
+// MARK: - Palette tokens (PLAN-V2 §2 — the only source of color in the app)
+
+extension Color {
+    private static var isDark: Bool { ThemeStore.shared.mode == .dark }
+
+    static var ink: Color { isDark ? Color(hex: "F2F2F7") : Color(hex: "2E2E34") }
+    static var bg: Color { isDark ? Color(hex: "2C2C2E") : Color(hex: "D7D7DB") }
+    static var chrome: Color { isDark ? Color(hex: "29292B") : Color(hex: "CDCDD2") }
+    static var panel: Color { isDark ? Color(hex: "232325") : Color(hex: "CBCBD0") }
+    static var panel2: Color { isDark ? Color(hex: "272729") : Color(hex: "D0D0D4") }
+    static var popbg: Color { isDark ? Color(hex: "38383B") : Color(hex: "E1E1E5") }
+    static var compbg: Color { isDark ? Color(hex: "323235") : Color(hex: "DDDDE1") }
+    static var bubble: Color { isDark ? Color(hex: "3A3A3D") : Color(hex: "C5C5CB") }
+    static var txt: Color { isDark ? Color(hex: "F2F2F7") : Color(hex: "2E2E34") }
+    static var accent: Color { isDark ? Color(hex: "F2994A") : Color(hex: "C97620") }
+    static var green: Color { isDark ? Color(hex: "7FB77E") : Color(hex: "4F8B4E") }
+    static var blue: Color { isDark ? Color(hex: "7EA6C9") : Color(hex: "4E7BA0") }
+    static var teal: Color { isDark ? Color(hex: "6FBFB0") : Color(hex: "3F8D7F") }
+    static var rose: Color { isDark ? Color(hex: "C98A9E") : Color(hex: "A55E77") }
+    static var danger: Color { isDark ? Color(hex: "FF6A5C") : Color(hex: "C74836") }
+
+    /// P-core bars in the CPU hardware panel — one fixed hex, not themed (PLAN-V2 §2/§7.4).
+    static let coreP = Color(hex: "8B7EC9")
+    /// Inline code color — one fixed hex, not themed (PLAN-V2 §2/§7.4).
+    static let code = Color(hex: "FCA311")
+
+    // MARK: - v1 aliases (kept so Chat/SyntaxHighlighter.swift and Chat/MarkdownText.swift
+    // keep compiling untouched this wave; ponytail: rename call sites when those files
+    // are next touched instead of doing it as a drive-by here).
+    static var kiwiMangoTextPrimary: Color { txt }
+    static var kiwiMangoSyntaxNumber: Color { code }
+    static var kiwiMangoPanelDeep: Color { panel2 }
+}
+
+// MARK: - Section label
+
+/// The recurring "CONTROL PANEL" / "MODEL" / "SESJE DZIŚ" look: tiny uppercase
+/// caps, wide tracking, muted. One modifier so every section/eyebrow label
+/// across the app matches exactly.
 struct KiwiSectionLabelStyle: ViewModifier {
     func body(content: Content) -> some View {
         content
             .font(KiwiMangoFont.mono(10.5, weight: .semibold))
             .tracking(1.2)
             .textCase(.uppercase)
-            .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.55))
+            .foregroundStyle(Color.txt.opacity(0.55))
     }
 }
 
@@ -107,128 +111,24 @@ enum KiwiMangoFont {
         .system(size: size, weight: weight, design: .monospaced)
     }
 
-    /// Redirected to monospaced — the v2 terminal look uses mono everywhere,
-    /// including message content. Kept as a separate name (rather than replacing
-    /// every `.sans` call site) so a future non-mono body font is a one-line change.
+    /// SF Pro (system default) — body font per PLAN-V2 §1. Kept as a separate
+    /// name (rather than inlining `.system`) so call sites read intent.
     static func sans(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .monospaced)
-    }
-}
-
-// MARK: - Noir backdrop
-
-extension View {
-    /// Neon Noir, now alive (F9.1): instead of a static gradient, a Metal shader
-    /// glow in the same top-left spot that breathes faster while a model streams
-    /// and settles to a calm static frame at idle. Nakładać na NAJBARDZIEJ
-    /// zewnętrzny kontener widoku; wewnętrzne tła muszą być .clear, żeby
-    /// prześwitywało.
-    func kiwiMangoNoirBackground() -> some View {
-        background(BreathingBackdrop())
-    }
-}
-
-/// Drives `breathingGlow` — a `TimelineView` that only ticks (30fps cap) while
-/// a reply is streaming AND the window is active; idle renders one static
-/// frame and costs nothing (PLAN.md F9 iron rule #1).
-private struct BreathingBackdrop: View {
-    @Environment(ChatState.self) private var chatState
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var intensity: CGFloat = 0.45
-
-    private var isPaused: Bool {
-        !chatState.isStreaming || scenePhase != .active
-    }
-
-    var body: some View {
-        GeometryReader { proxy in
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: isPaused)) { timeline in
-                // Faster model → faster pulse, capped so it never turns into a strobe.
-                let speed = 1.2 + min(chatState.liveTokRate / 40.0, 2.0)
-                let t = timeline.date.timeIntervalSinceReferenceDate * speed
-                Rectangle()
-                    .fill(Color.kiwiMangoBackground)
-                    .colorEffect(kiwiShaders.breathingGlow(.float2(proxy.size), .float(t), .float(intensity)))
-            }
-        }
-        .ignoresSafeArea()
-        .onChange(of: chatState.isStreaming) { _, isStreaming in
-            withAnimation(.easeInOut(duration: 0.8)) {
-                intensity = isStreaming ? 1.2 : 0.45
-            }
-        }
-    }
-}
-
-// MARK: - Real bloom (F9.2)
-
-extension View {
-    /// A real sampled bloom, not a shadow trick — use ONLY on small, non-scrolling
-    /// elements (logo, status dots, composer prefix). `layerEffect` re-samples a
-    /// blurred version of the layer every frame it's asked to; on a `LazyVStack`
-    /// row that means bloom-on-scroll jank, so never put this in the transcript.
-    func realBloom(strength: CGFloat = 1.2, radius: CGFloat = 3) -> some View {
-        layerEffect(
-            kiwiShaders.neonBloom(.float(strength), .float(radius)),
-            maxSampleOffset: CGSize(width: radius * 2, height: radius * 2)
-        )
-    }
-}
-
-// MARK: - Materialize-in (F9.3)
-
-/// One-shot "teleport" for a freshly appended chat bubble — a horizontal wave
-/// distortion that settles over 0.35s. `isActive` must be `false` for loaded
-/// history / scroll-recycled rows (see `ChatState.lastAnimatedMessageID`);
-/// when inactive this renders as a plain, undistorted, fully-opaque view.
-private struct MaterializeIn: ViewModifier {
-    let isActive: Bool
-    var onFinished: () -> Void = {}
-
-    @State private var progress: CGFloat = 0
-    @State private var size: CGSize = .zero
-
-    func body(content: Content) -> some View {
-        content
-            .background(
-                GeometryReader { proxy in
-                    Color.clear.onAppear { size = proxy.size }
-                }
-            )
-            .distortionEffect(
-                kiwiShaders.materialize(.float2(size), .float(progress)),
-                maxSampleOffset: CGSize(width: 40, height: 0)
-            )
-            .opacity(0.15 + 0.85 * progress)
-            .onAppear {
-                guard isActive else {
-                    progress = 1
-                    return
-                }
-                withAnimation(.easeOut(duration: 0.35)) { progress = 1 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onFinished() }
-            }
-    }
-}
-
-extension View {
-    func materializeIn(isActive: Bool, onFinished: @escaping () -> Void = {}) -> some View {
-        modifier(MaterializeIn(isActive: isActive, onFinished: onFinished))
+        .system(size: size, weight: weight)
     }
 }
 
 // MARK: - Warm dark effects
 
 extension View {
-    /// Soft, warm shadow behind small elements (send button, active dots). Keeps the
-    /// same call sites as the old neonGlow but matches the screenshot's subtle depth.
+    /// Soft glow behind small elements (status dots, active nav item).
     func neonGlow(_ color: Color, intensity: CGFloat = 1) -> some View {
         self
             .shadow(color: color.opacity(0.35 * intensity), radius: 4, x: 0, y: 2)
     }
 }
 
-/// Subtle border matching the warm dark theme. Active variant uses full accent color.
+/// Subtle border matching the theme. Active variant uses full accent color.
 struct NeonBorder: ViewModifier {
     var color: Color
     var cornerRadius: CGFloat = 4
@@ -253,7 +153,7 @@ extension View {
 
 // MARK: - Hover glow
 
-/// Hover feedback for sidebar action buttons: border brightens to accent + soft shadow.
+/// Hover feedback for interactive elements: border brightens to accent + soft shadow.
 struct HoverGlow: View {
     let active: Bool
     let glowColor: Color
@@ -269,9 +169,9 @@ struct HoverGlow: View {
     }
 }
 
-/// Generalized chamfered-corner panel shape — pick which corners get cut and by
-/// how much. `UserBubbleShape`/`AssistantBubbleShape` predate this and stay as-is
-/// (single fixed corner each); this is for new panels that need it configurable.
+// MARK: - Chat bubble shapes (reused by ConversationView, fala 2/3)
+
+/// Generalized chamfered-corner panel shape — pick which corners get cut and by how much.
 struct CutCornerShape: Shape {
     struct Corners: OptionSet {
         let rawValue: Int
@@ -305,10 +205,7 @@ struct CutCornerShape: Shape {
     }
 }
 
-// MARK: - Chat bubble shapes
-
 /// User bubble: tail notch cut into the bottom-right corner.
-/// Mirrors the mockup's `polygon(0 0,100% 0,100% 100%,14px 100%,0 calc(100% - 14px))`.
 struct UserBubbleShape: Shape {
     var tail: CGFloat = 14
 
@@ -325,7 +222,6 @@ struct UserBubbleShape: Shape {
 }
 
 /// Assistant bubble: tail notch cut into the top-left corner.
-/// Mirrors the mockup's `polygon(14px 0,100% 0,100% 100%,0 100%,0 14px)`.
 struct AssistantBubbleShape: Shape {
     var tail: CGFloat = 14
 
