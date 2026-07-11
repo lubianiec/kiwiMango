@@ -147,4 +147,57 @@ enum HermesStateReader {
         }
     }
 
+    // MARK: - Recent sessions ("01 AGENCI", PLAN-V2 §7.2 pt.3 / pułapka #15)
+    //
+    // The gateway (`HermesGatewayClient`) has no RPC that lists other agents'
+    // sessions — it only creates/resumes/drives kiwiMango's OWN chat session.
+    // Verified against every method in Chat/HermesGatewayClient.swift: no
+    // `session.list`. So the AGENCI section reads `state.db` directly instead
+    // — the same table `dailyTokenTotals`/`modelTokenTotals` already read,
+    // just at per-session grain instead of aggregated.
+
+    struct RecentSession: Identifiable, Sendable {
+        let id: String
+        let title: String?
+        let model: String?
+        let startedAt: Date
+        let endedAt: Date?
+        let inputTokens: Int
+        let outputTokens: Int
+        let toolCallCount: Int
+    }
+
+    /// Sessions started in the last `minutes` minutes, or still open
+    /// (`ended_at IS NULL`) regardless of age — newest first.
+    static func recentSessions(minutes: Int = 15) async throws -> [RecentSession] {
+        guard let dbQueue else { return [] }
+        let cutoff = Date().addingTimeInterval(-Double(minutes) * 60).timeIntervalSince1970
+        return try await dbQueue.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT id, title, model, started_at, ended_at, input_tokens, output_tokens, tool_call_count
+                    FROM sessions
+                    WHERE started_at >= ? OR ended_at IS NULL
+                    ORDER BY started_at DESC
+                    LIMIT 20
+                    """,
+                arguments: [cutoff]
+            ).map { row in
+                let startedAt: Double = row["started_at"] ?? 0
+                let endedAt: Double? = row["ended_at"]
+                return RecentSession(
+                    id: row["id"] ?? "",
+                    title: row["title"],
+                    model: row["model"],
+                    startedAt: Date(timeIntervalSince1970: startedAt),
+                    endedAt: endedAt.map { Date(timeIntervalSince1970: $0) },
+                    inputTokens: row["input_tokens"] ?? 0,
+                    outputTokens: row["output_tokens"] ?? 0,
+                    toolCallCount: row["tool_call_count"] ?? 0
+                )
+            }
+        }
+    }
+
 }

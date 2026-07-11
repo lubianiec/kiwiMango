@@ -169,6 +169,23 @@ struct HoverGlow: View {
     }
 }
 
+// MARK: - Compact number formatting (PLAN-V2 §7.2 — "48,2M" / "142k" style)
+
+/// Polish-locale compact token/count formatter shared by AgentsSection,
+/// CostsBlock — matches the reference mockup's `48,2M` / `142k` look.
+func formatCompactTokens(_ n: Int) -> String {
+    let value = Double(abs(n))
+    let sign = n < 0 ? "-" : ""
+    switch value {
+    case 1_000_000...:
+        return sign + String(format: "%.1fM", value / 1_000_000).replacingOccurrences(of: ".", with: ",")
+    case 1_000...:
+        return sign + String(format: "%.0fk", value / 1_000)
+    default:
+        return "\(n)"
+    }
+}
+
 // MARK: - Chat bubble shapes (reused by ConversationView, fala 2/3)
 
 /// Generalized chamfered-corner panel shape — pick which corners get cut and by how much.
