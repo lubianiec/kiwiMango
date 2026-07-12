@@ -1,0 +1,50 @@
+<svg viewBox="0 0 1400 360" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2C2C2E"/>
+      <stop offset="100%" stop-color="#1C1C1E"/>
+    </linearGradient>
+    <linearGradient id="amberGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#F2994A" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#F2994A" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#F2994A" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="glowSpot" cx="50%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#F2994A" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#F2994A" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1400" height="360" fill="url(#bg)"/>
+  <rect width="1400" height="360" fill="url(#glowSpot)"/>
+
+  <!-- hairline top/bottom, echoing the hardware strip -->
+  <rect x="0" y="0" width="1400" height="1" fill="#F2F2F7" opacity="0.08"/>
+  <rect x="0" y="359" width="1400" height="1" fill="#F2F2F7" opacity="0.08"/>
+
+  <!-- wordmark -->
+  <text x="700" y="168" text-anchor="middle" font-family="-apple-system, 'SF Pro Display', Helvetica, Arial, sans-serif" font-size="88" font-weight="300" fill="#F2F2F7" letter-spacing="1">kiwi<tspan fill="#F2994A" filter="url(#softGlow)">Mango</tspan></text>
+
+  <!-- tagline -->
+  <text x="700" y="212" text-anchor="middle" font-family="-apple-system, 'SF Pro Display', Helvetica, Arial, sans-serif" font-size="16.5" font-weight="600" letter-spacing="4" fill="#F2F2F7" opacity="0.45">DASHBOARD  ·  AGENT  ·  CHAT</text>
+
+  <!-- decorative sparkline, same silhouette language as HardwareStrip -->
+  <polyline points="120,300 160,290 200,296 240,270 280,282 320,255 360,268 400,240 440,252 480,225 520,238 560,210"
+            fill="none" stroke="#F2994A" stroke-width="2" opacity="0.55" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="840,238 880,224 920,246 960,214 1000,230 1040,200 1080,222 1120,196 1160,214 1200,190 1240,208 1280,182"
+            fill="none" stroke="#7EA6C9" stroke-width="2" opacity="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- amber center rule, like the active-nav underglow -->
+  <rect x="560" y="300" width="280" height="1.5" fill="url(#amberGlow)"/>
+
+  <!-- corner labels, matching the app's uppercase micro-type -->
+  <text x="60" y="322" font-family="-apple-system, 'SF Mono', Menlo, monospace" font-size="11" font-weight="600" letter-spacing="1.6" fill="#F2F2F7" opacity="0.3">macOS · SWIFTUI</text>
+  <text x="1340" y="322" text-anchor="end" font-family="-apple-system, 'SF Mono', Menlo, monospace" font-size="11" font-weight="600" letter-spacing="1.6" fill="#F2F2F7" opacity="0.3">GRAFIT + AMBER</text>
+</svg>
