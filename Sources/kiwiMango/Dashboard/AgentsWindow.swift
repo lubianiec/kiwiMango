@@ -88,7 +88,13 @@ final class AgentsMonitor {
 // build a real tree without inventing structure for the other 94%. Flat list
 // per project group instead. Revisit if Hermes starts populating it reliably.
 struct AgentsWindow: View {
-    let monitor: AgentsMonitor
+    // ponytail: owns its own poller instead of taking one from the Dashboard
+    // — this view now lives in its own WindowGroup scene (App.swift), and
+    // sharing @State across independent scenes isn't something SwiftUI
+    // supports cleanly. Two independent 4s pollers (this + the Dashboard
+    // status line's count) is simpler than plumbing a shared instance
+    // across scenes.
+    @State private var monitor = AgentsMonitor()
     @Environment(\.dismiss) private var dismiss
     @State private var expandedID: String?
 

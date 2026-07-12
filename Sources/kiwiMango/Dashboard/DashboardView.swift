@@ -86,7 +86,7 @@ private struct StatusLine: View {
     let store: DashboardStore
     let services: ServiceStatus
     let agents: AgentsMonitor
-    @State private var showAgents = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         HStack(spacing: 5) {
@@ -109,7 +109,7 @@ private struct StatusLine: View {
                 Text("· \(model)")
             }
 
-            QuickAction(title: "Agenci \(agents.activeCount)") { showAgents = true }
+            QuickAction(title: "Agenci \(agents.activeCount)") { openWindow(id: "agents") }
 
             QuickAction(title: "＋ agent") { page = .agent }
             QuickAction(title: "＋ chat") { page = .chat }
@@ -118,9 +118,6 @@ private struct StatusLine: View {
         .foregroundStyle(Color.ink.opacity(0.55))
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: false)
-        .sheet(isPresented: $showAgents) {
-            AgentsWindow(monitor: agents)
-        }
     }
 }
 

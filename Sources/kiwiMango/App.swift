@@ -15,6 +15,17 @@ struct KiwiMangoApp: App {
         }
         .defaultSize(width: 560, height: 700)
         .windowResizability(.contentSize)
+
+        // Real separate window for the Agenci list (opened via openWindow(id:
+        // "agents") from the Dashboard status line) — a `.sheet` here would be
+        // capped to the presenting window's 560pt width by AppKit regardless
+        // of `idealWidth` (verified 2026-07-12), so this needs its own scene
+        // to actually render bigger than the main window.
+        WindowGroup(id: "agents") {
+            AgentsWindow()
+        }
+        .defaultSize(width: 900, height: 700)
+        .windowResizability(.contentMinSize)
     }
 }
 
