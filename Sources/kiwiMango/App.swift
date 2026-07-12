@@ -11,9 +11,9 @@ struct KiwiMangoApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 560, minHeight: 640)
+                .frame(minWidth: 560, idealWidth: 720, minHeight: 640, idealHeight: 900)
         }
-        .defaultSize(width: 560, height: 700)
+        .defaultSize(width: 720, height: 900)
         .windowResizability(.contentSize)
 
         // Real separate window for the Agenci list (opened via openWindow(id:
@@ -26,6 +26,7 @@ struct KiwiMangoApp: App {
         }
         .defaultSize(width: 900, height: 700)
         .windowResizability(.contentMinSize)
+        .defaultLaunchBehavior(.suppressed)
     }
 }
 
