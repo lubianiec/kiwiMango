@@ -29,7 +29,7 @@ struct DashboardView: View {
             // ponytail: ContentView already pads horizontal/top/bottom around
             // every page (nav clearance) — Dashboard doesn't re-pad on top of that.
         }
-        .scrollIndicators(.automatic)
+        .scrollIndicators(.hidden)
         .onAppear {
             monitor.start()
             store.start()

@@ -148,6 +148,7 @@ struct AgentsWindow: View {
                         }
                     }
                 }
+                .scrollIndicators(.hidden)
             }
         }
         .padding(20)

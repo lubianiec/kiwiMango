@@ -124,6 +124,7 @@ struct ConversationView: View {
                 }
                 .padding(.vertical, 4)
             }
+            .scrollIndicators(.hidden)
             .overlay(alignment: .bottom) {
                 if session.autoscrollPaused {
                     scrollNote
