@@ -115,47 +115,85 @@ struct CostsBlock: View {
         return percent >= 0 ? "▲ \(percent)%" : "▼ \(-percent)%"
     }
 
-    // MARK: 7-day bars
+    // MARK: 7-day bars — full-width stacked input/output, day labels + peak value
 
     private var sevenDayBars: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Ostatnie 7 dni").font(KiwiMangoFont.sans(8.5, weight: .semibold)).tracking(1.2)
-                .textCase(.uppercase).foregroundStyle(Color.ink.opacity(0.45))
+            HStack(spacing: 4) {
+                Text("Ostatnie 7 dni").font(KiwiMangoFont.sans(8.5, weight: .semibold)).tracking(1.2)
+                    .textCase(.uppercase).foregroundStyle(Color.ink.opacity(0.45))
+                Text("· wejście ↓ wyjście ↑").font(KiwiMangoFont.sans(7.5)).foregroundStyle(Color.ink.opacity(0.3))
+            }
             let days = store.last7Days
-            HStack(alignment: .bottom, spacing: 4) {
-                if days.isEmpty {
-                    Text("brak danych").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.45))
-                } else {
-                    let maxTotal = max(days.map(\.total).max() ?? 1, 1)
-                    ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                        let isLast = index == days.count - 1
-                        RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.accent.opacity(isLast ? 1 : 0.65))
-                            .frame(width: 5, height: max(2, CGFloat(day.total) / CGFloat(maxTotal) * 56))
+            if days.isEmpty {
+                Text("brak danych").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.45))
+            } else {
+                let maxTotal = max(days.map(\.total).max() ?? 1, 1)
+                let peakDay = days.max(by: { $0.total < $1.total })
+
+                VStack(alignment: .leading, spacing: 2) {
+                    // ponytail: peak value label above the tallest bar
+                    if let peakDay {
+                        HStack(spacing: 0) {
+                            ForEach(Array(days.enumerated()), id: \.offset) { index, day in
+                                if day.day == peakDay.day {
+                                    Text(formatCompactTokens(day.total))
+                                        .font(KiwiMangoFont.mono(8, weight: .semibold))
+                                        .foregroundStyle(Color.accent)
+                                } else {
+                                    Spacer().frame(width: barWidth)
+                                }
+                                if index < days.count - 1 { Spacer(minLength: 0) }
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+
+                    HStack(alignment: .bottom, spacing: 0) {
+                        ForEach(Array(days.enumerated()), id: \.offset) { index, day in
+                            let isLast = index == days.count - 1
+                            VStack(spacing: 0) {
+                                // output (top, lighter)
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(Color.accent.opacity(isLast ? 0.55 : 0.4))
+                                    .frame(width: barWidth, height: max(1, CGFloat(day.outputTokens) / CGFloat(maxTotal) * 64))
+                                // input (bottom, solid)
+                                RoundedRectangle(cornerRadius: 1)
+                                    .fill(Color.accent.opacity(isLast ? 1 : 0.75))
+                                    .frame(width: barWidth, height: max(1, CGFloat(day.inputTokens + day.cacheReadTokens + day.cacheWriteTokens) / CGFloat(maxTotal) * 64))
+                            }
+                            if index < days.count - 1 { Spacer(minLength: 0) }
+                        }
+                    }
+                    .frame(height: 64, alignment: .bottom)
+
+                    // day labels
+                    HStack(spacing: 0) {
+                        ForEach(Array(days.enumerated()), id: \.offset) { index, day in
+                            Text(Self.weekdayAbbrevShort(day))
+                                .font(KiwiMangoFont.sans(7, weight: .semibold))
+                                .foregroundStyle(Color.ink.opacity(index == days.count - 1 ? 0.5 : 0.3))
+                                .frame(width: barWidth)
+                            if index < days.count - 1 { Spacer(minLength: 0) }
+                        }
                     }
                 }
             }
-            .frame(height: 56, alignment: .bottom)
-            HStack {
-                Text(days.first.map(Self.weekdayAbbrev) ?? "")
-                Spacer()
-                Text(days.isEmpty ? "" : "Dziś")
-            }
-            .font(KiwiMangoFont.sans(7.5, weight: .semibold)).tracking(0.6).textCase(.uppercase)
-            .foregroundStyle(Color.ink.opacity(0.3))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private static func weekdayAbbrev(_ day: HermesStateReader.DayTokens) -> String {
+    private var barWidth: CGFloat { 14 }
+
+    private static func weekdayAbbrevShort(_ day: HermesStateReader.DayTokens) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.timeZone = .current
         guard let date = formatter.date(from: day.day) else { return "" }
         let weekday = DateFormatter()
         weekday.locale = Locale(identifier: "pl_PL")
-        weekday.dateFormat = "EEE"
-        return weekday.string(from: date).capitalized
+        weekday.dateFormat = "EEEEE" // single-letter: Pn, Wt, Śr...
+        return weekday.string(from: date).uppercased()
     }
 
     // MARK: Costs column

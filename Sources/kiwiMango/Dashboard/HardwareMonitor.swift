@@ -543,7 +543,8 @@ final class HardwareMonitor {
 
         lastProcSample = newSample
         lastProcSampleTime = now
-        topProcesses = Array(results.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(5))
+        // ponytail: 8 not 5 — 720×900 window (was 560×700) has room for more rows.
+        topProcesses = Array(results.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(8))
     }
 }
 

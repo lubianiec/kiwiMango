@@ -35,10 +35,10 @@ struct HardwareStrip: View {
                 detailPanel(for: open)
                     .padding(.vertical, 16)
                     .overlay(alignment: .bottom) { Rectangle().fill(Color.ink.opacity(0.08)).frame(height: 1) }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: open)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: open)
     }
 
     private var divider: some View {
@@ -100,7 +100,7 @@ struct HardwareStrip: View {
             label: "SIEĆ", tempCelsius: nil,
             valueText: nil, unitText: "M/s",
             valueColor: Color.txt,
-            history: monitor.netDownHistory, sparklineColor: Color.teal,
+            history: monitor.netDownHistory, sparklineColor: Color.teal, sparklineUnit: "MB/s",
             netDown: monitor.netDownBytesPerSec, netUp: monitor.netUpBytesPerSec,
             isOpen: open == .net
         ) { toggle(.net) }
@@ -150,6 +150,7 @@ private struct HWCell: View {
     var valueColor: Color = .txt
     var history: [Double]? = nil
     var sparklineColor: Color = .accent
+    var sparklineUnit: String = "%"
     var hairlineFraction: Double? = nil
     var hairlineColor: Color = .accent
     var netDown: Double? = nil
@@ -203,7 +204,7 @@ private struct HWCell: View {
                 }
 
                 if let history {
-                    Sparkline(data: history, color: sparklineColor)
+                    Sparkline(data: history, color: sparklineColor, unit: sparklineUnit, height: 22)
                 } else if let hairlineFraction {
                     HairlineBar(fraction: hairlineFraction, color: hairlineColor)
                         .frame(width: 85 * 0.01 * 100) // 85% of cell width, matches mockup
@@ -213,6 +214,7 @@ private struct HWCell: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 6)
+            .contentShape(Rectangle()) // ponytail: cała komórka klikalna, nie tylko tekst
         }
         .buttonStyle(.plain)
         .background(hovering || isOpen ? Color.ink.opacity(isOpen ? 0.06 : 0.04) : .clear)
@@ -221,34 +223,66 @@ private struct HWCell: View {
 }
 
 // MARK: - Sparkline (Canvas — pułapka #13: size comes from the draw closure, never cached from init)
+//
+// ponytail: labels are a thin overlay — the max label sits top-right, the
+// current value bottom-right, the unit is passed by the caller so the same
+// Sparkline works for %, MB/s, and dimensionless GPU utilization.
 
 private struct Sparkline: View {
     let data: [Double]
     let color: Color
+    var unit: String = ""   // e.g. "%", "MB/s" — shown next to current value
+    var height: CGFloat = 24
 
     var body: some View {
-        Canvas { context, size in
-            guard data.count > 1 else { return }
-            let maxV = max(data.max() ?? 1, 1)
-            var line = Path()
-            for (i, v) in data.enumerated() {
-                let x = size.width * CGFloat(i) / CGFloat(data.count - 1)
-                let y = size.height - CGFloat(v / maxV) * size.height * 0.9 - 1
-                if i == 0 { line.move(to: CGPoint(x: x, y: y)) } else { line.addLine(to: CGPoint(x: x, y: y)) }
+        let maxV = max(data.max() ?? 0, 0.1)
+        let current = data.last ?? 0
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 3) {
+                Text(unit.isEmpty ? "" : String(format: "%.0f", maxV))
+                    .font(.system(size: 7, weight: .medium))
+                    .foregroundStyle(Color.ink.opacity(0.3))
+                    .monospacedDigit()
+                if !unit.isEmpty { Text(unit).font(.system(size: 6.5)).foregroundStyle(Color.ink.opacity(0.25)) }
+                Spacer()
+                Text(String(format: "%.0f", current))
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundStyle(color.opacity(0.8))
+                    .monospacedDigit()
             }
-            context.stroke(line, with: .color(color), lineWidth: 1.5)
+            Canvas { context, size in
+                guard data.count > 1 else {
+                    context.draw(Text("brak").font(.system(size: 8)).foregroundColor(Color.ink.opacity(0.25)),
+                                 at: CGPoint(x: size.width / 2, y: size.height / 2))
+                    return
+                }
+                var line = Path()
+                for (i, v) in data.enumerated() {
+                    let x = size.width * CGFloat(i) / CGFloat(data.count - 1)
+                    let y = size.height - CGFloat(v / maxV) * size.height * 0.85 - 1
+                    if i == 0 { line.move(to: CGPoint(x: x, y: y)) } else { line.addLine(to: CGPoint(x: x, y: y)) }
+                }
+                context.stroke(line, with: .color(color), lineWidth: 1.5)
 
-            var fill = line
-            fill.addLine(to: CGPoint(x: size.width, y: size.height))
-            fill.addLine(to: CGPoint(x: 0, y: size.height))
-            fill.closeSubpath()
-            context.fill(fill, with: .linearGradient(
-                Gradient(colors: [color.opacity(0.33), color.opacity(0)]),
-                startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: 0, y: size.height)
-            ))
+                var fill = line
+                fill.addLine(to: CGPoint(x: size.width, y: size.height))
+                fill.addLine(to: CGPoint(x: 0, y: size.height))
+                fill.closeSubpath()
+                context.fill(fill, with: .linearGradient(
+                    Gradient(colors: [color.opacity(0.33), color.opacity(0)]),
+                    startPoint: CGPoint(x: 0, y: 0), endPoint: CGPoint(x: 0, y: size.height)
+                ))
+
+                // ponytail: current-value dot — gives the eye a "where are we now" anchor
+                if let lastPoint = data.indices.last {
+                    let x = size.width
+                    let y = size.height - CGFloat(data[lastPoint] / maxV) * size.height * 0.85 - 1
+                    context.fill(Path(ellipseIn: CGRect(x: x - 2.5, y: y - 2.5, width: 4, height: 4)),
+                                 with: .color(color))
+                }
+            }
+            .frame(height: height)
         }
-        .frame(height: 24)
-        .padding(.top, 6)
     }
 }
 
@@ -418,7 +452,7 @@ private struct GPUDetailPanel: View {
             .padding(.bottom, 6)
 
             DetailSectionLabel(text: "Historia użycia")
-            Sparkline(data: monitor.gpuHistory, color: Color.blue).frame(height: 44)
+            Sparkline(data: monitor.gpuHistory, color: Color.blue, unit: "%", height: 44)
 
             DetailSectionLabel(text: "Szczegóły")
             if let temp = monitor.gpuTempCelsius {
@@ -500,10 +534,10 @@ private struct NetDetailPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            DetailSectionLabel(text: "Historia — ↓ teal · ↑ róż")
+            DetailSectionLabel(text: "Historia — ↓ teal · ↑ róż (MB/s)")
             ZStack {
-                Sparkline(data: monitor.netDownHistory, color: Color.teal)
-                Sparkline(data: monitor.netUpHistory, color: Color.rose)
+                Sparkline(data: monitor.netDownHistory, color: Color.teal, unit: "MB/s", height: 44)
+                Sparkline(data: monitor.netUpHistory, color: Color.rose, unit: "", height: 44)
             }
             .frame(height: 44)
 

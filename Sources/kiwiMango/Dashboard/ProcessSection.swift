@@ -17,12 +17,13 @@ struct ProcessSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHead("03", "Procesy") {
-                Text("top 5 · CPU").font(KiwiMangoFont.sans(9.5)).foregroundStyle(Color.ink.opacity(0.55))
+                Text("top \(hardware.topProcesses.count) · CPU").font(KiwiMangoFont.sans(9.5)).foregroundStyle(Color.ink.opacity(0.55))
             }
 
             HStack(spacing: 10) {
                 Spacer().frame(width: 18)
                 Text("Nazwa").frame(maxWidth: .infinity, alignment: .leading)
+                Text("PID").frame(width: 48, alignment: .trailing)
                 Text("CPU").frame(width: 52, alignment: .trailing)
                 Text("RAM").frame(width: 58, alignment: .trailing)
                 Spacer().frame(width: 46)
@@ -59,6 +60,10 @@ struct ProcessSection: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            Text("\(process.id)")
+                .font(KiwiMangoFont.mono(9))
+                .foregroundStyle(Color.ink.opacity(0.35))
+                .frame(width: 48, alignment: .trailing)
             Text(String(format: "%.0f%%", process.cpuPercent))
                 .font(KiwiMangoFont.mono(10))
                 .foregroundStyle(Color.ink.opacity(0.6))
