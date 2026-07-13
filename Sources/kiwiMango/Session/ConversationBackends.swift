@@ -79,6 +79,10 @@ final class AgentSessionController {
     private var currentThinking: ThinkingBlockModel?
     private var toolCalls: [String: ToolCall] = [:]
 
+    /// Wired by `ConversationStore` at controller creation — saves the session
+    /// snapshot to disk. Called at end-of-turn points only, never per-chunk.
+    var onPersist: (() -> Void)?
+
     init(session: ConversationSession) {
         self.session = session
     }
@@ -90,10 +94,17 @@ final class AgentSessionController {
     }
 
     func send(_ text: String) {
+        if session.title == "Nowa sesja" { session.title = String(text.prefix(40)) } // fallback until sessionTitle event arrives
         session.items.append(.userMessage(id: UUID(), text: text))
+        onPersist?()
         Task {
             do {
                 try await HermesGatewayClient.shared.connectIfNeeded()
+                // ponytail: resume after a gateway restart = gateway doesn't know
+                // `existingSessionID` → resumeOrCreateSession silently makes a new
+                // one, so the agent loses context while the UI still shows the old
+                // transcript. Acceptable v1; upgrade: resend a summary of `items`
+                // as the first prompt when a resume falls back to create.
                 if session.gatewaySessionID == nil || lastModelUsed != session.model {
                     let id = try await HermesGatewayClient.shared.resumeOrCreateSession(
                         existingSessionID: session.gatewaySessionID, model: session.model,
@@ -101,6 +112,7 @@ final class AgentSessionController {
                     )
                     session.gatewaySessionID = id
                     lastModelUsed = session.model
+                    onPersist?()
                     HermesEventRouter.shared.register(sessionID: id) { [weak self] event in
                         self?.handle(event)
                     }
@@ -110,6 +122,7 @@ final class AgentSessionController {
                 session.items.append(.aiMessage(
                     id: UUID(), senderLabel: "HERMES", text: "⚠️ \(error.localizedDescription)", isStreaming: false
                 ))
+                onPersist?()
             }
         }
     }
@@ -181,14 +194,17 @@ final class AgentSessionController {
                     model: session.model, source: "kiwi-agent", promptEvalCount: inputTokens, evalCount: outputTokens
                 )
             }
+            onPersist?()
 
         case .sessionTitle(_, let title):
             session.title = title
+            onPersist?()
 
         case .turnError(_, let message):
             session.items.append(.aiMessage(id: UUID(), senderLabel: "HERMES", text: "⚠️ \(message)", isStreaming: false))
             currentAIMessageID = nil
             currentThinking = nil
+            onPersist?()
 
         case .ready, .subagentStart, .subagentText, .subagentComplete:
             break // ponytail: subagent progress has no UI surface in ConversationView yet.
@@ -206,12 +222,18 @@ final class ChatSessionController {
     private var thinkingModelCache: Set<String> = []
     private var thinkingModelCacheLoaded = false
 
+    /// Wired by `ConversationStore` at controller creation — saves the session
+    /// snapshot to disk. Called at end-of-turn points only, never per-chunk.
+    var onPersist: (() -> Void)?
+
     init(session: ConversationSession) {
         self.session = session
     }
 
     func send(_ text: String) {
+        if session.title == "Nowa rozmowa" { session.title = String(text.prefix(40)) }
         session.items.append(.userMessage(id: UUID(), text: text))
+        onPersist?()
         if let claudeModel = ClaudeCodeService.parseModelID(session.model) {
             Task { await runClaude(text: text, model: claudeModel) }
         } else {
@@ -315,10 +337,12 @@ final class ChatSessionController {
               case .aiMessage(_, let label, let text, _) = session.items[index]
         else { return }
         session.items[index] = .aiMessage(id: id, senderLabel: label, text: text, isStreaming: false)
+        onPersist?()
     }
 
     private func failAIMessage(id: UUID, message: String) {
         guard let index = session.items.firstIndex(where: { $0.id == id }) else { return }
         session.items[index] = .aiMessage(id: id, senderLabel: "SYSTEM", text: "⚠️ \(message)", isStreaming: false)
+        onPersist?()
     }
 }

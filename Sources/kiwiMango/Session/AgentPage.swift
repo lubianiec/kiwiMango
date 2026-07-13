@@ -14,7 +14,10 @@ struct AgentPage: View {
                 sessions: store.agentSessions,
                 selectedID: $store.agentSelectedID,
                 onAdd: store.newAgentSession,
-                onClose: store.closeAgentSession
+                onClose: store.closeAgentSession,
+                history: store.history.filter { $0.kind == "agent" },
+                onOpenHistory: store.openFromHistory,
+                onDeleteHistory: store.deleteFromHistory
             )
             .padding(.bottom, 12)
 

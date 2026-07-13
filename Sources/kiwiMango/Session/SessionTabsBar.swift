@@ -7,6 +7,9 @@ struct SessionTabsBar: View {
     @Binding var selectedID: ConversationSession.ID?
     var onAdd: () -> Void
     var onClose: (ConversationSession.ID) -> Void
+    var history: [SessionSnapshot] = []
+    var onOpenHistory: (SessionSnapshot) -> Void = { _ in }
+    var onDeleteHistory: (UUID) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -24,7 +27,47 @@ struct SessionTabsBar: View {
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(TabAddButtonStyle())
+
+            if !history.isEmpty {
+                HistoryMenu(history: history, onOpen: onOpenHistory, onDelete: onDeleteHistory)
+            }
         }
+    }
+}
+
+// MARK: - History menu (PLAN-HISTORIA §4)
+//
+// ponytail: native Menu instead of a dedicated panel with search — a panel
+// only earns its keep once the list is too long to scan in a menu.
+
+private struct HistoryMenu: View {
+    let history: [SessionSnapshot]
+    let onOpen: (SessionSnapshot) -> Void
+    let onDelete: (UUID) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(history, id: \.id) { snapshot in
+                Button(entryLabel(snapshot)) { onOpen(snapshot) }
+            }
+            Divider()
+            Menu("Usuń…") {
+                ForEach(history, id: \.id) { snapshot in
+                    Button(entryLabel(snapshot), role: .destructive) { onDelete(snapshot.id) }
+                }
+            }
+        } label: {
+            Text("🕘 HISTORIA")
+                .font(KiwiMangoFont.sans(10))
+                .foregroundStyle(Color.ink.opacity(0.5))
+                .frame(height: 24)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func entryLabel(_ snapshot: SessionSnapshot) -> String {
+        "\(snapshot.title) — \(snapshot.updatedAt.formatted(.relative(presentation: .named)))"
     }
 }
 

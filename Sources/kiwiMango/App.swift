@@ -64,7 +64,10 @@ struct ContentView: View {
                 .padding(.trailing, 14)
                 .frame(maxWidth: .infinity, alignment: .topTrailing)
         }
-        .task { await store.loadOllamaModels() }
+        .task {
+            store.loadHistory()
+            await store.loadOllamaModels()
+        }
         .animation(.easeInOut(duration: 0.2), value: ThemeStore.shared.mode)
     }
 }

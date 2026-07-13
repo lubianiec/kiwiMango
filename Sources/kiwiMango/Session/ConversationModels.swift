@@ -96,7 +96,7 @@ enum ConversationKind {
 /// model + autoscroll-pause flag (PLAN-V2 §7.3, pułapka #6: "NIE globalna").
 @Observable
 final class ConversationSession: Identifiable {
-    let id = UUID()
+    let id: UUID
     var title: String
     var model: String
     var items: [ConversationItem] {
@@ -129,7 +129,8 @@ final class ConversationSession: Identifiable {
     var totalTokens: Int = 0
     var totalCostUSD: Double = 0
 
-    init(title: String, model: String, items: [ConversationItem] = []) {
+    init(id: UUID = UUID(), title: String, model: String, items: [ConversationItem] = []) {
+        self.id = id
         self.title = title
         self.model = model
         self.items = items

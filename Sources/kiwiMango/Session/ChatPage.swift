@@ -14,7 +14,10 @@ struct ChatPage: View {
                 sessions: store.chatSessions,
                 selectedID: $store.chatSelectedID,
                 onAdd: store.newChatSession,
-                onClose: store.closeChatSession
+                onClose: store.closeChatSession,
+                history: store.history.filter { $0.kind == "chat" },
+                onOpenHistory: store.openFromHistory,
+                onDeleteHistory: store.deleteFromHistory
             )
             .padding(.bottom, 12)
 
