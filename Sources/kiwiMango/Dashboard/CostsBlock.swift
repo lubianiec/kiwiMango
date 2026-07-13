@@ -19,11 +19,11 @@ struct SectionHead: View {
     var body: some View {
         HStack(alignment: .lastTextBaseline, spacing: 8) {
             Text(number)
-                .font(KiwiMangoFont.sans(8.5, weight: .semibold))
+                .font(KiwiMangoFont.sans(9, weight: .semibold))
                 .tracking(1.2)
                 .foregroundStyle(Color.ink.opacity(0.28))
             Text(label)
-                .font(KiwiMangoFont.sans(8.5, weight: .semibold))
+                .font(KiwiMangoFont.sans(9, weight: .semibold))
                 .tracking(1.2)
                 .textCase(.uppercase)
                 .foregroundStyle(Color.ink.opacity(0.65))
@@ -35,13 +35,7 @@ struct SectionHead: View {
 }
 
 // MARK: - ModelPricing (PLAN-V2 §7.2 pt.4)
-//
-// ponytail: static approximate $/1M in-out table, no Settings UI yet (plan
-// explicitly scopes the editable dictionary out of this wave — "poza
-// zakresem tej fali"). Matched by substring against whatever model name
-// HermesStateReader reports (e.g. "kimi-k2.7-code:cloud"). All entries are
-// "≈" — comparable public API pricing for these model families, not billed
-// figures (kiwiMango pays a flat Ollama Pro subscription, not per-token).
+
 enum ModelPricing {
     struct Price { let inputPerMillion: Double; let outputPerMillion: Double }
 
@@ -52,7 +46,6 @@ enum ModelPricing {
         ("qwen", Price(inputPerMillion: 0.4, outputPerMillion: 1.2)),
         ("deepseek", Price(inputPerMillion: 0.55, outputPerMillion: 2.19)),
     ]
-    /// Generic fallback for unlisted models — also "≈", flagged the same way in the UI.
     private static let fallback = Price(inputPerMillion: 0.5, outputPerMillion: 2.0)
 
     static func price(for model: String) -> Price {
@@ -71,8 +64,8 @@ struct CostsBlock: View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHead("02", "Tokeny")
             kpiRow
-            HStack(alignment: .top, spacing: 26) {
-                sevenDayBars
+            HStack(alignment: .top, spacing: 22) {
+                sevenDayDonut
                 Rectangle().fill(Color.ink.opacity(0.07)).frame(width: 1)
                 costsColumn
             }
@@ -98,14 +91,14 @@ struct CostsBlock: View {
 
     private func kpi(_ label: String, value: String, sub: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(KiwiMangoFont.sans(8.5, weight: .semibold)).tracking(1.2)
+            Text(label).font(KiwiMangoFont.sans(9.5, weight: .semibold)).tracking(1.2)
                 .textCase(.uppercase).foregroundStyle(Color.ink.opacity(0.45))
             Text(value)
-                .font(KiwiMangoFont.sans(17, weight: .light))
+                .font(KiwiMangoFont.sans(18, weight: .light))
                 .contentTransition(.numericText())
                 .animation(.default, value: value)
                 .foregroundStyle(Color.txt)
-            Text(sub).font(KiwiMangoFont.sans(9.5)).foregroundStyle(Color.ink.opacity(0.55))
+            Text(sub).font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.55))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -115,75 +108,56 @@ struct CostsBlock: View {
         return percent >= 0 ? "▲ \(percent)%" : "▼ \(-percent)%"
     }
 
-    // MARK: 7-day bars — full-width stacked input/output, day labels + peak value
+    // MARK: 7-day donut chart (replacing the bar chart)
 
-    private var sevenDayBars: some View {
+    private var sevenDayDonut: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 4) {
-                Text("Ostatnie 7 dni").font(KiwiMangoFont.sans(8.5, weight: .semibold)).tracking(1.2)
+                Text("Ostatnie 7 dni").font(KiwiMangoFont.sans(9.5, weight: .semibold)).tracking(1.2)
                     .textCase(.uppercase).foregroundStyle(Color.ink.opacity(0.45))
-                Text("· wejście ↓ wyjście ↑").font(KiwiMangoFont.sans(7.5)).foregroundStyle(Color.ink.opacity(0.3))
+                Text("· wejście / wyjście").font(KiwiMangoFont.sans(9)).foregroundStyle(Color.ink.opacity(0.3))
             }
+
             let days = store.last7Days
             if days.isEmpty {
-                Text("brak danych").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.45))
+                Text("brak danych").font(KiwiMangoFont.sans(11)).foregroundStyle(Color.ink.opacity(0.45))
             } else {
-                let maxTotal = max(days.map(\.total).max() ?? 1, 1)
-                let peakDay = days.max(by: { $0.total < $1.total })
+                HStack(spacing: 16) {
+                    DonutChart(days: days)
+                        .frame(width: 110, height: 110)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    // ponytail: peak value label above the tallest bar
-                    if let peakDay {
-                        HStack(spacing: 0) {
-                            ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                                if day.day == peakDay.day {
-                                    Text(formatCompactTokens(day.total))
-                                        .font(KiwiMangoFont.mono(8, weight: .semibold))
-                                        .foregroundStyle(Color.accent)
-                                } else {
-                                    Spacer().frame(width: barWidth)
-                                }
-                                if index < days.count - 1 { Spacer(minLength: 0) }
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(days.suffix(4).enumerated()), id: \.offset) { index, day in
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(segmentColor(for: index))
+                                    .frame(width: 6, height: 6)
+                                Text(Self.weekdayAbbrevShort(day))
+                                    .font(KiwiMangoFont.sans(9.5, weight: .medium))
+                                    .foregroundStyle(Color.ink.opacity(0.65))
+                                    .frame(width: 24, alignment: .leading)
+                                Text(formatCompactTokens(day.total))
+                                    .font(KiwiMangoFont.mono(10))
+                                    .foregroundStyle(Color.txt)
+                                Spacer()
                             }
                         }
-                        .frame(maxWidth: .infinity)
                     }
-
-                    HStack(alignment: .bottom, spacing: 0) {
-                        ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                            let isLast = index == days.count - 1
-                            VStack(spacing: 0) {
-                                // output (top, lighter)
-                                RoundedRectangle(cornerRadius: 1)
-                                    .fill(Color.accent.opacity(isLast ? 0.55 : 0.4))
-                                    .frame(width: barWidth, height: max(1, CGFloat(day.outputTokens) / CGFloat(maxTotal) * 64))
-                                // input (bottom, solid)
-                                RoundedRectangle(cornerRadius: 1)
-                                    .fill(Color.accent.opacity(isLast ? 1 : 0.75))
-                                    .frame(width: barWidth, height: max(1, CGFloat(day.inputTokens + day.cacheReadTokens + day.cacheWriteTokens) / CGFloat(maxTotal) * 64))
-                            }
-                            if index < days.count - 1 { Spacer(minLength: 0) }
-                        }
-                    }
-                    .frame(height: 64, alignment: .bottom)
-
-                    // day labels
-                    HStack(spacing: 0) {
-                        ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                            Text(Self.weekdayAbbrevShort(day))
-                                .font(KiwiMangoFont.sans(7, weight: .semibold))
-                                .foregroundStyle(Color.ink.opacity(index == days.count - 1 ? 0.5 : 0.3))
-                                .frame(width: barWidth)
-                            if index < days.count - 1 { Spacer(minLength: 0) }
-                        }
-                    }
+                    .frame(width: 110)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var barWidth: CGFloat { 14 }
+    private func segmentColor(for index: Int) -> Color {
+        switch index % 4 {
+        case 0: Color.accent
+        case 1: Color.accent.opacity(0.7)
+        case 2: Color.accent.opacity(0.45)
+        default: Color.accent.opacity(0.25)
+        }
+    }
 
     private static func weekdayAbbrevShort(_ day: HermesStateReader.DayTokens) -> String {
         let formatter = DateFormatter()
@@ -192,7 +166,7 @@ struct CostsBlock: View {
         guard let date = formatter.date(from: day.day) else { return "" }
         let weekday = DateFormatter()
         weekday.locale = Locale(identifier: "pl_PL")
-        weekday.dateFormat = "EEEEE" // single-letter: Pn, Wt, Śr...
+        weekday.dateFormat = "EEEEE"
         return weekday.string(from: date).uppercased()
     }
 
@@ -201,9 +175,9 @@ struct CostsBlock: View {
     private var costsColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 4) {
-                Text("Koszty").font(KiwiMangoFont.sans(8.5, weight: .semibold)).tracking(1.2)
+                Text("Koszty").font(KiwiMangoFont.sans(9.5, weight: .semibold)).tracking(1.2)
                     .textCase(.uppercase).foregroundStyle(Color.ink.opacity(0.45))
-                Text("· kurs NBP dziś").font(KiwiMangoFont.sans(8.5)).foregroundStyle(Color.ink.opacity(0.3))
+                Text("· kurs NBP dziś").font(KiwiMangoFont.sans(9)).foregroundStyle(Color.ink.opacity(0.3))
             }
             if let usdRate = nbp.usdRate, let eurRate = nbp.eurRate, apiValueUSD > 0 {
                 costRow("Zapłacone (flat)", value: "\(Int(DashboardStore.ollamaProMonthlyCost * usdRate)) zł", sub: "/mc")
@@ -212,8 +186,7 @@ struct CostsBlock: View {
                 Rectangle().fill(Color.green).frame(height: 2).opacity(0.9)
                 costRow("Oszczędność", value: "−\(max(0, savingsPercent))%", sub: nil, valueColor: .green)
             } else {
-                // pułapka #14: offline/no cache/no usage yet → no invented rate.
-                Text("brak kursu NBP lub danych o zużyciu").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.45))
+                Text("brak kursu NBP lub danych o zużyciu").font(KiwiMangoFont.sans(11)).foregroundStyle(Color.ink.opacity(0.45))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -221,12 +194,12 @@ struct CostsBlock: View {
 
     private func costRow(_ label: String, value: String, sub: String?, valueColor: Color = .txt) -> some View {
         HStack(alignment: .lastTextBaseline) {
-            Text(label).font(KiwiMangoFont.sans(9.5)).foregroundStyle(Color.ink.opacity(0.55))
+            Text(label).font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.55))
             Spacer()
             HStack(spacing: 4) {
-                Text(value).font(KiwiMangoFont.sans(14, weight: .light)).foregroundStyle(valueColor)
+                Text(value).font(KiwiMangoFont.sans(15, weight: .light)).foregroundStyle(valueColor)
                 if let sub {
-                    Text(sub).font(KiwiMangoFont.sans(9.5)).foregroundStyle(Color.ink.opacity(0.55))
+                    Text(sub).font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.55))
                 }
             }
         }
@@ -244,39 +217,108 @@ struct CostsBlock: View {
     // MARK: Model share
 
     private var modelShare: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("Udział modeli — 7 dni").font(KiwiMangoFont.sans(8.5, weight: .semibold)).tracking(1.2)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Udział modeli — 7 dni").font(KiwiMangoFont.sans(9.5, weight: .semibold)).tracking(1.2)
                 .textCase(.uppercase).foregroundStyle(Color.ink.opacity(0.45))
                 .padding(.top, 18)
             let models = Array(store.modelTokens7d.prefix(4))
             let total = max(models.reduce(0) { $0 + $1.total }, 1)
             if models.isEmpty {
-                Text("brak danych").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.45))
+                Text("brak danych").font(KiwiMangoFont.sans(11)).foregroundStyle(Color.ink.opacity(0.45))
             } else {
-                ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
-                    let percent = Double(model.total) / Double(total) * 100
-                    HStack(spacing: 10) {
-                        Text(model.model.uppercased())
-                            .font(KiwiMangoFont.sans(8.5, weight: .medium)).tracking(0.4)
-                            .foregroundStyle(Color.ink.opacity(0.65))
-                            .frame(width: 100, alignment: .leading)
-                            .lineLimit(1)
-                        GeometryReader { geo in
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(Color.ink.opacity(0.15))
-                                .overlay(alignment: .leading) {
-                                    RoundedRectangle(cornerRadius: 1)
-                                        .fill(Color.accent.opacity(index == 0 ? 1 : 0.6))
-                                        .frame(width: geo.size.width * percent / 100)
-                                }
+                HStack(alignment: .top, spacing: 18) {
+                    ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
+                        let percent = Double(model.total) / Double(total) * 100
+                        VStack(spacing: 6) {
+                            ZStack {
+                                Circle()
+                                    .stroke(Color.ink.opacity(0.12), lineWidth: 4)
+                                Circle()
+                                    .trim(from: 0, to: percent / 100)
+                                    .stroke(modelColor(for: index), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                                    .rotationEffect(.degrees(-90))
+                                    .animation(.easeOut, value: percent)
+                                Text("\(Int(percent))%")
+                                    .font(KiwiMangoFont.mono(11, weight: .semibold))
+                                    .foregroundStyle(Color.txt)
+                            }
+                            .frame(width: 52, height: 52)
+
+                            Text(model.model.uppercased())
+                                .font(KiwiMangoFont.sans(9.5, weight: .medium))
+                                .tracking(0.3)
+                                .foregroundStyle(Color.ink.opacity(0.65))
+                                .lineLimit(1)
+                            Text(formatCompactTokens(model.total))
+                                .font(KiwiMangoFont.mono(10))
+                                .foregroundStyle(Color.ink.opacity(0.45))
                         }
-                        .frame(height: 2)
-                        Text("\(Int(percent))%")
-                            .font(KiwiMangoFont.mono(9.5))
-                            .foregroundStyle(Color.ink.opacity(0.55))
-                            .frame(width: 28, alignment: .trailing)
+                        .frame(maxWidth: .infinity)
                     }
                 }
+            }
+        }
+    }
+
+    private func modelColor(for index: Int) -> Color {
+        switch index {
+        case 0: Color.accent
+        case 1: Color.blue
+        case 2: Color.teal
+        default: Color.rose
+        }
+    }
+}
+
+// MARK: - Donut chart
+
+private struct DonutChart: View {
+    let days: [HermesStateReader.DayTokens]
+
+    private var total: Double {
+        max(Double(days.reduce(0) { $0 + $1.total }), 1)
+    }
+
+    private func segmentColor(for index: Int) -> Color {
+        switch index % 4 {
+        case 0: Color.accent
+        case 1: Color.accent.opacity(0.7)
+        case 2: Color.accent.opacity(0.45)
+        default: Color.accent.opacity(0.25)
+        }
+    }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.ink.opacity(0.08))
+            Circle()
+                .stroke(Color.ink.opacity(0.12), lineWidth: 10)
+
+            Canvas { context, size in
+                let radius = min(size.width, size.height) / 2 - 5
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                var startAngle = -Double.pi / 2
+
+                for (index, day) in days.enumerated() {
+                    let sweep = Double(day.total) / total * 2 * .pi
+                    let endAngle = startAngle + sweep
+                    let path = Path { path in
+                        path.addArc(center: center, radius: radius, startAngle: .radians(startAngle), endAngle: .radians(endAngle), clockwise: false)
+                    }
+                    context.stroke(path, with: .color(segmentColor(for: index)), lineWidth: 10)
+                    startAngle = endAngle
+                }
+            }
+
+            VStack(spacing: 0) {
+                Text(formatCompactTokens(Int(total)))
+                    .font(KiwiMangoFont.mono(14, weight: .semibold))
+                    .foregroundStyle(Color.txt)
+                Text("7 dni")
+                    .font(KiwiMangoFont.sans(8.5, weight: .semibold))
+                    .textCase(.uppercase)
+                    .foregroundStyle(Color.ink.opacity(0.4))
             }
         }
     }

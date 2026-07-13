@@ -32,7 +32,7 @@ struct Composer: View {
 
                 Button(action: onSend) {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 11 + FontScale.bump, weight: .semibold))
                         .foregroundStyle(Color.bg)
                         .frame(width: 24, height: 24)
                         .background(Circle().fill(Color.accent))
@@ -51,7 +51,7 @@ struct Composer: View {
 
 private extension Image {
     func kiwiComposerIcon() -> some View {
-        self.font(.system(size: 12))
+        self.font(.system(size: 12 + FontScale.bump))
             .foregroundStyle(Color.ink.opacity(0.45))
     }
 }

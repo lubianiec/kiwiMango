@@ -75,11 +75,20 @@ extension Color {
     /// Inline code color — one fixed hex, not themed (PLAN-V2 §2/§7.4).
     static let code = Color(hex: "FCA311")
 
+    // MARK: - Terminal / syntax palette
+    static var syntaxKeyword: Color { isDark ? Color(hex: "FF7B72") : Color(hex: "D73A49") }
+    static var syntaxString: Color { isDark ? Color(hex: "A5D6FF") : Color(hex: "032162") }
+    static var syntaxComment: Color { isDark ? Color(hex: "8B949E") : Color(hex: "6A737D") }
+    static var syntaxNumber: Color { code }
+
     // MARK: - v1 aliases (kept so Chat/SyntaxHighlighter.swift and Chat/MarkdownText.swift
     // keep compiling untouched this wave; ponytail: rename call sites when those files
     // are next touched instead of doing it as a drive-by here).
     static var kiwiMangoTextPrimary: Color { txt }
-    static var kiwiMangoSyntaxNumber: Color { code }
+    static var kiwiMangoSyntaxKeyword: Color { syntaxKeyword }
+    static var kiwiMangoSyntaxString: Color { syntaxString }
+    static var kiwiMangoSyntaxComment: Color { syntaxComment }
+    static var kiwiMangoSyntaxNumber: Color { syntaxNumber }
     static var kiwiMangoPanelDeep: Color { panel2 }
 }
 
@@ -104,17 +113,24 @@ extension View {
     }
 }
 
+// MARK: - Font scale (global readability bump)
+
+enum FontScale {
+    /// Global font-size bump for readability (PLAN-V2 polish).
+    static let bump: CGFloat = 2
+}
+
 // MARK: - Fonts
 
 enum KiwiMangoFont {
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .monospaced)
+        .system(size: size + FontScale.bump, weight: weight, design: .monospaced)
     }
 
     /// SF Pro (system default) — body font per PLAN-V2 §1. Kept as a separate
     /// name (rather than inlining `.system`) so call sites read intent.
     static func sans(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight)
+        .system(size: size + FontScale.bump, weight: weight)
     }
 }
 

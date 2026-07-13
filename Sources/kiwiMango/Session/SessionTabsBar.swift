@@ -20,7 +20,7 @@ struct SessionTabsBar: View {
             }
             Button(action: onAdd) {
                 Image(systemName: "plus")
-                    .font(.system(size: 11, weight: .light))
+                    .font(.system(size: 11 + FontScale.bump, weight: .light))
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(TabAddButtonStyle())
@@ -47,7 +47,7 @@ private struct TabChip: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Text("✕")
-                .font(.system(size: 9))
+                .font(.system(size: 9 + FontScale.bump))
                 .foregroundStyle(Color.ink.opacity(0.3))
                 .onTapGesture(perform: onClose)
         }
@@ -90,7 +90,7 @@ struct EmptySessionView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Text("✦").font(.system(size: 22)).opacity(0.5)
+            Text("✦").font(.system(size: 22 + FontScale.bump)).opacity(0.5)
             Text(text).font(KiwiMangoFont.sans(11))
         }
         .foregroundStyle(Color.ink.opacity(0.35))

@@ -34,7 +34,7 @@ private struct NavItem: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 10 + FontScale.bump, weight: .semibold))
                 .tracking(isActive ? 1.4 : (isHovering ? 2.0 : 1.4))
                 .textCase(.uppercase)
                 .foregroundStyle(isActive ? Color.accent : Color.ink.opacity(isHovering ? 0.75 : 0.55))
@@ -56,7 +56,7 @@ private struct ThemeToggleButton: View {
             theme.toggle()
         } label: {
             Image(systemName: theme.mode == .dark ? "moon" : "sun.max")
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 11 + FontScale.bump, weight: .medium))
                 .foregroundStyle(Color.ink.opacity(isHovering ? 0.9 : 0.65))
                 .frame(width: 26, height: 26)
                 .overlay(

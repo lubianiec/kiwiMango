@@ -165,12 +165,12 @@ private struct HWCell: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 3) {
                     Text(label)
-                        .font(.system(size: 8.5, weight: .semibold))
+                        .font(.system(size: 8.5 + FontScale.bump, weight: .semibold))
                         .tracking(1.2)
                         .foregroundStyle(Color.ink.opacity(0.45))
                     if let tempCelsius {
                         Text("\(Int(tempCelsius.rounded()))°")
-                            .font(.system(size: 9))
+                            .font(.system(size: 9 + FontScale.bump))
                             .foregroundStyle(Color.ink.opacity(0.5))
                             .monospacedDigit()
                     }
@@ -180,26 +180,26 @@ private struct HWCell: View {
                 if let netDown {
                     // ponytail: net cell has its own two-number layout (↓/↑), not the single valueText path
                     HStack(spacing: 1) {
-                        Text("↓").font(.system(size: 12.5))
+                        Text("↓").font(.system(size: 12.5 + FontScale.bump))
                         Text(plNumber(netDown / 1_000_000, 1)).foregroundStyle(Color.teal)
-                        Text(" ↑").font(.system(size: 12.5))
+                        Text(" ↑").font(.system(size: 12.5 + FontScale.bump))
                         Text(plNumber((netUp ?? 0) / 1_000_000, 1)).foregroundStyle(Color.rose)
-                        Text(" \(unitText)").font(.system(size: 9)).foregroundStyle(Color.ink.opacity(0.5))
+                        Text(" \(unitText)").font(.system(size: 9 + FontScale.bump)).foregroundStyle(Color.ink.opacity(0.5))
                     }
-                    .font(.system(size: 12.5, weight: .light))
+                    .font(.system(size: 12.5 + FontScale.bump, weight: .light))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                 } else if let valueText {
                     HStack(spacing: 1) {
                         Text(valueText).foregroundStyle(valueColor)
-                        Text(unitText).font(.system(size: 9)).foregroundStyle(Color.ink.opacity(0.5))
+                        Text(unitText).font(.system(size: 9 + FontScale.bump)).foregroundStyle(Color.ink.opacity(0.5))
                     }
-                    .font(.system(size: 15, weight: .light))
+                    .font(.system(size: 15 + FontScale.bump, weight: .light))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                 } else {
                     Text("brak danych")
-                        .font(.system(size: 10))
+                        .font(.system(size: 10 + FontScale.bump))
                         .foregroundStyle(Color.ink.opacity(0.35))
                 }
 
@@ -240,19 +240,19 @@ private struct Sparkline: View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 3) {
                 Text(unit.isEmpty ? "" : String(format: "%.0f", maxV))
-                    .font(.system(size: 7, weight: .medium))
+                    .font(.system(size: 7 + FontScale.bump, weight: .medium))
                     .foregroundStyle(Color.ink.opacity(0.3))
                     .monospacedDigit()
-                if !unit.isEmpty { Text(unit).font(.system(size: 6.5)).foregroundStyle(Color.ink.opacity(0.25)) }
+                if !unit.isEmpty { Text(unit).font(.system(size: 6.5 + FontScale.bump)).foregroundStyle(Color.ink.opacity(0.25)) }
                 Spacer()
                 Text(String(format: "%.0f", current))
-                    .font(.system(size: 7, weight: .semibold))
+                    .font(.system(size: 7 + FontScale.bump, weight: .semibold))
                     .foregroundStyle(color.opacity(0.8))
                     .monospacedDigit()
             }
             Canvas { context, size in
                 guard data.count > 1 else {
-                    context.draw(Text("brak").font(.system(size: 8)).foregroundColor(Color.ink.opacity(0.25)),
+                    context.draw(Text("brak").font(.system(size: 8 + FontScale.bump)).foregroundColor(Color.ink.opacity(0.25)),
                                  at: CGPoint(x: size.width / 2, y: size.height / 2))
                     return
                 }
@@ -320,8 +320,8 @@ struct DetailRing: View {
                 .rotationEffect(.degrees(-90))
                 .animation(.easeInOut(duration: 0.8), value: value)
             VStack(spacing: 1) {
-                Text(bigLabel).font(.system(size: 13, weight: .light)).monospacedDigit().contentTransition(.numericText())
-                Text(smallLabel).font(.system(size: 7)).tracking(0.8).textCase(.uppercase).foregroundStyle(Color.ink.opacity(0.45))
+                Text(bigLabel).font(.system(size: 13 + FontScale.bump, weight: .light)).monospacedDigit().contentTransition(.numericText())
+                Text(smallLabel).font(.system(size: 7 + FontScale.bump)).tracking(0.8).textCase(.uppercase).foregroundStyle(Color.ink.opacity(0.45))
             }
         }
         .frame(width: 64, height: 64)
@@ -334,7 +334,7 @@ struct DetailSectionLabel: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(text)
-                .font(.system(size: 8, weight: .semibold))
+                .font(.system(size: 8 + FontScale.bump, weight: .semibold))
                 .tracking(1.2)
                 .textCase(.uppercase)
                 .foregroundStyle(Color.ink.opacity(0.3))
@@ -362,7 +362,7 @@ struct DetailRow: View {
             Spacer()
             Text(value).foregroundStyle(valueColor).monospacedDigit().contentTransition(.numericText())
         }
-        .font(.system(size: 11))
+        .font(.system(size: 11 + FontScale.bump))
         .padding(.vertical, 4)
     }
 }

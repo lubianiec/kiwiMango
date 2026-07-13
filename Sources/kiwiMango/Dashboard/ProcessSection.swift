@@ -4,10 +4,8 @@ import SwiftUI
 
 // MARK: - ProcessSection ("03 PROCESY", PLAN-V2 §7.2 pt.5)
 //
-// Reads `HardwareMonitor.topProcesses` (already computed by Fala 1 — no
-// second process scan here). `hardware` is passed in by whoever owns the
-// HardwareMonitor instance (the hardware strip) so both views share one
-// 2s-timer/one process snapshot instead of running two scanners.
+// Reads `HardwareMonitor.topProcesses` (already computed by Fala 1). `hardware`
+// is passed in so both views share one 2s-timer/one process snapshot.
 struct ProcessSection: View {
     let hardware: HardwareMonitor
 
@@ -17,27 +15,32 @@ struct ProcessSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SectionHead("03", "Procesy") {
-                Text("top \(hardware.topProcesses.count) · CPU").font(KiwiMangoFont.sans(9.5)).foregroundStyle(Color.ink.opacity(0.55))
+                Text("top \(hardware.topProcesses.count) · CPU").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.55))
             }
 
             HStack(spacing: 10) {
-                Spacer().frame(width: 18)
+                Spacer().frame(width: 22)
                 Text("Nazwa").frame(maxWidth: .infinity, alignment: .leading)
-                Text("PID").frame(width: 48, alignment: .trailing)
-                Text("CPU").frame(width: 52, alignment: .trailing)
-                Text("RAM").frame(width: 58, alignment: .trailing)
+                Text("PID").frame(width: 52, alignment: .trailing)
+                Text("CPU").frame(width: 56, alignment: .trailing)
+                Text("RAM").frame(width: 62, alignment: .trailing)
                 Spacer().frame(width: 46)
             }
-            .font(KiwiMangoFont.sans(8, weight: .semibold)).tracking(1).textCase(.uppercase)
+            .font(KiwiMangoFont.sans(9, weight: .semibold)).tracking(1).textCase(.uppercase)
             .foregroundStyle(Color.ink.opacity(0.3))
-            .padding(.bottom, 6)
+            .padding(.bottom, 8)
 
             if hardware.topProcesses.isEmpty {
-                Text("brak danych").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.45))
+                Text("brak danych").font(KiwiMangoFont.sans(11)).foregroundStyle(Color.ink.opacity(0.45))
             } else {
-                ForEach(hardware.topProcesses) { process in
-                    processRow(process)
+                VStack(spacing: 2) {
+                    ForEach(hardware.topProcesses) { process in
+                        processRow(process)
+                    }
                 }
+                .padding(6)
+                .background(Color.ink.opacity(0.03))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
             }
         }
         .alert(item: $pendingAction) { action in
@@ -54,29 +57,31 @@ struct ProcessSection: View {
     private func processRow(_ process: HardwareMonitor.TopProcess) -> some View {
         HStack(spacing: 10) {
             processIcon(process)
-                .frame(width: 18, height: 18)
+                .frame(width: 22, height: 22)
             Text(process.name)
-                .font(KiwiMangoFont.sans(11.5))
+                .font(KiwiMangoFont.sans(12.5))
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("\(process.id)")
-                .font(KiwiMangoFont.mono(9))
+                .font(KiwiMangoFont.mono(10))
                 .foregroundStyle(Color.ink.opacity(0.35))
-                .frame(width: 48, alignment: .trailing)
-            Text(String(format: "%.0f%%", process.cpuPercent))
-                .font(KiwiMangoFont.mono(10))
-                .foregroundStyle(Color.ink.opacity(0.6))
                 .frame(width: 52, alignment: .trailing)
+            Text(String(format: "%.0f%%", process.cpuPercent))
+                .font(KiwiMangoFont.mono(11))
+                .foregroundStyle(cpuColor(process.cpuPercent))
+                .frame(width: 56, alignment: .trailing)
             Text(Self.formatBytes(process.ramBytes))
-                .font(KiwiMangoFont.mono(10))
+                .font(KiwiMangoFont.mono(11))
                 .foregroundStyle(Color.ink.opacity(0.6))
-                .frame(width: 58, alignment: .trailing)
+                .frame(width: 62, alignment: .trailing)
             Rectangle().fill(Color.ink.opacity(0.1)).frame(width: 46, height: 1)
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 8)
         .contentShape(Rectangle())
+        .background(Color.ink.opacity(openPopoverPID == process.id ? 0.06 : 0))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
         .onTapGesture { openPopoverPID = process.id }
         .popover(isPresented: Binding(
             get: { openPopoverPID == process.id },
@@ -89,17 +94,23 @@ struct ProcessSection: View {
         }
     }
 
+    private func cpuColor(_ percent: Double) -> Color {
+        if percent >= 50 { return .danger }
+        if percent >= 20 { return .accent }
+        return Color.ink.opacity(0.6)
+    }
+
     private func processIcon(_ process: HardwareMonitor.TopProcess) -> some View {
         Group {
             if let icon = NSRunningApplication(processIdentifier: process.id)?.icon {
                 Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
             } else {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 10))
+                    .font(.system(size: 12 + FontScale.bump))
                     .foregroundStyle(Color.ink.opacity(0.6))
-                    .frame(width: 18, height: 18)
+                    .frame(width: 22, height: 22)
                     .background(Color.ink.opacity(0.08))
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .clipShape(RoundedRectangle(cornerRadius: 5))
             }
         }
     }
@@ -110,22 +121,19 @@ struct ProcessSection: View {
     }
 }
 
-// MARK: - Popover (PLAN-V2 §7.2 pt.5 — Restart / Wyczyść cache / Zamknij)
+// MARK: - Popover
 
 private struct ProcessActionsPopover: View {
     let process: HardwareMonitor.TopProcess
     let onAction: (PendingProcessAction) -> Void
 
-    /// Pułapka #8: only a real GUI app (bundle + bundle URL) is eligible for
-    /// any destructive action. Daemons/system processes (WindowServer,
-    /// kernel_task, …) get an info-only popover.
     private var app: NSRunningApplication? { NSRunningApplication(processIdentifier: process.id) }
     private var bundleURL: URL? { app?.bundleURL }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(process.name.uppercased())
-                .font(KiwiMangoFont.sans(9, weight: .semibold)).tracking(0.8)
+                .font(KiwiMangoFont.sans(10, weight: .semibold)).tracking(0.8)
                 .foregroundStyle(Color.ink.opacity(0.4))
                 .padding(.horizontal, 8).padding(.top, 5).padding(.bottom, 6)
 
@@ -141,21 +149,21 @@ private struct ProcessActionsPopover: View {
                 }
             } else {
                 Text("Proces systemowy — brak dostępnych akcji.")
-                    .font(KiwiMangoFont.sans(10.5))
+                    .font(KiwiMangoFont.sans(11.5))
                     .foregroundStyle(Color.ink.opacity(0.5))
                     .padding(.horizontal, 8).padding(.bottom, 8)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .frame(width: 172)
+        .frame(width: 180)
         .padding(4)
     }
 
     private func actionButton(_ icon: String, _ label: String, danger: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: icon).font(.system(size: 10)).frame(width: 14)
-                Text(label).font(KiwiMangoFont.sans(11))
+                Image(systemName: icon).font(.system(size: 11 + FontScale.bump)).frame(width: 14)
+                Text(label).font(KiwiMangoFont.sans(12))
             }
             .foregroundStyle(danger ? Color.danger : Color.txt)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -165,7 +173,7 @@ private struct ProcessActionsPopover: View {
     }
 }
 
-// MARK: - PendingProcessAction (confirm-then-perform)
+// MARK: - PendingProcessAction
 
 struct PendingProcessAction: Identifiable {
     enum Kind {
@@ -221,8 +229,6 @@ struct PendingProcessAction: Identifiable {
             if let app = NSRunningApplication(processIdentifier: pid) {
                 app.terminate()
             }
-            // ponytail: fire-and-forget relaunch shortly after — terminate()
-            // is async on macOS's side, a short delay avoids racing the quit.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
                 NSWorkspace.shared.open(bundleURL)
             }
@@ -231,14 +237,12 @@ struct PendingProcessAction: Identifiable {
             let cacheURL = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Caches/\(bundleID)", isDirectory: true)
             guard FileManager.default.fileExists(atPath: cacheURL.path) else { return }
-            // ponytail: trashItem (recoverable) rather than removeItem — same
-            // "reversible deletion" principle as MoleView's Clean tab (§7.5).
             try? FileManager.default.trashItem(at: cacheURL, resultingItemURL: nil)
         case .quit(let pid, _):
             if let app = NSRunningApplication(processIdentifier: pid) {
                 let started = app.terminate()
                 if !started {
-                    kill(pid, SIGTERM) // pułapka #8 fallback — only reached for a real app that refused terminate()
+                    kill(pid, SIGTERM)
                 }
             }
         }

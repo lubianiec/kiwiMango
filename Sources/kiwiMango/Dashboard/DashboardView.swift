@@ -64,7 +64,7 @@ private struct HeroSection: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Witaj, Paweł!")
-                    .font(.system(size: 19, weight: .light))
+                    .font(.system(size: 19 + FontScale.bump, weight: .light))
 
                 StatusLine(page: $page, store: store, services: services, agents: agents)
             }
@@ -72,7 +72,7 @@ private struct HeroSection: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text("TOKENY 7 DNI").kiwiSectionLabel()
                 Text(formatCompactTokens(store.sevenDayTotal))
-                    .font(.system(size: 24, weight: .light))
+                    .font(.system(size: 24 + FontScale.bump, weight: .light))
                     .monospacedDigit()
                     .contentTransition(.numericText())
             }
@@ -114,7 +114,7 @@ private struct StatusLine: View {
             QuickAction(title: "＋ agent") { page = .agent }
             QuickAction(title: "＋ chat") { page = .chat }
         }
-        .font(.system(size: 9.5))
+        .font(.system(size: 9.5 + FontScale.bump))
         .foregroundStyle(Color.ink.opacity(0.55))
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: false)

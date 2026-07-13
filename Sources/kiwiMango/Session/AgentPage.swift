@@ -2,28 +2,24 @@ import SwiftUI
 
 // MARK: - AgentPage (PLAN-V2 §5, §9 Fala 3/C1)
 //
-// SessionTabsBar + ConversationView(kind: .agent), each tab backed by its own
-// `AgentSessionController` (HermesGatewayClient — real gateway session,
-// live tool/thinking/permission events replacing Fala 2/B3's mocks).
+// Fix: sessions + controllers now live in ConversationStore (hoisted to
+// ContentView), so switching pages no longer destroys agent history.
 
 struct AgentPage: View {
-    @State private var sessions: [ConversationSession] = []
-    @State private var controllers: [ConversationSession.ID: AgentSessionController] = [:]
-    @State private var selectedID: ConversationSession.ID?
-    @AppStorage("lastAgentModel") private var lastAgentModel = AgentSessionController.availableModels[0]
+    @Bindable var store: ConversationStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SessionTabsBar(
-                sessions: sessions,
-                selectedID: $selectedID,
-                onAdd: newSession,
-                onClose: closeSession
+                sessions: store.agentSessions,
+                selectedID: $store.agentSelectedID,
+                onAdd: store.newAgentSession,
+                onClose: store.closeAgentSession
             )
             .padding(.bottom, 12)
 
-            if let session = sessions.first(where: { $0.id == selectedID }),
-               let controller = controllers[session.id] {
+            if let session = store.selectedAgentSession,
+               let controller = store.agentController(for: session.id) {
                 ConversationView(
                     session: session,
                     kind: .agent,
@@ -39,22 +35,7 @@ struct AgentPage: View {
             }
         }
         .onAppear {
-            if sessions.isEmpty { newSession() }
+            if store.agentSessions.isEmpty { store.newAgentSession() }
         }
-    }
-
-    private func newSession() {
-        let model = sessions.last?.model ?? lastAgentModel
-        let session = ConversationSession(title: "Nowa sesja", model: model)
-        sessions.append(session)
-        controllers[session.id] = AgentSessionController(session: session)
-        selectedID = session.id
-        lastAgentModel = model
-    }
-
-    private func closeSession(_ id: ConversationSession.ID) {
-        sessions.removeAll { $0.id == id }
-        controllers.removeValue(forKey: id)
-        if selectedID == id { selectedID = sessions.first?.id }
     }
 }

@@ -40,7 +40,7 @@ struct ThinkingBlockView: View {
                 Text("✦")
                 Text("Tok myślenia · \(String(format: "%.1f", model.seconds)) s")
                 Text("▼")
-                    .font(.system(size: 7))
+                    .font(.system(size: 7 + FontScale.bump))
                     .rotationEffect(.degrees(model.isExpanded ? 180 : 0))
             }
             .font(KiwiMangoFont.sans(9.5))

@@ -99,9 +99,15 @@ final class ConversationSession: Identifiable {
     let id = UUID()
     var title: String
     var model: String
-    var items: [ConversationItem]
+    var items: [ConversationItem] {
+        didSet { scrollPulse += 1 }
+    }
     /// Set true whenever ≥1 thinking block in THIS session is expanded.
     var autoscrollPaused: Bool = false
+
+    /// Bumps on every `items` mutation so the transcript can scroll to bottom
+    /// during streaming (when item count stays constant but text grows).
+    var scrollPulse: Int = 0
 
     /// Real `@State`/`@Bindable` draft per session (was a dead `Binding` stub
     /// in Fala 2/B3) — lives on the session so switching tabs preserves it.

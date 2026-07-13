@@ -141,7 +141,7 @@ private struct CodeBlockView: View {
                 Spacer()
                 Button(action: copy) {
                     Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 10))
+                        .font(.system(size: 10 + FontScale.bump))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.kiwiMangoTextPrimary.opacity(0.72))

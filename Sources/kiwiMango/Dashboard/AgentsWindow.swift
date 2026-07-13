@@ -205,7 +205,7 @@ private struct AgentWindowRow: View {
                         .frame(width: 52, alignment: .trailing)
 
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 8))
+                        .font(.system(size: 8 + FontScale.bump))
                         .foregroundStyle(Color.ink.opacity(0.3))
                         .rotationEffect(.degrees(isOpen ? 180 : 0))
                 }

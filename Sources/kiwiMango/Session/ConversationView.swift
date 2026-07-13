@@ -3,9 +3,8 @@ import SwiftUI
 // MARK: - ConversationView (PLAN-V2 §5, §7.3)
 //
 // THE single conversation surface — Agent and Chat both render through this
-// exact view, differing only by `kind` (quick actions + composer copy) and by
-// which backend feeds `session.items` (mocked here; Fala 3/C1 wires
-// HermesGatewayClient for Agent and ClaudeCodeService/Ollama for Chat).
+// exact view. Terminal-styled transcript: dark panel, monospace text, syntax
+// highlighting, clickable links, markdown tables, and a clear code block chrome.
 
 /// One quick-action capsule (Agent only). `action == nil` renders dimmed and
 /// inert — PLAN-V2 §7.3/§9 C1: only "Kontekst z vaulta" has a real backend
@@ -27,17 +26,27 @@ struct ConversationView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
+            // Terminal title bar: traffic dots + title + model picker
+            terminalTitleBar
+                .padding(.bottom, 8)
+
             if kind == .agent {
                 quickActions
                     .padding(.bottom, 12)
             }
 
-            if session.items.isEmpty {
-                EmptySessionView(text: emptyText)
-            } else {
+            // Terminal window frame around transcript
+            VStack(alignment: .leading, spacing: 0) {
                 transcript
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .background(Color.panel2)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.ink.opacity(0.12), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Composer(
                 draft: $session.draft,
@@ -51,8 +60,44 @@ struct ConversationView: View {
                     onSend(text)
                 }
             )
+            .padding(.top, 10)
         }
         .padding(.top, 2)
+    }
+
+    // MARK: Terminal title bar
+
+    private var terminalTitleBar: some View {
+        HStack(spacing: 8) {
+            // Traffic light dots in app palette colors
+            HStack(spacing: 6) {
+                Circle().fill(Color.danger).frame(width: 10, height: 10)
+                Circle().fill(Color.accent).frame(width: 10, height: 10)
+                Circle().fill(Color.green).frame(width: 10, height: 10)
+            }
+
+            Text(session.title)
+                .font(KiwiMangoFont.mono(11, weight: .medium))
+                .foregroundStyle(Color.ink.opacity(0.55))
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer()
+
+            // Status dot + model picker
+            Circle()
+                .fill(session.isWorking ? Color.accent : Color.green)
+                .frame(width: 6, height: 6)
+                .neonGlow(session.isWorking ? Color.accent : Color.green, intensity: session.isWorking ? 1.5 : 0.5)
+
+            Picker("", selection: $session.model) {
+                ForEach(modelOptions, id: \.self) { model in
+                    Text(model).tag(model)
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 160)
+        }
     }
 
     private var emptyText: String {
@@ -73,36 +118,7 @@ struct ConversationView: View {
         value >= 1000 ? String(format: "%.1fk", Double(value) / 1000) : "\(value)"
     }
 
-    // MARK: Header
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(session.isWorking ? Color.accent : Color.green)
-                .frame(width: 6, height: 6)
-            Text(kind == .agent ? "Hermes" : "Chat")
-                .font(KiwiMangoFont.sans(16, weight: .light))
-            Picker("", selection: $session.model) {
-                ForEach(modelOptions, id: \.self) { model in
-                    Text(model).tag(model)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: 160)
-            Spacer()
-            // ponytail: cosmetic only — real permission-mode switching needs
-            // `claude -p --permission-mode`/interactive approval streaming,
-            // which `ClaudeCodeService` doesn't implement yet (see
-            // `ChatSessionController`). Left visible per PLAN-V2 §7.3 layout,
-            // not wired to any backend this wave.
-            Picker("", selection: .constant(0)) {
-                Text(kind == .agent ? "Sesja: aktywna" : "Uprawnienia: pytaj").tag(0)
-            }
-            .labelsHidden()
-            .frame(maxWidth: 160)
-        }
-        .padding(.bottom, 14)
-    }
+    // MARK: Quick actions
 
     private var quickActions: some View {
         HStack(spacing: 6) {
@@ -117,12 +133,17 @@ struct ConversationView: View {
     private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(session.items) { item in
-                        itemView(item).id(item.id)
+                if session.items.isEmpty {
+                    EmptySessionView(text: emptyText)
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                } else {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(session.items) { item in
+                            itemView(item).id(item.id)
+                        }
                     }
+                    .padding(.all, 12)
                 }
-                .padding(.vertical, 4)
             }
             .scrollIndicators(.hidden)
             .overlay(alignment: .bottom) {
@@ -131,16 +152,13 @@ struct ConversationView: View {
                 }
             }
             .onAppear { scrollToBottom(proxy) }
-            .onChange(of: session.items.count) { _, _ in scrollToBottom(proxy) }
+            .onChange(of: session.scrollPulse) { _, _ in scrollToBottom(proxy) }
             .onChange(of: session.autoscrollPaused) { wasPaused, isPaused in
                 if wasPaused && !isPaused { scrollToBottom(proxy) }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Rescans every thinking block for `isExpanded` — called after any toggle.
-    /// One flag per session (not global), per PLAN-V2 pułapka #6.
     private func recomputeAutoscrollPause() {
         session.autoscrollPaused = session.items.contains {
             if case .thinking(let block) = $0 { return block.isExpanded }
@@ -148,12 +166,12 @@ struct ConversationView: View {
         }
     }
 
-    /// No-op while paused — new messages still land in the list, they just
-    /// don't yank the viewport (PLAN-V2 §7.3: "Nowe wiadomości przy pauzie
-    /// normalnie dochodzą poniżej").
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         guard !session.autoscrollPaused, let last = session.items.last else { return }
-        withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last.id, anchor: .bottom) }
+        // pułapka #6: give SwiftUI one cycle to lay out the new item before scrolling.
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last.id, anchor: .bottom) }
+        }
     }
 
     private var scrollNote: some View {
@@ -173,27 +191,10 @@ struct ConversationView: View {
     private func itemView(_ item: ConversationItem) -> some View {
         switch item {
         case .userMessage(_, let text):
-            Text(text)
-                .font(KiwiMangoFont.sans(12))
-                .padding(.horizontal, 13)
-                .padding(.vertical, 9)
-                .background(Color.bubble)
-                .clipShape(RoundedCorners(radii: [12, 12, 3, 12]))
-                .frame(maxWidth: 340, alignment: .trailing)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            userMessage(text)
 
         case .aiMessage(_, let label, let text, let isStreaming):
-            VStack(alignment: .leading, spacing: 4) {
-                Text(label)
-                    .font(KiwiMangoFont.sans(8, weight: .semibold))
-                    .tracking(1)
-                    .foregroundStyle(Color.ink.opacity(0.35))
-                HStack(alignment: .lastTextBaseline, spacing: 2) {
-                    MarkdownText(content: text)
-                    if isStreaming { StreamingCursor() }
-                }
-            }
-            .frame(maxWidth: 340, alignment: .leading)
+            aiMessage(label: label, text: text, isStreaming: isStreaming)
 
         case .thinking(let block):
             ThinkingBlockView(model: block, onToggle: recomputeAutoscrollPause)
@@ -204,6 +205,42 @@ struct ConversationView: View {
         case .permission(let request):
             PermissionCard(request: request)
         }
+    }
+
+    // MARK: User prompt — terminal prompt style
+
+    private func userMessage(_ text: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text("❯")
+                .font(KiwiMangoFont.mono(13, weight: .bold))
+                .foregroundStyle(Color.accent)
+            TerminalMarkdown(content: text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.bubble.opacity(0.45))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: AI reply — terminal panel style
+
+    private func aiMessage(label: String, text: String, isStreaming: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(label)
+                    .font(KiwiMangoFont.mono(9, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.ink.opacity(0.45))
+                Spacer()
+                if isStreaming { StreamingCursor() }
+            }
+            TerminalMarkdown(content: text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -269,7 +306,7 @@ private struct ToolCallView: View {
                             .foregroundStyle(Color.ink.opacity(0.35))
                     }
                     Text("▾")
-                        .font(.system(size: 8))
+                        .font(.system(size: 8 + FontScale.bump))
                         .foregroundStyle(Color.ink.opacity(0.3))
                 }
                 .font(KiwiMangoFont.mono(10))
@@ -292,9 +329,10 @@ private struct ToolCallView: View {
                 }
                 .background(Color.panel2)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-                .frame(maxWidth: 340)
+                .frame(maxWidth: .infinity)
             }
         }
-        .frame(maxWidth: 340, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
     }
 }

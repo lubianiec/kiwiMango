@@ -40,6 +40,7 @@ enum Page: String, CaseIterable {
 
 struct ContentView: View {
     @State private var page: Page = .dashboard
+    @State private var store = ConversationStore()
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -48,8 +49,8 @@ struct ContentView: View {
             VStack(spacing: 0) {
                 switch page {
                 case .dashboard: DashboardView(page: $page)
-                case .agent: AgentPage()
-                case .chat: ChatPage()
+                case .agent: AgentPage(store: store)
+                case .chat: ChatPage(store: store)
                 }
             }
             .padding(.horizontal, 22)
@@ -63,6 +64,7 @@ struct ContentView: View {
                 .padding(.trailing, 14)
                 .frame(maxWidth: .infinity, alignment: .topTrailing)
         }
+        .task { await store.loadOllamaModels() }
         .animation(.easeInOut(duration: 0.2), value: ThemeStore.shared.mode)
     }
 }
