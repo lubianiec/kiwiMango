@@ -92,6 +92,16 @@ enum ConversationKind {
     case agent, chat
 }
 
+/// A file dropped onto the conversation, waiting to be sent with the next
+/// message. Transient — never persisted (SessionSnapshot doesn't touch it,
+/// same as `draft`).
+struct PendingAttachment: Identifiable {
+    let id = UUID()
+    let filename: String
+    let base64: String
+    let mimeType: String
+}
+
 /// One Safari-like session tab. Each tab owns an independent conversation +
 /// model + autoscroll-pause flag (PLAN-V2 §7.3, pułapka #6: "NIE globalna").
 @Observable
@@ -112,6 +122,10 @@ final class ConversationSession: Identifiable {
     /// Real `@State`/`@Bindable` draft per session (was a dead `Binding` stub
     /// in Fala 2/B3) — lives on the session so switching tabs preserves it.
     var draft: String = ""
+
+    /// Files dropped onto the conversation, waiting to be sent with the next
+    /// message — never persisted.
+    var pendingAttachments: [PendingAttachment] = []
 
     // MARK: Backend bookkeeping (Fala 3/C1)
 

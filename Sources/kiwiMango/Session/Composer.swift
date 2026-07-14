@@ -7,12 +7,35 @@ struct Composer: View {
     var placeholder: String
     /// "kontekst: X / Y tok." (Agent) or "model · X tok. · koszt" (Chat).
     var counterText: String
-    /// Agent = microphone, Chat = "/" snippet trigger (PLAN-V2 §7.3).
-    var thirdIcon: String
+    @Binding var pendingAttachments: [PendingAttachment]
     var onSend: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if !pendingAttachments.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(pendingAttachments) { attachment in
+                        HStack(spacing: 4) {
+                            Text(attachment.filename)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .frame(maxWidth: 100)
+                            Button {
+                                pendingAttachments.removeAll { $0.id == attachment.id }
+                            } label: {
+                                Text("✕")
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .font(KiwiMangoFont.mono(9))
+                        .foregroundStyle(Color.ink.opacity(0.55))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .overlay(Capsule().strokeBorder(Color.ink.opacity(0.14), lineWidth: 1))
+                    }
+                }
+            }
+
             TextField(placeholder, text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(KiwiMangoFont.sans(12))
@@ -20,10 +43,6 @@ struct Composer: View {
                 .onSubmit(onSend)
 
             HStack(spacing: 10) {
-                Image(systemName: "plus").kiwiComposerIcon()
-                Image(systemName: "photo").kiwiComposerIcon()
-                Image(systemName: thirdIcon).kiwiComposerIcon()
-
                 Text(counterText)
                     .font(KiwiMangoFont.sans(9))
                     .foregroundStyle(Color.ink.opacity(0.4))
@@ -46,12 +65,5 @@ struct Composer: View {
         .background(Color.compbg)
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.ink.opacity(0.1), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-private extension Image {
-    func kiwiComposerIcon() -> some View {
-        self.font(.system(size: 12 + FontScale.bump))
-            .foregroundStyle(Color.ink.opacity(0.45))
     }
 }

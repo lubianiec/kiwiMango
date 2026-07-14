@@ -117,6 +117,12 @@ final class AgentSessionController {
                         self?.handle(event)
                     }
                 }
+                for attachment in session.pendingAttachments {
+                    try await HermesGatewayClient.shared.attachImageBytes(
+                        sessionID: session.gatewaySessionID!, base64Data: attachment.base64, mimeType: attachment.mimeType
+                    )
+                }
+                session.pendingAttachments.removeAll()
                 try await HermesGatewayClient.shared.submitPrompt(sessionID: session.gatewaySessionID!, text: text)
             } catch {
                 session.items.append(.aiMessage(
@@ -233,10 +239,19 @@ final class ChatSessionController {
     func send(_ text: String) {
         if session.title == "Nowa rozmowa" { session.title = String(text.prefix(40)) }
         session.items.append(.userMessage(id: UUID(), text: text))
-        onPersist?()
         if let claudeModel = ClaudeCodeService.parseModelID(session.model) {
+            if !session.pendingAttachments.isEmpty {
+                session.items.append(.aiMessage(
+                    id: UUID(), senderLabel: "CHAT",
+                    text: "⚠️ Model Claude w Chacie nie obsługuje załączników obrazów — przełącz na model Ollama.",
+                    isStreaming: false
+                ))
+                session.pendingAttachments.removeAll()
+            }
+            onPersist?()
             Task { await runClaude(text: text, model: claudeModel) }
         } else {
+            onPersist?()
             Task { await runOllama(text: text, model: session.model) }
         }
     }
@@ -279,7 +294,16 @@ final class ChatSessionController {
         // ":cloud" suffix when we haven't fetched capabilities for this exact name.
         let isLocal = !model.hasSuffix(":cloud")
         let think: Bool? = thinkingModelCache.contains(model) ? false : nil
-        let history = historyMessages()
+        var history = historyMessages()
+        // ponytail: images ride only on this turn's outgoing request, not saved
+        // into session.items — reopening the session from history replays text
+        // only, same as the rest of Chat's history today.
+        if !session.pendingAttachments.isEmpty, let last = history.last {
+            history[history.count - 1] = OllamaService.ChatPayloadMessage(
+                role: last.role, content: last.content, images: session.pendingAttachments.map(\.base64)
+            )
+            session.pendingAttachments.removeAll()
+        }
 
         let service = OllamaService()
         do {

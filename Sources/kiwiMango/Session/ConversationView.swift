@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - ConversationView (PLAN-V2 §5, §7.3)
 //
@@ -24,6 +25,8 @@ struct ConversationView: View {
     var quickActionItems: [QuickActionItem] = []
     var onSend: (String) -> Void = { _ in }
 
+    @State private var isDropTargeted = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Terminal title bar: traffic dots + title + model picker
@@ -46,13 +49,26 @@ struct ConversationView: View {
                     .strokeBorder(Color.ink.opacity(0.12), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.accent.opacity(isDropTargeted ? 0.08 : 0))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.accent.opacity(isDropTargeted ? 0.5 : 0), lineWidth: 1.5)
+                    )
+                    .allowsHitTesting(false)
+            )
+            .onDrop(of: [.image], isTargeted: $isDropTargeted) { providers in
+                handleDrop(providers)
+                return true
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Composer(
                 draft: $session.draft,
                 placeholder: kind == .agent ? "Napisz do Hermesa…" : "Napisz wiadomość… (⇧⏎ nowa linia)",
                 counterText: counterText,
-                thirdIcon: kind == .agent ? "mic" : "slash.circle",
+                pendingAttachments: $session.pendingAttachments,
                 onSend: {
                     let text = session.draft.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !text.isEmpty else { return }
@@ -63,6 +79,32 @@ struct ConversationView: View {
             .padding(.top, 10)
         }
         .padding(.top, 2)
+    }
+
+    // MARK: Drag & drop images
+
+    private func handleDrop(_ providers: [NSItemProvider]) {
+        for provider in providers {
+            let filename = provider.suggestedName ?? "obraz"
+            _ = provider.loadDataRepresentation(for: .image) { data, _ in
+                guard let data else { return }
+                Task { @MainActor in
+                    session.pendingAttachments.append(PendingAttachment(
+                        filename: filename,
+                        base64: data.base64EncodedString(),
+                        mimeType: Self.mimeType(forFilename: filename)
+                    ))
+                }
+            }
+        }
+    }
+
+    private static func mimeType(forFilename filename: String) -> String {
+        switch (filename as NSString).pathExtension.lowercased() {
+        case "jpg", "jpeg": "image/jpeg"
+        case "gif": "image/gif"
+        default: "image/png"
+        }
     }
 
     // MARK: Terminal title bar
@@ -130,6 +172,38 @@ struct ConversationView: View {
 
     // MARK: Transcript + autoscroll (PLAN-V2 §7.3, pułapka #6)
 
+    // Grouping is render-only: session.items stays flat, this just batches
+    // adjacent .toolCall items so the terminal-log view (pkt 3) can collapse them.
+    private enum RenderGroup: Identifiable {
+        case single(ConversationItem)
+        case toolGroup([ToolCall])
+
+        var id: AnyHashable {
+            switch self {
+            case .single(let item): item.id
+            case .toolGroup(let calls): calls.first!.id
+            }
+        }
+    }
+
+    private func renderGroups(_ items: [ConversationItem]) -> [RenderGroup] {
+        var result: [RenderGroup] = []
+        var pending: [ToolCall] = []
+        func flush() {
+            if !pending.isEmpty { result.append(.toolGroup(pending)); pending = [] }
+        }
+        for item in items {
+            if case .toolCall(let call) = item {
+                pending.append(call)
+            } else {
+                flush()
+                result.append(.single(item))
+            }
+        }
+        flush()
+        return result
+    }
+
     private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -138,8 +212,13 @@ struct ConversationView: View {
                         .frame(maxWidth: .infinity, minHeight: 180)
                 } else {
                     LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(session.items) { item in
-                            itemView(item).id(item.id)
+                        ForEach(renderGroups(session.items)) { group in
+                            switch group {
+                            case .single(let item):
+                                itemView(item).id(item.id)
+                            case .toolGroup(let calls):
+                                ToolCallGroupView(calls: calls).id(calls.first!.id)
+                            }
                         }
                     }
                     .padding(.all, 12)
@@ -200,7 +279,9 @@ struct ConversationView: View {
             ThinkingBlockView(model: block, onToggle: recomputeAutoscrollPause)
 
         case .toolCall(let call):
-            ToolCallView(call: call)
+            // ponytail: unreachable in practice — renderGroups() always routes .toolCall
+            // items through ToolCallGroupView. Kept for switch exhaustiveness only.
+            ToolCallRowView(call: call)
 
         case .permission(let request):
             PermissionCard(request: request)
@@ -285,15 +366,54 @@ private struct QuickActionChip: View {
     }
 }
 
-// MARK: - Tool call capsule (PLAN-V2 §7.3)
+// MARK: - Tool call group (terminal log style — ciasna lista, zwijana >3 akcji)
 
-private struct ToolCallView: View {
+private struct ToolCallGroupView: View {
+    let calls: [ToolCall]
+    @State private var isExpanded = false
+
+    var body: some View {
+        if calls.count <= 3 {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(calls) { call in
+                    ToolCallRowView(call: call)
+                }
+            }
+            .padding(.horizontal, 12)
+        } else {
+            VStack(alignment: .leading, spacing: 3) {
+                Button {
+                    isExpanded.toggle()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(isExpanded ? "▾" : "▸")
+                        Text("Wykonano \(calls.count) akcji")
+                    }
+                    .font(KiwiMangoFont.mono(10))
+                    .foregroundStyle(Color.ink.opacity(0.45))
+                }
+                .buttonStyle(.plain)
+
+                if isExpanded {
+                    ForEach(calls) { call in
+                        ToolCallRowView(call: call)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+        }
+    }
+}
+
+// MARK: - Tool call row — single terminal line, no box (PLAN-V2 §7.3)
+
+private struct ToolCallRowView: View {
     @Bindable var call: ToolCall
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Button {
-                call.isExpanded.toggle()
+                if !call.output.isEmpty { call.isExpanded.toggle() }
             } label: {
                 HStack(spacing: 8) {
                     Circle()
@@ -301,25 +421,24 @@ private struct ToolCallView: View {
                         .frame(width: 5, height: 5)
                     Text("\(call.name) · \(call.argument)")
                         .lineLimit(1)
+                    Spacer(minLength: 8)
                     if let seconds = call.seconds {
                         Text(String(format: "%.1f s", seconds))
                             .foregroundStyle(Color.ink.opacity(0.35))
                     }
-                    Text("▾")
-                        .font(.system(size: 8 + FontScale.bump))
-                        .foregroundStyle(Color.ink.opacity(0.3))
+                    if !call.output.isEmpty {
+                        Text(call.isExpanded ? "▾" : "▸")
+                            .font(.system(size: 8 + FontScale.bump))
+                            .foregroundStyle(Color.ink.opacity(0.3))
+                    }
                 }
                 .font(KiwiMangoFont.mono(10))
                 .foregroundStyle(Color.ink.opacity(0.6))
-                .padding(.horizontal, 11)
-                .padding(.vertical, 6)
-                .background(Color.ink.opacity(0.05))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.ink.opacity(0.08), lineWidth: 1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .padding(.vertical, 2)
             }
             .buttonStyle(.plain)
 
-            if call.isExpanded {
+            if call.isExpanded && !call.output.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(call.output)
                         .font(KiwiMangoFont.mono(9.5))
@@ -333,6 +452,5 @@ private struct ToolCallView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
     }
 }

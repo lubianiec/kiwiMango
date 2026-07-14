@@ -29,9 +29,6 @@ struct AgentPage: View {
                     modelOptions: AgentSessionController.availableModels,
                     quickActionItems: [
                         QuickActionItem(label: "📖 Kontekst z vaulta", action: controller.insertVaultContext),
-                        QuickActionItem(label: "🖼 Wygeneruj obraz", action: nil),
-                        QuickActionItem(label: "📋 Podsumuj dziennik", action: nil),
-                        QuickActionItem(label: "⏰ Nowy cron", action: nil),
                     ],
                     onSend: controller.send
                 )
