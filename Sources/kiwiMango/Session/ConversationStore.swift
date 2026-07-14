@@ -35,8 +35,15 @@ final class ConversationStore {
         set { defaults.set(newValue, forKey: "lastChatModel") }
     }
     private var lastAgentModel: String {
-        get { defaults.string(forKey: "lastAgentModel") ?? AgentSessionController.availableModels[0] }
+        get { defaults.string(forKey: "lastAgentModel") ?? "glm-5.2:cloud" }
         set { defaults.set(newValue, forKey: "lastAgentModel") }
+    }
+    // ponytail: Paweł's own stated default — "nie chce mi się tego ciągle
+    // zmieniać" — glm-5.2:cloud + xhigh reasoning as the standing default,
+    // same persistence pattern as lastAgentModel above.
+    private var lastAgentReasoningEffort: String {
+        get { defaults.string(forKey: "lastAgentReasoningEffort") ?? "xhigh" }
+        set { defaults.set(newValue, forKey: "lastAgentReasoningEffort") }
     }
 
     var chatModelOptions: [String] {
@@ -141,13 +148,16 @@ final class ConversationStore {
 
     func newAgentSession() {
         let model = agentSessions.last?.model ?? lastAgentModel
+        let effort = agentSessions.last?.reasoningEffort ?? lastAgentReasoningEffort
         let session = ConversationSession(title: "Nowa sesja", model: model)
+        session.reasoningEffort = effort
         agentSessions.append(session)
         let controller = AgentSessionController(session: session)
         controller.onPersist = { [weak self] in self?.persist(session, kind: .agent) }
         agentControllers[session.id] = controller
         agentSelectedID = session.id
         lastAgentModel = model
+        lastAgentReasoningEffort = effort
     }
 
     func closeAgentSession(_ id: ConversationSession.ID) {
