@@ -307,6 +307,14 @@ struct ClaudeCodeService: Sendable {
                 // completion, not a headless Claude Code agent with hidden
                 // tool access the UI never surfaced.
                 "--tools", "",
+                // --tools "" alone still loaded Paweł's global ~/.claude/CLAUDE.md
+                // (Session Start ritual: "ALWAYS run `date` first", journal
+                // check, etc.) — the model had no Bash to actually run it, but
+                // it kept narrating that persona in Chat replies. --safe-mode
+                // disables CLAUDE.md/skills/plugins auto-discovery entirely.
+                // (--bare would too, but also skips keychain reads and broke
+                // OAuth login — verified empirically, --safe-mode doesn't.)
+                "--safe-mode",
             ] + (resumeSessionID.map { ["--resume", $0] } ?? [])
             process.environment = Self.sanitizedEnvironment()
 
