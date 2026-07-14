@@ -139,7 +139,33 @@ struct ConversationView: View {
             }
             .labelsHidden()
             .frame(maxWidth: 160)
+
+            if kind == .agent {
+                Picker("", selection: reasoningEffortBinding) {
+                    ForEach(Self.reasoningEffortOptions, id: \.value) { option in
+                        Text(option.label).tag(option.value)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 120)
+                .help("Poziom myślenia agenta")
+            }
         }
+    }
+
+    // ponytail: plain-String Picker binding with "" = default, instead of
+    // wrestling SwiftUI's Optional<String> tag matching — same pattern as
+    // the existing model picker, just with an empty-string sentinel.
+    private static let reasoningEffortOptions: [(label: String, value: String)] = [
+        ("domyślny", ""), ("minimalny", "minimal"), ("niski", "low"),
+        ("średni", "medium"), ("wysoki", "high"), ("bardzo wysoki", "xhigh"), ("max", "max"),
+    ]
+
+    private var reasoningEffortBinding: Binding<String> {
+        Binding(
+            get: { session.reasoningEffort ?? "" },
+            set: { session.reasoningEffort = $0.isEmpty ? nil : $0 }
+        )
     }
 
     private var emptyText: String {
@@ -295,7 +321,7 @@ struct ConversationView: View {
             Text("❯")
                 .font(KiwiMangoFont.mono(13, weight: .bold))
                 .foregroundStyle(Color.accent)
-            TerminalMarkdown(content: text)
+            TerminalMarkdown(content: text, textColor: Color.accent.opacity(0.65))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 12)

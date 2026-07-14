@@ -111,6 +111,10 @@ private enum TerminalMarkdownParser {
 
 struct TerminalMarkdown: View {
     let content: String
+    /// Plain-text color for headings/paragraphs only — code blocks and tables
+    /// keep their own syntax colors regardless (a pasted code snippet in a
+    /// user prompt shouldn't turn amber). Defaults to the shared body color.
+    var textColor: Color = Color.txt
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -127,11 +131,11 @@ struct TerminalMarkdown: View {
         case .heading(let level, let text):
             Text(inlineAttributed(text))
                 .font(headingFont(level))
-                .foregroundStyle(Color.txt)
+                .foregroundStyle(textColor)
         case .paragraph(let text):
             Text(inlineAttributed(text))
                 .font(KiwiMangoFont.mono(12))
-                .foregroundStyle(Color.txt)
+                .foregroundStyle(textColor)
                 .lineSpacing(2)
         case .code(let language, let codeContent):
             CodeBlockView(language: language, content: codeContent)

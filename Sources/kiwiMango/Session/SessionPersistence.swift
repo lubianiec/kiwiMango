@@ -13,6 +13,7 @@ struct SessionSnapshot: Codable {
     var kind: String // "chat" | "agent"
     var updatedAt: Date
     var gatewaySessionID: String?
+    var reasoningEffort: String?
     var claudeResumeSessionID: String?
     var contextUsed: Int?
     var contextMax: Int?
@@ -37,6 +38,7 @@ struct SessionSnapshot: Codable {
         self.kind = kind == .agent ? "agent" : "chat"
         updatedAt = Date()
         gatewaySessionID = session.gatewaySessionID
+        reasoningEffort = session.reasoningEffort
         claudeResumeSessionID = session.claudeResumeSessionID
         contextUsed = session.contextUsed
         contextMax = session.contextMax
@@ -75,6 +77,7 @@ struct SessionSnapshot: Codable {
         }
         let session = ConversationSession(id: id, title: title, model: model, items: restoredItems)
         session.gatewaySessionID = gatewaySessionID
+        session.reasoningEffort = reasoningEffort
         session.claudeResumeSessionID = claudeResumeSessionID
         session.contextUsed = contextUsed
         session.contextMax = contextMax

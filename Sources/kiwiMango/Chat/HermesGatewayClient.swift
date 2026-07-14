@@ -447,9 +447,10 @@ actor HermesGatewayClient {
 
     /// Creates a session, returning the short 8-hex `session_id` to use in
     /// every subsequent call for this conversation.
-    func createSession(model: String, provider: String, cwd: String?) async throws -> String {
+    func createSession(model: String, provider: String, cwd: String?, reasoningEffort: String? = nil) async throws -> String {
         var params: [String: Any] = ["model": model, "provider": provider, "cols": 80]
         if let cwd { params["cwd"] = cwd }
+        if let reasoningEffort, !reasoningEffort.isEmpty { params["reasoning_effort"] = reasoningEffort }
         let result = try await call("session.create", params: params)
         guard let sessionID = result["session_id"] as? String else {
             throw ClientError.sessionMissing
@@ -461,7 +462,7 @@ actor HermesGatewayClient {
     /// Falls back to a fresh `createSession` if the resume fails (e.g. the
     /// server restarted and the in-memory session is gone) — resuming a
     /// dead id must never hard-fail a turn.
-    func resumeOrCreateSession(existingSessionID: String?, model: String, provider: String, cwd: String?) async throws -> String {
+    func resumeOrCreateSession(existingSessionID: String?, model: String, provider: String, cwd: String?, reasoningEffort: String? = nil) async throws -> String {
         if let existingSessionID {
             do {
                 let result = try await call("session.resume", params: ["session_id": existingSessionID])
@@ -472,7 +473,7 @@ actor HermesGatewayClient {
                 // Fall through to a fresh session — see doc comment.
             }
         }
-        return try await createSession(model: model, provider: provider, cwd: cwd)
+        return try await createSession(model: model, provider: provider, cwd: cwd, reasoningEffort: reasoningEffort)
     }
 
     func submitPrompt(sessionID: String, text: String) async throws {

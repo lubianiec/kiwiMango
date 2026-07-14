@@ -75,6 +75,7 @@ final class AgentSessionController {
     ]
 
     private var lastModelUsed: String?
+    private var lastReasoningEffortUsed: String?
     private var currentAIMessageID: UUID?
     private var currentThinking: ThinkingBlockModel?
     private var toolCalls: [String: ToolCall] = [:]
@@ -105,13 +106,14 @@ final class AgentSessionController {
                 // one, so the agent loses context while the UI still shows the old
                 // transcript. Acceptable v1; upgrade: resend a summary of `items`
                 // as the first prompt when a resume falls back to create.
-                if session.gatewaySessionID == nil || lastModelUsed != session.model {
+                if session.gatewaySessionID == nil || lastModelUsed != session.model || lastReasoningEffortUsed != session.reasoningEffort {
                     let id = try await HermesGatewayClient.shared.resumeOrCreateSession(
                         existingSessionID: session.gatewaySessionID, model: session.model,
-                        provider: "ollama-launch", cwd: nil
+                        provider: "ollama-launch", cwd: nil, reasoningEffort: session.reasoningEffort
                     )
                     session.gatewaySessionID = id
                     lastModelUsed = session.model
+                    lastReasoningEffortUsed = session.reasoningEffort
                     onPersist?()
                     HermesEventRouter.shared.register(sessionID: id) { [weak self] event in
                         self?.handle(event)

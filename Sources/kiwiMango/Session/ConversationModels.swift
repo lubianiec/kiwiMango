@@ -134,6 +134,9 @@ final class ConversationSession: Identifiable {
     /// opens a fresh gateway session with the new model (PLAN-V2: model
     /// is fixed per `session.create`, not switchable mid-session).
     var gatewaySessionID: String?
+    /// Optional `reasoning_effort` override sent to `session.create` (Agent only).
+    /// `nil` = default from the gateway profile. Same fixed-per-session rule as `model`.
+    var reasoningEffort: String?
     /// `claude -p --resume <id>` continuity for Chat's Claude route.
     var claudeResumeSessionID: String?
     /// Agent's "kontekst: X / Y tok." — from the gateway's `message.complete` usage.
