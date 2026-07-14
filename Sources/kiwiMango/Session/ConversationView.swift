@@ -312,7 +312,7 @@ struct ConversationView: View {
                 Text(label)
                     .font(KiwiMangoFont.mono(9, weight: .semibold))
                     .tracking(0.8)
-                    .foregroundStyle(Color.ink.opacity(0.45))
+                    .foregroundStyle(Color.accent.opacity(0.8))
                 Spacer()
                 if isStreaming { StreamingCursor() }
             }
@@ -322,6 +322,10 @@ struct ConversationView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // ponytail: whisper-light tint, not a full card — enough to separate
+        // an AI turn from the user prompt row without a boxed/bordered look.
+        .background(Color.ink.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 
