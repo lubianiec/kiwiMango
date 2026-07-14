@@ -42,7 +42,7 @@ struct ConversationView: View {
                     )
                     .allowsHitTesting(false)
             )
-            .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            .onDrop(of: [.fileURL, .image], isTargeted: $isDropTargeted) { providers in
                 handleDrop(providers)
                 return true
             }
@@ -71,22 +71,45 @@ struct ConversationView: View {
 
     private func handleDrop(_ providers: [NSItemProvider]) {
         for provider in providers {
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
-                guard let data = item as? Data,
-                      let url = URL(dataRepresentation: data, relativeTo: nil),
-                      let fileData = try? Data(contentsOf: url)
-                else { return }
-                Task { @MainActor in
-                    let ext = url.pathExtension.lowercased()
-                    let kind: PendingAttachment.Kind = ["png", "jpg", "jpeg", "gif", "heic", "webp"].contains(ext)
-                        ? .image
-                        : ext == "pdf" ? .pdf : .file
-                    session.pendingAttachments.append(PendingAttachment(
-                        kind: kind,
-                        filename: url.lastPathComponent,
-                        base64: fileData.base64EncodedString(),
-                        mimeType: Self.mimeType(forFilename: url.lastPathComponent)
-                    ))
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
+                    guard let data = item as? Data,
+                          let url = URL(dataRepresentation: data, relativeTo: nil),
+                          let fileData = try? Data(contentsOf: url)
+                    else { return }
+                    Task { @MainActor in
+                        let ext = url.pathExtension.lowercased()
+                        let kind: PendingAttachment.Kind = ["png", "jpg", "jpeg", "gif", "heic", "webp"].contains(ext)
+                            ? .image
+                            : ext == "pdf" ? .pdf : .file
+                        session.pendingAttachments.append(PendingAttachment(
+                            kind: kind,
+                            filename: url.lastPathComponent,
+                            base64: fileData.base64EncodedString(),
+                            mimeType: Self.mimeType(forFilename: url.lastPathComponent)
+                        ))
+                    }
+                }
+            } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                // ponytail: Photos.app (and some other sources) vend raw image
+                // data with no file on disk — no `.fileURL` to load, so fall
+                // back to the concrete registered image type (jpeg/png/tiff/…)
+                // and read its bytes directly instead of requiring a real file.
+                let imageTypeID = provider.registeredTypeIdentifiers.first {
+                    UTType($0)?.conforms(to: .image) == true
+                } ?? UTType.jpeg.identifier
+                provider.loadDataRepresentation(forTypeIdentifier: imageTypeID) { data, _ in
+                    guard let data else { return }
+                    Task { @MainActor in
+                        let ext = UTType(imageTypeID)?.preferredFilenameExtension ?? "jpg"
+                        let filename = "zdjecie.\(ext)"
+                        session.pendingAttachments.append(PendingAttachment(
+                            kind: .image,
+                            filename: filename,
+                            base64: data.base64EncodedString(),
+                            mimeType: Self.mimeType(forFilename: filename)
+                        ))
+                    }
                 }
             }
         }
@@ -97,6 +120,9 @@ struct ConversationView: View {
         case "jpg", "jpeg": "image/jpeg"
         case "gif": "image/gif"
         case "pdf": "application/pdf"
+        case "heic": "image/heic"
+        case "tiff", "tif": "image/tiff"
+        case "webp": "image/webp"
         default: "image/png"
         }
     }
