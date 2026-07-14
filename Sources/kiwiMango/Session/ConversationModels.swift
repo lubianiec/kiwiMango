@@ -96,7 +96,9 @@ enum ConversationKind {
 /// message. Transient — never persisted (SessionSnapshot doesn't touch it,
 /// same as `draft`).
 struct PendingAttachment: Identifiable {
+    enum Kind { case image, pdf, file }
     let id = UUID()
+    let kind: Kind
     let filename: String
     let base64: String
     let mimeType: String

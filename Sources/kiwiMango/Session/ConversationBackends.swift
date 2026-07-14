@@ -119,13 +119,27 @@ final class AgentSessionController {
                         self?.handle(event)
                     }
                 }
+                var fileRefs: [String] = []
                 for attachment in session.pendingAttachments {
-                    try await HermesGatewayClient.shared.attachImageBytes(
-                        sessionID: session.gatewaySessionID!, base64Data: attachment.base64, mimeType: attachment.mimeType
-                    )
+                    switch attachment.kind {
+                    case .image:
+                        try await HermesGatewayClient.shared.attachImageBytes(
+                            sessionID: session.gatewaySessionID!, base64Data: attachment.base64, mimeType: attachment.mimeType
+                        )
+                    case .pdf:
+                        try await HermesGatewayClient.shared.attachPDF(
+                            sessionID: session.gatewaySessionID!, contentBase64: attachment.base64, filename: attachment.filename
+                        )
+                    case .file:
+                        let ref = try await HermesGatewayClient.shared.attachFile(
+                            sessionID: session.gatewaySessionID!, dataBase64: attachment.base64, filename: attachment.filename
+                        )
+                        fileRefs.append(ref)
+                    }
                 }
                 session.pendingAttachments.removeAll()
-                try await HermesGatewayClient.shared.submitPrompt(sessionID: session.gatewaySessionID!, text: text)
+                let promptText = fileRefs.isEmpty ? text : (fileRefs.joined(separator: "\n") + "\n" + text)
+                try await HermesGatewayClient.shared.submitPrompt(sessionID: session.gatewaySessionID!, text: promptText)
             } catch {
                 session.items.append(.aiMessage(
                     id: UUID(), senderLabel: "HERMES", text: "⚠️ \(error.localizedDescription)", isStreaming: false
@@ -241,6 +255,14 @@ final class ChatSessionController {
     func send(_ text: String) {
         if session.title == "Nowa rozmowa" { session.title = String(text.prefix(40)) }
         session.items.append(.userMessage(id: UUID(), text: text))
+        if session.pendingAttachments.contains(where: { $0.kind != .image }) {
+            session.items.append(.aiMessage(
+                id: UUID(), senderLabel: "CHAT",
+                text: "⚠️ Chat obsługuje tylko załączniki obrazów — PDF/pliki działają wyłącznie w Agent.",
+                isStreaming: false
+            ))
+            session.pendingAttachments.removeAll()
+        }
         if let claudeModel = ClaudeCodeService.parseModelID(session.model) {
             if !session.pendingAttachments.isEmpty {
                 session.items.append(.aiMessage(

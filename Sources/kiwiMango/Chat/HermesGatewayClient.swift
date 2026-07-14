@@ -490,6 +490,25 @@ actor HermesGatewayClient {
         ])
     }
 
+    /// `pdf.attach` — renders PDF pages to PNG and queues them like attached
+    /// images. Requires `pdftoppm` (poppler) on the gateway host.
+    func attachPDF(sessionID: String, contentBase64: String, filename: String) async throws {
+        _ = try await call("pdf.attach", params: [
+            "session_id": sessionID, "content_base64": contentBase64, "filename": filename,
+        ])
+    }
+
+    /// `file.attach` — stages a non-image file into the session workspace and
+    /// returns an `@file:` ref for the agent's own file tools. Caller must
+    /// prepend the returned ref into the SAME turn's prompt text — unlike
+    /// image/pdf attach, the model doesn't see this file automatically.
+    func attachFile(sessionID: String, dataBase64: String, filename: String) async throws -> String {
+        let result = try await call("file.attach", params: [
+            "session_id": sessionID, "data_url": dataBase64, "name": filename,
+        ])
+        return result["ref_text"] as? String ?? "@file:\(filename)"
+    }
+
     /// UI only offers ZATWIERDŹ/ODRZUĆ (no session/always granularity —
     /// matches the two-button plan). `approve` → server's "once" choice.
     func respondApproval(sessionID: String, approve: Bool) async throws {

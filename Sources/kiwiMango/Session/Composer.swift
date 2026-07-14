@@ -16,7 +16,7 @@ struct Composer: View {
                 HStack(spacing: 6) {
                     ForEach(pendingAttachments) { attachment in
                         HStack(spacing: 4) {
-                            Text(attachment.filename)
+                            Text("\(attachment.kind == .image ? "🖼" : attachment.kind == .pdf ? "📄" : "📎") \(attachment.filename)")
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                                 .frame(maxWidth: 100)

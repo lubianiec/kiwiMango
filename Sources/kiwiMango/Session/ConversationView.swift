@@ -58,7 +58,7 @@ struct ConversationView: View {
                     )
                     .allowsHitTesting(false)
             )
-            .onDrop(of: [.image], isTargeted: $isDropTargeted) { providers in
+            .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
                 handleDrop(providers)
                 return true
             }
@@ -85,14 +85,21 @@ struct ConversationView: View {
 
     private func handleDrop(_ providers: [NSItemProvider]) {
         for provider in providers {
-            let filename = provider.suggestedName ?? "obraz"
-            _ = provider.loadDataRepresentation(for: .image) { data, _ in
-                guard let data else { return }
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
+                guard let data = item as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil),
+                      let fileData = try? Data(contentsOf: url)
+                else { return }
                 Task { @MainActor in
+                    let ext = url.pathExtension.lowercased()
+                    let kind: PendingAttachment.Kind = ["png", "jpg", "jpeg", "gif", "heic", "webp"].contains(ext)
+                        ? .image
+                        : ext == "pdf" ? .pdf : .file
                     session.pendingAttachments.append(PendingAttachment(
-                        filename: filename,
-                        base64: data.base64EncodedString(),
-                        mimeType: Self.mimeType(forFilename: filename)
+                        kind: kind,
+                        filename: url.lastPathComponent,
+                        base64: fileData.base64EncodedString(),
+                        mimeType: Self.mimeType(forFilename: url.lastPathComponent)
                     ))
                 }
             }
@@ -103,6 +110,7 @@ struct ConversationView: View {
         switch (filename as NSString).pathExtension.lowercased() {
         case "jpg", "jpeg": "image/jpeg"
         case "gif": "image/gif"
+        case "pdf": "application/pdf"
         default: "image/png"
         }
     }
