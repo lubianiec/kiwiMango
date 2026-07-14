@@ -73,9 +73,18 @@ private struct HeroSection: View {
                     .font(.system(size: 24 + FontScale.bump, weight: .light))
                     .monospacedDigit()
                     .contentTransition(.numericText())
+                Text(appVersionLabel)
+                    .font(.system(size: 8.5 + FontScale.bump))
+                    .foregroundStyle(Color.ink.opacity(0.3))
             }
         }
     }
+}
+
+/// Git-derived build identifier stamped by Makefile — one glance tells you
+/// exactly which commit is installed, no more guessing vs GitHub/disk.
+private var appVersionLabel: String {
+    Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
 }
 
 /// One nowrap 9.5pt status line: service dots + model + quick actions.

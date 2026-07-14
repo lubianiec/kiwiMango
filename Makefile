@@ -3,7 +3,11 @@
 
 APP_NAME     := kiwiMango
 BUNDLE_ID    := com.kiwimango.app
-VERSION      ?= 1.0.0
+# Auto-derived from git so every build is self-identifying — no more manual
+# version bumps to remember, no more "czy to jest aktualne" guessing.
+# Tag → "v1.2.0"; commits after tag → "v1.2.0-3-gabc1234"; uncommitted
+# changes → "-dirty" suffix.
+VERSION      ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 BUILD_DIR    := .build
 RELEASE_DIR  := $(BUILD_DIR)/release
@@ -17,7 +21,7 @@ BINARY       := $(BUILD_DIR)/$(SWIFT_TRIPLE)/release/$(APP_NAME)
 RESOURCE_BUNDLE := $(APP_NAME)_$(APP_NAME).bundle
 BUNDLE_SRC      := $(RELEASE_DIR)/$(RESOURCE_BUNDLE)
 
-.PHONY: all build run install dmg clean
+.PHONY: all build run install dmg clean status
 
 all: build
 
@@ -98,3 +102,26 @@ dmg: build
 # ── Clean ────────────────────────────────────────────────────────────
 clean:
 	rm -rf "$(BUILD_DIR)"
+
+# ── Status: co jest gdzie, jednym spojrzeniem ─────────────────────────
+status:
+	@echo "=== kiwiMango — stan wersji ==="
+	@git fetch origin main --quiet 2>/dev/null || echo "(brak sieci — pomijam fetch)"
+	@LOCAL=$$(git rev-parse --short HEAD); \
+	REMOTE=$$(git rev-parse --short origin/main 2>/dev/null || echo "?"); \
+	DIRTY=$$(git status --porcelain | wc -l | tr -d ' '); \
+	INSTALLED=$$(defaults read "/Applications/$(APP_NAME).app/Contents/Info" CFBundleShortVersionString 2>/dev/null || echo "(brak w /Applications)"); \
+	RELEASE=$$(gh release view --json tagName -q .tagName 2>/dev/null || echo "(brak/gh nie zalogowany)"); \
+	echo "Lokalny commit:       $$LOCAL"; \
+	echo "GitHub (origin/main): $$REMOTE"; \
+	if [ "$$DIRTY" != "0" ]; then echo "Niezacommitowane zmiany: $$DIRTY plik(ów) ⚠️"; fi; \
+	echo "Zainstalowana appka:  $$INSTALLED"; \
+	echo "Ostatni release:      $$RELEASE"; \
+	echo ""; \
+	if [ "$$LOCAL" != "$$REMOTE" ]; then \
+		echo "⚠️  Lokalny kod NIE jest zpushowany na GitHub."; \
+	elif [ "$$DIRTY" != "0" ]; then \
+		echo "⚠️  Masz niezacommitowane zmiany."; \
+	else \
+		echo "✅ Kod lokalny = GitHub main."; \
+	fi
