@@ -7,22 +7,10 @@ import UniformTypeIdentifiers
 // exact view. Terminal-styled transcript: dark panel, monospace text, syntax
 // highlighting, clickable links, markdown tables, and a clear code block chrome.
 
-/// One quick-action capsule (Agent only). `action == nil` renders dimmed and
-/// inert — PLAN-V2 §7.3/§9 C1: only "Kontekst z vaulta" has a real backend
-/// this wave (`AgentSessionController.insertVaultContext`); the other three
-/// have no wired service yet (flow-agent image gen, dziennik summarizer, a
-/// cron-creation form are new infra, out of scope for an integration pass).
-struct QuickActionItem: Identifiable {
-    let id = UUID()
-    let label: String
-    let action: (() -> Void)?
-}
-
 struct ConversationView: View {
     @Bindable var session: ConversationSession
     var kind: ConversationKind
     var modelOptions: [String] = []
-    var quickActionItems: [QuickActionItem] = []
     var onSend: (String) -> Void = { _ in }
 
     @State private var isDropTargeted = false
@@ -32,11 +20,6 @@ struct ConversationView: View {
             // Terminal title bar: traffic dots + title + model picker
             terminalTitleBar
                 .padding(.bottom, 8)
-
-            if kind == .agent {
-                quickActions
-                    .padding(.bottom, 12)
-            }
 
             // Terminal window frame around transcript
             VStack(alignment: .leading, spacing: 0) {
@@ -192,16 +175,6 @@ struct ConversationView: View {
 
     private static func formatK(_ value: Int) -> String {
         value >= 1000 ? String(format: "%.1fk", Double(value) / 1000) : "\(value)"
-    }
-
-    // MARK: Quick actions
-
-    private var quickActions: some View {
-        HStack(spacing: 6) {
-            ForEach(quickActionItems) { item in
-                QuickActionChip(label: item.label, action: item.action)
-            }
-        }
     }
 
     // MARK: Transcript + autoscroll (PLAN-V2 §7.3, pułapka #6)
@@ -378,29 +351,6 @@ private struct StreamingCursor: View {
                     visible = false
                 }
             }
-    }
-}
-
-// MARK: - Quick action chip
-
-private struct QuickActionChip: View {
-    let label: String
-    let action: (() -> Void)?
-    @State private var isHovering = false
-
-    private var isActive: Bool { action != nil }
-
-    var body: some View {
-        Text(label)
-            .font(KiwiMangoFont.sans(9))
-            .foregroundStyle(isActive ? (isHovering ? Color.accent : Color.ink.opacity(0.6)) : Color.ink.opacity(0.25))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .overlay(Capsule().strokeBorder(isActive && isHovering ? Color.accent.opacity(0.5) : Color.ink.opacity(0.14), lineWidth: 1))
-            .animation(.easeInOut(duration: 0.2), value: isHovering)
-            .contentShape(Capsule())
-            .onTapGesture { action?() }
-            .onHover { isHovering = isActive && $0 }
     }
 }
 

@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// One distinct hue per weekday for the 7-day donut — reused by both the
+/// legend dots (`CostsBlock`) and the arc segments (`DonutChart`) so they
+/// always agree. Existing palette tokens only, no new colors.
+private func weekdayColor(for index: Int) -> Color {
+    let palette: [Color] = [.accent, .blue, .teal, .rose, .green, .danger, .coreP]
+    return palette[index % palette.count]
+}
+
 // MARK: - SectionHead (PLAN-V2 §7.2 — "01 AGENCI ───" header, shared by
 // CostsBlock/ProcessSection/AgentsWindow; one definition, reused across the
 // target. Moved here from the deleted AgentsSection.swift 2026-07-12 when the
@@ -127,10 +135,10 @@ struct CostsBlock: View {
                         .frame(width: 110, height: 110)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        ForEach(Array(days.suffix(4).enumerated()), id: \.offset) { index, day in
+                        ForEach(Array(days.enumerated()).suffix(4), id: \.offset) { index, day in
                             HStack(spacing: 6) {
                                 Circle()
-                                    .fill(segmentColor(for: index))
+                                    .fill(weekdayColor(for: index))
                                     .frame(width: 6, height: 6)
                                 Text(Self.weekdayAbbrevShort(day))
                                     .font(KiwiMangoFont.sans(9.5, weight: .medium))
@@ -148,15 +156,6 @@ struct CostsBlock: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func segmentColor(for index: Int) -> Color {
-        switch index % 4 {
-        case 0: Color.accent
-        case 1: Color.accent.opacity(0.7)
-        case 2: Color.accent.opacity(0.45)
-        default: Color.accent.opacity(0.25)
-        }
     }
 
     private static func weekdayAbbrevShort(_ day: HermesStateReader.DayTokens) -> String {
@@ -279,15 +278,6 @@ private struct DonutChart: View {
         max(Double(days.reduce(0) { $0 + $1.total }), 1)
     }
 
-    private func segmentColor(for index: Int) -> Color {
-        switch index % 4 {
-        case 0: Color.accent
-        case 1: Color.accent.opacity(0.7)
-        case 2: Color.accent.opacity(0.45)
-        default: Color.accent.opacity(0.25)
-        }
-    }
-
     var body: some View {
         ZStack {
             Circle()
@@ -306,7 +296,7 @@ private struct DonutChart: View {
                     let path = Path { path in
                         path.addArc(center: center, radius: radius, startAngle: .radians(startAngle), endAngle: .radians(endAngle), clockwise: false)
                     }
-                    context.stroke(path, with: .color(segmentColor(for: index)), lineWidth: 10)
+                    context.stroke(path, with: .color(weekdayColor(for: index)), lineWidth: 10)
                     startAngle = endAngle
                 }
             }

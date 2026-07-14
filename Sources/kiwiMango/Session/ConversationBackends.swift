@@ -149,14 +149,6 @@ final class AgentSessionController {
         }
     }
 
-    /// "📖 Kontekst z vaulta" quick action — the only one with a wired backend
-    /// this wave (PLAN-V2 §7.3 quick actions; the other three have none yet,
-    /// see `AgentPage.quickActionItems`).
-    func insertVaultContext() {
-        guard let memory = HermesFilesReader.memoryFile() else { return }
-        session.draft = "Kontekst z vaulta (MEMORY.md):\n\(memory.text)\n\n" + session.draft
-    }
-
     private func handle(_ event: HermesGatewayClient.Event) {
         switch event {
         case .messageStart:

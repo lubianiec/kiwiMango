@@ -27,9 +27,6 @@ struct AgentPage: View {
                     session: session,
                     kind: .agent,
                     modelOptions: AgentSessionController.availableModels,
-                    quickActionItems: [
-                        QuickActionItem(label: "📖 Kontekst z vaulta", action: controller.insertVaultContext),
-                    ],
                     onSend: controller.send
                 )
             }

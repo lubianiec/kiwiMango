@@ -9,7 +9,6 @@ import SwiftUI
 // starts/stops with this view (pułapka #5).
 
 struct DashboardView: View {
-    @Binding var page: Page
     @State private var monitor = HardwareMonitor()
     @State private var store = DashboardStore()
     @State private var services = ServiceStatus()
@@ -18,7 +17,7 @@ struct DashboardView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HeroSection(page: $page, store: store, services: services, agents: agents)
+                HeroSection(store: store, services: services, agents: agents)
 
                 HardwareStrip(monitor: monitor)
                     .padding(.top, 12)
@@ -55,7 +54,6 @@ struct DashboardView: View {
 // MARK: - Hero (§7.2 pkt 1)
 
 private struct HeroSection: View {
-    @Binding var page: Page
     let store: DashboardStore
     let services: ServiceStatus
     let agents: AgentsMonitor
@@ -66,7 +64,7 @@ private struct HeroSection: View {
                 Text("Witaj, Paweł!")
                     .font(.system(size: 19 + FontScale.bump, weight: .light))
 
-                StatusLine(page: $page, store: store, services: services, agents: agents)
+                StatusLine(store: store, services: services, agents: agents)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -82,7 +80,6 @@ private struct HeroSection: View {
 
 /// One nowrap 9.5pt status line: service dots + model + quick actions.
 private struct StatusLine: View {
-    @Binding var page: Page
     let store: DashboardStore
     let services: ServiceStatus
     let agents: AgentsMonitor
@@ -110,9 +107,6 @@ private struct StatusLine: View {
             }
 
             QuickAction(title: "Agenci \(agents.activeCount)") { openWindow(id: "agents") }
-
-            QuickAction(title: "＋ agent") { page = .agent }
-            QuickAction(title: "＋ chat") { page = .chat }
         }
         .font(.system(size: 9.5 + FontScale.bump))
         .foregroundStyle(Color.ink.opacity(0.55))

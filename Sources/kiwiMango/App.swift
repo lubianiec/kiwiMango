@@ -48,7 +48,7 @@ struct ContentView: View {
 
             VStack(spacing: 0) {
                 switch page {
-                case .dashboard: DashboardView(page: $page)
+                case .dashboard: DashboardView()
                 case .agent: AgentPage(store: store)
                 case .chat: ChatPage(store: store)
                 }
