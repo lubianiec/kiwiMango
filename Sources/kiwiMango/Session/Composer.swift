@@ -9,6 +9,8 @@ struct Composer: View {
     var counterText: String
     @Binding var pendingAttachments: [PendingAttachment]
     var onSend: () -> Void
+    /// When set, counterText renders as a button (context-usage popover trigger).
+    var onTapCounter: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -43,10 +45,7 @@ struct Composer: View {
                 .onSubmit(onSend)
 
             HStack(spacing: 10) {
-                Text(counterText)
-                    .font(KiwiMangoFont.sans(9))
-                    .foregroundStyle(Color.ink.opacity(0.4))
-                    .monospacedDigit()
+                counterLabel
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 Button(action: onSend) {
@@ -65,5 +64,19 @@ struct Composer: View {
         .background(Color.compbg)
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.ink.opacity(0.1), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    @ViewBuilder
+    private var counterLabel: some View {
+        let text = Text(counterText)
+            .font(KiwiMangoFont.sans(9))
+            .foregroundStyle(Color.ink.opacity(0.4))
+            .monospacedDigit()
+        if let onTapCounter {
+            Button(action: onTapCounter) { text }
+                .buttonStyle(.plain)
+        } else {
+            text
+        }
     }
 }

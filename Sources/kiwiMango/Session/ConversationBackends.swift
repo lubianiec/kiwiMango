@@ -235,6 +235,7 @@ final class ChatSessionController {
 
     private var thinkingModelCache: Set<String> = []
     private var thinkingModelCacheLoaded = false
+    private var lastContextModel: String?
 
     /// Wired by `ConversationStore` at controller creation — saves the session
     /// snapshot to disk. Called at end-of-turn points only, never per-chunk.
@@ -245,6 +246,10 @@ final class ChatSessionController {
     }
 
     func send(_ text: String) {
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "/compact" {
+            Task { await performCompact() }
+            return
+        }
         if session.title == "Nowa rozmowa" { session.title = String(text.prefix(40)) }
         session.items.append(.userMessage(id: UUID(), text: text))
         if session.pendingAttachments.contains(where: { $0.kind != .image }) {
@@ -309,6 +314,10 @@ final class ChatSessionController {
         // ponytail: same local/cloud fallback heuristic as v1's ChatState.isLocalOllamaModel —
         // ":cloud" suffix when we haven't fetched capabilities for this exact name.
         let isLocal = !model.hasSuffix(":cloud")
+        if model != lastContextModel {
+            lastContextModel = model
+            session.contextMax = isLocal ? 8192 : (try? await OllamaService().contextLength(for: model)) ?? 8192
+        }
         let think: Bool? = thinkingModelCache.contains(model) ? false : nil
         var history = historyMessages()
         // ponytail: images ride only on this turn's outgoing request, not saved
@@ -329,6 +338,7 @@ final class ChatSessionController {
                     appendToAIMessage(chunk, id: id)
                 case .stats(let stats):
                     session.totalTokens += stats.evalCount
+                    session.contextUsed = stats.promptEvalCount + stats.evalCount
                     Task {
                         await TokenUsageRecorder.shared.record(
                             model: model, source: "kiwi-chat",
@@ -338,6 +348,49 @@ final class ChatSessionController {
                 }
             }
             finishAIMessage(id: id)
+        } catch {
+            failAIMessage(id: id, message: error.localizedDescription)
+        }
+    }
+
+    /// `/compact` — Ollama route only (Claude manages its own context via
+    /// `--resume`). Summarizes the visible history via one extra model call,
+    /// then replaces the whole item list with the summary and resets the
+    /// context/token counters.
+    private func performCompact() async {
+        guard ClaudeCodeService.parseModelID(session.model) == nil else {
+            session.items.append(.aiMessage(
+                id: UUID(), senderLabel: "CHAT", text: "⚠️ /compact działa tylko dla modeli Ollama.", isStreaming: false
+            ))
+            onPersist?()
+            return
+        }
+        guard !session.items.isEmpty else { return }
+
+        let id = UUID()
+        session.items.append(.aiMessage(id: id, senderLabel: "KOMPAKT", text: "", isStreaming: true))
+
+        await loadThinkingModelsIfNeeded()
+        let isLocal = !session.model.hasSuffix(":cloud")
+        let think: Bool? = thinkingModelCache.contains(session.model) ? false : nil
+        let instruction = OllamaService.ChatPayloadMessage(
+            role: "user",
+            content: "Podsumuj zwięźle całą powyższą rozmowę — kluczowe fakty, decyzje, ustalenia i kontekst potrzebny do jej kontynuowania. Bądź rzeczowy, bez formalności, bez powtarzania pytania."
+        )
+        let service = OllamaService()
+        do {
+            for try await delta in service.streamChat(
+                model: session.model, messages: historyMessages() + [instruction], think: think, isLocal: isLocal
+            ) {
+                if case .content(let chunk) = delta { appendToAIMessage(chunk, id: id) }
+            }
+            finishAIMessage(id: id)
+            session.items.removeAll { $0.id != id }
+            session.contextUsed = nil
+            session.contextMax = nil
+            session.totalTokens = 0
+            lastContextModel = nil
+            onPersist?()
         } catch {
             failAIMessage(id: id, message: error.localizedDescription)
         }

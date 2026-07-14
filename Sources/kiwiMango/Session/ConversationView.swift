@@ -14,6 +14,7 @@ struct ConversationView: View {
     var onSend: (String) -> Void = { _ in }
 
     @State private var isDropTargeted = false
+    @State private var showBreakdown = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -57,8 +58,10 @@ struct ConversationView: View {
                     guard !text.isEmpty else { return }
                     session.draft = ""
                     onSend(text)
-                }
+                },
+                onTapCounter: showsContextBreakdown ? { showBreakdown = true } : nil
             )
+            .popover(isPresented: $showBreakdown) { contextBreakdownView }
             .padding(.top, 10)
         }
         .padding(.top, 2)
@@ -169,12 +172,68 @@ struct ConversationView: View {
             return "kontekst: \(Self.formatK(used)) / \(Self.formatK(max)) tok."
         } else {
             let cost = session.totalCostUSD > 0 ? String(format: "$%.2f", session.totalCostUSD) : "$0,00 (Pro)"
+            if isOllamaRoute, let used = session.contextUsed, let max = session.contextMax, max > 0 {
+                let percent = Int(Double(used) / Double(max) * 100)
+                return "\(session.model) · \(percent)% kontekstu · \(cost)"
+            }
             return "\(session.model) · \(Self.formatK(session.totalTokens)) tok. · \(cost)"
         }
     }
 
     private static func formatK(_ value: Int) -> String {
         value >= 1000 ? String(format: "%.1fk", Double(value) / 1000) : "\(value)"
+    }
+
+    /// True when Chat is routed to an Ollama model (not Claude) — /compact and
+    /// the % breakdown only make sense on this route.
+    private var isOllamaRoute: Bool {
+        kind == .chat && ClaudeCodeService.parseModelID(session.model) == nil
+    }
+
+    private var showsContextBreakdown: Bool {
+        isOllamaRoute && session.contextMax != nil
+    }
+
+    private var contextBreakdownView: some View {
+        let used = session.contextUsed ?? 0
+        let max = session.contextMax ?? 0
+        let percent = max > 0 ? Int(Double(used) / Double(max) * 100) : 0
+        let isLocal = !session.model.hasSuffix(":cloud")
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(session.model)
+                .font(KiwiMangoFont.mono(11, weight: .semibold))
+                .foregroundStyle(Color.ink)
+            Text("Limit: \(max) tok.")
+                .font(KiwiMangoFont.sans(10))
+                .foregroundStyle(Color.ink.opacity(0.7))
+            Text(isLocal
+                 ? "Ograniczenie kiwiMango dla 16GB RAM, nie realny max modelu."
+                 : "Zgłoszony limit modelu w Ollama Cloud.")
+                .font(KiwiMangoFont.sans(9))
+                .foregroundStyle(Color.ink.opacity(0.45))
+            Divider()
+            Text("Zużycie: \(used) tok. (\(percent)%)")
+                .font(KiwiMangoFont.sans(10))
+                .foregroundStyle(Color.ink.opacity(0.7))
+            Text("Wiadomości w historii: \(session.items.count)")
+                .font(KiwiMangoFont.sans(10))
+                .foregroundStyle(Color.ink.opacity(0.7))
+            Button {
+                onSend("/compact")
+                showBreakdown = false
+            } label: {
+                Text("Kompaktuj teraz")
+                    .font(KiwiMangoFont.mono(10, weight: .medium))
+                    .foregroundStyle(Color.bg)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(Color.accent)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .frame(width: 240)
     }
 
     // MARK: Transcript + autoscroll (PLAN-V2 §7.3, pułapka #6)
@@ -302,7 +361,7 @@ struct ConversationView: View {
             Text("❯")
                 .font(KiwiMangoFont.mono(13, weight: .bold))
                 .foregroundStyle(Color.accent)
-            TerminalMarkdown(content: text, textColor: Color.accent.opacity(0.65))
+            TerminalMarkdown(content: text)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 12)
@@ -323,7 +382,7 @@ struct ConversationView: View {
                 Spacer()
                 if isStreaming { StreamingCursor() }
             }
-            TerminalMarkdown(content: text)
+            TerminalMarkdown(content: text, textColor: Color.accent.opacity(0.75))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 12)

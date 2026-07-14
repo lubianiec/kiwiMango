@@ -372,6 +372,33 @@ struct OllamaService: Sendable {
         }
     }
 
+    /// `POST /api/show` → context window size for `model`. The context length
+    /// key is namespaced by architecture (`kimi-k2.context_length`,
+    /// `qwen3.context_length`, ...), so read `general.architecture` first,
+    /// then look up the matching key.
+    // ponytail: JSONSerialization instead of Decodable — the context_length
+    // key name varies per model family, which Codable can't express without
+    // more boilerplate than this dict lookup.
+    func contextLength(for model: String) async throws -> Int {
+        var request = URLRequest(url: try endpoint("/api/show"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10
+        request.httpBody = try JSONEncoder().encode(["model": model])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw OllamaError.http(http.statusCode, Self.decodeErrorBody(body) ?? body)
+        }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let modelInfo = json["model_info"] as? [String: Any],
+              let arch = modelInfo["general.architecture"] as? String,
+              let contextLength = modelInfo["\(arch).context_length"] as? Int
+        else { throw OllamaError.server("context_length not found") }
+        return contextLength
+    }
+
     // MARK: - Helpers
 
     /// Raw image bytes (JPEG/PNG) → base64 string for the `images` field.

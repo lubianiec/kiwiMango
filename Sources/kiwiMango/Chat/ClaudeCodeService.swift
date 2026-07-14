@@ -302,6 +302,11 @@ struct ClaudeCodeService: Sendable {
                 "--output-format", "stream-json",
                 "--include-partial-messages",
                 "--verbose",
+                // Chat is a plain conversation, not an agent — "" disables every
+                // built-in tool (Bash/Edit/Read/...) so this is a real chat
+                // completion, not a headless Claude Code agent with hidden
+                // tool access the UI never surfaced.
+                "--tools", "",
             ] + (resumeSessionID.map { ["--resume", $0] } ?? [])
             process.environment = Self.sanitizedEnvironment()
 
