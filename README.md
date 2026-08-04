@@ -74,6 +74,9 @@ make run
 
 Wymagania: macOS 15+, Xcode z toolchainem Swift 6. `make install` kopiuje gotową paczkę do `/Applications`.
 
+**Grok (xAI):** wymaga uruchomionego lokalnego proxy — `hermes proxy start --provider xai`.
+Auth to OAuth SuperGrok podpięty przez `hermes auth` (nie klucz API w appce).
+
 <br>
 
 ## Struktura

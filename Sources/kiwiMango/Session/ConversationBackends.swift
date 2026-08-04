@@ -67,11 +67,12 @@ final class AgentSessionController {
     let session: ConversationSession
     /// Hermes gateway model list has no discovery endpoint wired yet — this is
     /// the curated set from Paweł's own Ollama cloud roster (see MEMORY.md).
-    /// `provider` is always "ollama-launch": the only value verified against a
-    /// live Hermes install (HermesChatService's F22 finding) — session.create's
-    /// provider space for other values is undocumented, so we don't guess.
+    /// Two verified providers: "ollama-launch" (HermesChatService's F22 finding)
+    /// and "xai-oauth" (verified 2026-08-04 via `hermes chat -m grok-4.5
+    /// --provider xai-oauth`) — session.create's provider space for other
+    /// values is undocumented, so we don't guess beyond these two.
     static let availableModels = [
-        "kimi-k2.7-code:cloud", "glm-5.2:cloud", "qwen3.5:cloud", "minimax-m3:cloud",
+        "grok-4.5", "kimi-k2.7-code:cloud", "glm-5.2:cloud", "qwen3.5:cloud", "minimax-m3:cloud",
     ]
 
     private var lastModelUsed: String?
@@ -107,9 +108,10 @@ final class AgentSessionController {
                 // transcript. Acceptable v1; upgrade: resend a summary of `items`
                 // as the first prompt when a resume falls back to create.
                 if session.gatewaySessionID == nil || lastModelUsed != session.model || lastReasoningEffortUsed != session.reasoningEffort {
+                    let provider = session.model.hasPrefix("grok") ? "xai-oauth" : "ollama-launch"
                     let id = try await HermesGatewayClient.shared.resumeOrCreateSession(
                         existingSessionID: session.gatewaySessionID, model: session.model,
-                        provider: "ollama-launch", cwd: nil, reasoningEffort: session.reasoningEffort
+                        provider: provider, cwd: nil, reasoningEffort: session.reasoningEffort
                     )
                     session.gatewaySessionID = id
                     lastModelUsed = session.model
@@ -271,6 +273,17 @@ final class ChatSessionController {
             }
             onPersist?()
             Task { await runClaude(text: text, model: claudeModel) }
+        } else if session.model.hasPrefix("grok") {
+            if !session.pendingAttachments.isEmpty {
+                session.items.append(.aiMessage(
+                    id: UUID(), senderLabel: "CHAT",
+                    text: "⚠️ Model Grok w Chacie nie obsługuje załączników obrazów — przełącz na model Ollama.",
+                    isStreaming: false
+                ))
+                session.pendingAttachments.removeAll()
+            }
+            onPersist?()
+            Task { await runXAI(text: text, model: session.model) }
         } else {
             onPersist?()
             Task { await runOllama(text: text, model: session.model) }
@@ -296,6 +309,42 @@ final class ChatSessionController {
                 case .result(let info):
                     if let sessionID = info.sessionID { session.claudeResumeSessionID = sessionID }
                     if let cost = info.costUSD { session.totalCostUSD += cost }
+                }
+            }
+            finishAIMessage(id: id)
+        } catch {
+            failAIMessage(id: id, message: error.localizedDescription)
+        }
+    }
+
+    // MARK: Grok (xAI) — contextMax hardcoded, xAI doesn't report a context
+    // window size the way Ollama's /api/show does. // ponytail: revisit if
+    // xAI ships a discovery endpoint.
+
+    private func runXAI(text: String, model: String) async {
+        let id = UUID()
+        session.items.append(.aiMessage(id: id, senderLabel: "GROK · \(model.uppercased())", text: "", isStreaming: true))
+
+        if model != lastContextModel {
+            lastContextModel = model
+            session.contextMax = 256_000
+        }
+
+        let service = XAIService()
+        do {
+            for try await delta in service.streamChat(model: model, messages: historyMessages()) {
+                switch delta {
+                case .content(let chunk):
+                    appendToAIMessage(chunk, id: id)
+                case .stats(let stats):
+                    session.totalTokens += stats.evalCount
+                    session.contextUsed = stats.promptEvalCount + stats.evalCount
+                    Task {
+                        await TokenUsageRecorder.shared.record(
+                            model: model, source: "kiwi-chat",
+                            promptEvalCount: stats.promptEvalCount, evalCount: stats.evalCount
+                        )
+                    }
                 }
             }
             finishAIMessage(id: id)
@@ -358,7 +407,7 @@ final class ChatSessionController {
     /// then replaces the whole item list with the summary and resets the
     /// context/token counters.
     private func performCompact() async {
-        guard ClaudeCodeService.parseModelID(session.model) == nil else {
+        guard ClaudeCodeService.parseModelID(session.model) == nil, !session.model.hasPrefix("grok") else {
             session.items.append(.aiMessage(
                 id: UUID(), senderLabel: "CHAT", text: "⚠️ /compact działa tylko dla modeli Ollama.", isStreaming: false
             ))

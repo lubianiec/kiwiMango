@@ -47,7 +47,7 @@ final class ConversationStore {
     }
 
     var chatModelOptions: [String] {
-        ["claude:sonnet", "claude:opus"] + chatOllamaModels
+        ["claude:sonnet", "claude:opus"] + XAIService.models + chatOllamaModels
     }
 
     func loadOllamaModels() async {
