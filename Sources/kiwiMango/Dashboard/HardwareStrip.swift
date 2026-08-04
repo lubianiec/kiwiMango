@@ -489,13 +489,8 @@ private struct RAMDetailPanel: View {
                 DetailRow(key: "Pamięć wymiany (swap)", value: "\(plNumber(Double(swapUsed) / 1e9, 2)) GB")
             }
 
-            let topByRAM = monitor.topProcesses.sorted { $0.ramBytes > $1.ramBytes }.prefix(3)
-            if !topByRAM.isEmpty {
-                DetailSectionLabel(text: "Top procesy — RAM")
-                ForEach(Array(topByRAM), id: \.id) { proc in
-                    DetailRow(key: proc.name, value: "\(plNumber(Double(proc.ramBytes) / 1e9, 2)) GB")
-                }
-            }
+            ProcessSection(hardware: monitor)
+                .padding(.top, 4)
         }
     }
 

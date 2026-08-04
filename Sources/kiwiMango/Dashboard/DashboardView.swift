@@ -23,7 +23,8 @@ struct DashboardView: View {
                     .padding(.top, 12)
 
                 CostsBlock(store: store)
-                ProcessSection(hardware: monitor)
+                // Procesy przeniesione do panelu detali RAM (klik w RAM na
+                // stripie) — decyzja Pawła 2026-08-05: psuły kompozycję.
             }
             // ponytail: ContentView already pads horizontal/top/bottom around
             // every page (nav clearance) — Dashboard doesn't re-pad on top of that.
