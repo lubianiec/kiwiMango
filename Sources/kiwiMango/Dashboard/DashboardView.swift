@@ -66,9 +66,9 @@ private struct HeroSection: View {
             VStack(alignment: .leading, spacing: 8) {
                 if let quote {
                     Text("„\(quote.text)”")
-                        .font(.system(size: 17 + FontScale.bump, weight: .regular))
+                        .font(.system(size: 18 + FontScale.bump, weight: .regular, design: .serif))
                         .italic()
-                        .foregroundStyle(Color.txt)
+                        .foregroundStyle(Color.txt.opacity(0.78))
                         .fixedSize(horizontal: false, vertical: true)
                     Text("— \(quote.author)")
                         .font(.system(size: 12 + FontScale.bump))
