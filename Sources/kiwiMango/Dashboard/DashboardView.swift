@@ -58,13 +58,30 @@ private struct HeroSection: View {
     let services: ServiceStatus
     let agents: AgentsMonitor
 
+    @State private var quote: Quote?
+    @State private var appeared = false
+
     var body: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Witaj, Paweł!")
-                    .font(.system(size: 19 + FontScale.bump, weight: .light))
+                if let quote {
+                    Text("„\(quote.text)”")
+                        .font(.system(size: 17 + FontScale.bump, weight: .regular))
+                        .italic()
+                        .foregroundStyle(Color.txt)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("— \(quote.author)")
+                        .font(.system(size: 12 + FontScale.bump))
+                        .foregroundStyle(Color.ink.opacity(0.5))
+                }
 
                 StatusLine(store: store, services: services, agents: agents)
+            }
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 6)
+            .task {
+                quote = await QuoteProvider.shared.nextQuote()
+                withAnimation(.easeOut(duration: 0.35)) { appeared = true }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
@@ -117,8 +134,8 @@ private struct StatusLine: View {
 
             QuickAction(title: "Agenci \(agents.activeCount)") { openWindow(id: "agents") }
         }
-        .font(.system(size: 9.5 + FontScale.bump))
-        .foregroundStyle(Color.ink.opacity(0.55))
+        .font(.system(size: 9 + FontScale.bump))
+        .foregroundStyle(Color.ink.opacity(0.45))
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: false)
     }
