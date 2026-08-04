@@ -9,12 +9,10 @@ import UniformTypeIdentifiers
 
 struct ConversationView: View {
     @Bindable var session: ConversationSession
-    var kind: ConversationKind
     var modelOptions: [String] = []
     var onSend: (String) -> Void = { _ in }
 
     @State private var isDropTargeted = false
-    @State private var showBreakdown = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -50,7 +48,7 @@ struct ConversationView: View {
 
             Composer(
                 draft: $session.draft,
-                placeholder: kind == .agent ? "Napisz do Hermesa…" : "Napisz wiadomość… (⇧⏎ nowa linia)",
+                placeholder: "Napisz do Hermesa…",
                 counterText: counterText,
                 pendingAttachments: $session.pendingAttachments,
                 onSend: {
@@ -58,10 +56,8 @@ struct ConversationView: View {
                     guard !text.isEmpty else { return }
                     session.draft = ""
                     onSend(text)
-                },
-                onTapCounter: showsContextBreakdown ? { showBreakdown = true } : nil
+                }
             )
-            .popover(isPresented: $showBreakdown) { contextBreakdownView }
             .padding(.top, 10)
         }
         .padding(.top, 2)
@@ -160,16 +156,14 @@ struct ConversationView: View {
             .labelsHidden()
             .frame(maxWidth: 160)
 
-            if kind == .agent {
-                Picker("", selection: reasoningEffortBinding) {
-                    ForEach(Self.reasoningEffortOptions, id: \.value) { option in
-                        Text(option.label).tag(option.value)
-                    }
+            Picker("", selection: reasoningEffortBinding) {
+                ForEach(Self.reasoningEffortOptions, id: \.value) { option in
+                    Text(option.label).tag(option.value)
                 }
-                .labelsHidden()
-                .frame(maxWidth: 120)
-                .help("Poziom myślenia agenta")
             }
+            .labelsHidden()
+            .frame(maxWidth: 120)
+            .help("Poziom myślenia agenta")
         }
     }
 
@@ -189,77 +183,16 @@ struct ConversationView: View {
     }
 
     private var emptyText: String {
-        kind == .agent ? "Nowa sesja agenta — opisz zadanie, Hermes rusza" : "Nowy chat — opisz o co pytasz"
+        "Nowa sesja agenta — opisz zadanie, Hermes rusza"
     }
 
     private var counterText: String {
-        if kind == .agent {
-            guard let used = session.contextUsed, let max = session.contextMax else { return "kontekst: — / — tok." }
-            return "kontekst: \(Self.formatK(used)) / \(Self.formatK(max)) tok."
-        } else {
-            let cost = session.totalCostUSD > 0 ? String(format: "$%.2f", session.totalCostUSD) : "$0,00 (Pro)"
-            if isOllamaRoute, let used = session.contextUsed, let max = session.contextMax, max > 0 {
-                let percent = Int(Double(used) / Double(max) * 100)
-                return "\(session.model) · \(percent)% kontekstu · \(cost)"
-            }
-            return "\(session.model) · \(Self.formatK(session.totalTokens)) tok. · \(cost)"
-        }
+        guard let used = session.contextUsed, let max = session.contextMax else { return "kontekst: — / — tok." }
+        return "kontekst: \(Self.formatK(used)) / \(Self.formatK(max)) tok."
     }
 
     private static func formatK(_ value: Int) -> String {
         value >= 1000 ? String(format: "%.1fk", Double(value) / 1000) : "\(value)"
-    }
-
-    /// True when Chat is routed to an Ollama model (not Claude) — /compact and
-    /// the % breakdown only make sense on this route.
-    private var isOllamaRoute: Bool {
-        kind == .chat && ClaudeCodeService.parseModelID(session.model) == nil
-    }
-
-    private var showsContextBreakdown: Bool {
-        isOllamaRoute && session.contextMax != nil
-    }
-
-    private var contextBreakdownView: some View {
-        let used = session.contextUsed ?? 0
-        let max = session.contextMax ?? 0
-        let percent = max > 0 ? Int(Double(used) / Double(max) * 100) : 0
-        let isLocal = !session.model.hasSuffix(":cloud")
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(session.model)
-                .font(KiwiMangoFont.mono(11, weight: .semibold))
-                .foregroundStyle(Color.ink)
-            Text("Limit: \(max) tok.")
-                .font(KiwiMangoFont.sans(10))
-                .foregroundStyle(Color.ink.opacity(0.7))
-            Text(isLocal
-                 ? "Ograniczenie kiwiMango dla 16GB RAM, nie realny max modelu."
-                 : "Zgłoszony limit modelu w Ollama Cloud.")
-                .font(KiwiMangoFont.sans(9))
-                .foregroundStyle(Color.ink.opacity(0.45))
-            Divider()
-            Text("Zużycie: \(used) tok. (\(percent)%)")
-                .font(KiwiMangoFont.sans(10))
-                .foregroundStyle(Color.ink.opacity(0.7))
-            Text("Wiadomości w historii: \(session.items.count)")
-                .font(KiwiMangoFont.sans(10))
-                .foregroundStyle(Color.ink.opacity(0.7))
-            Button {
-                onSend("/compact")
-                showBreakdown = false
-            } label: {
-                Text("Kompaktuj teraz")
-                    .font(KiwiMangoFont.mono(10, weight: .medium))
-                    .foregroundStyle(Color.bg)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(Color.accent)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(14)
-        .frame(width: 240)
     }
 
     // MARK: Transcript + autoscroll (PLAN-V2 §7.3, pułapka #6)

@@ -81,9 +81,9 @@ extension Color {
     static var syntaxComment: Color { isDark ? Color(hex: "8B949E") : Color(hex: "6A737D") }
     static var syntaxNumber: Color { code }
 
-    // MARK: - v1 aliases (kept so Chat/SyntaxHighlighter.swift and Chat/MarkdownText.swift
-    // keep compiling untouched this wave; ponytail: rename call sites when those files
-    // are next touched instead of doing it as a drive-by here).
+    // MARK: - v1 aliases (kept so Chat/SyntaxHighlighter.swift keeps compiling
+    // untouched; ponytail: rename call sites when that file is next touched
+    // instead of doing it as a drive-by here).
     static var kiwiMangoTextPrimary: Color { txt }
     static var kiwiMangoSyntaxKeyword: Color { syntaxKeyword }
     static var kiwiMangoSyntaxString: Color { syntaxString }

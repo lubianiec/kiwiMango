@@ -35,7 +35,6 @@ struct KiwiMangoApp: App {
 enum Page: String, CaseIterable {
     case dashboard = "DASHBOARD"
     case agent = "AGENT"
-    case chat = "CHAT"
 }
 
 struct ContentView: View {
@@ -50,7 +49,6 @@ struct ContentView: View {
                 switch page {
                 case .dashboard: DashboardView()
                 case .agent: AgentPage(store: store)
-                case .chat: ChatPage(store: store)
                 }
             }
             .padding(.horizontal, 22)
@@ -66,7 +64,6 @@ struct ContentView: View {
         }
         .task {
             store.loadHistory()
-            await store.loadOllamaModels()
         }
         .animation(.easeInOut(duration: 0.2), value: ThemeStore.shared.mode)
     }

@@ -43,8 +43,7 @@ final class ThinkingBlockModel: Identifiable {
     }
 }
 
-/// Permission/approval prompt, mapped from claude CLI's permission stream (Chat)
-/// or the gateway's own approval events (Agent) — PLAN-V2 §7.3.
+/// Permission/approval prompt, mapped from the gateway's approval events (Agent) — PLAN-V2 §7.3.
 @Observable
 final class PermissionRequest: Identifiable {
     let id = UUID()
@@ -52,9 +51,7 @@ final class PermissionRequest: Identifiable {
     var decision: Decision = .pending
     var resultLine: String?
     /// Wired by the backend controller that created this request — carries the
-    /// decision back to `HermesGatewayClient.respondApproval`. `nil` means no
-    /// live backend is listening (shouldn't happen in practice: Chat never
-    /// creates a `PermissionRequest` today, see `ChatSessionController`).
+    /// decision back to `HermesGatewayClient.respondApproval`.
     var onDecide: ((Bool) -> Void)?
 
     enum Decision { case pending, allowed, allowedForSession, denied }
@@ -83,13 +80,6 @@ enum ConversationItem: Identifiable {
         case .permission(let request): request.id
         }
     }
-}
-
-/// Which backend a `ConversationView` instance is pointed at — drives quick
-/// actions visibility and the session/permission picker's options only;
-/// message rendering is identical for both (PLAN-V2 §5: "ConversationView jest jeden").
-enum ConversationKind {
-    case agent, chat
 }
 
 /// A file dropped onto the conversation, waiting to be sent with the next
@@ -139,14 +129,9 @@ final class ConversationSession: Identifiable {
     /// Optional `reasoning_effort` override sent to `session.create` (Agent only).
     /// `nil` = default from the gateway profile. Same fixed-per-session rule as `model`.
     var reasoningEffort: String?
-    /// `claude -p --resume <id>` continuity for Chat's Claude route.
-    var claudeResumeSessionID: String?
     /// Agent's "kontekst: X / Y tok." — from the gateway's `message.complete` usage.
     var contextUsed: Int?
     var contextMax: Int?
-    /// Chat's "model · X tok. · koszt" — accumulated across turns in this tab.
-    var totalTokens: Int = 0
-    var totalCostUSD: Double = 0
 
     init(id: UUID = UUID(), title: String, model: String, items: [ConversationItem] = []) {
         self.id = id

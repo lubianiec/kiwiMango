@@ -6,7 +6,7 @@
 
 **Kokpit dla ludzi, którzy rozmawiają z maszynami cały dzień.**
 
-Jedno okno. Trzy strony. Zero szumu.
+Jedno okno. Dwie strony. Zero szumu.
 
 <br>
 
@@ -29,7 +29,7 @@ Nie jest to dashboard z gotowego szablonu. Każda liczba na ekranie pochodzi z r
 
 ## Dashboard
 
-Górny pasek to jedyny nawigator, jaki dostajesz: `DASHBOARD` · `AGENT` · `CHAT`, przełącznik motywu obok. Pod spodem — puls maszyny.
+Górny pasek to jedyny nawigator, jaki dostajesz: `DASHBOARD` · `AGENT`, przełącznik motywu obok. Pod spodem — puls maszyny.
 
 **Pięć komórek sprzętu**, każda z 60-próbkową historią (2 minuty wstecz): procesor rozbity na rdzenie wydajności i mocy, karta graficzna, pamięć ze splitem aplikacje/wired/skompresowane, dysk, sieć z realnym pingiem do 1.1.1.1. Kliknięcie w dysk otwiera **Mole** — pięciozakładkowe centrum sprzątania (Clean / Uninstall / Optimize / Analyze / Status), które liczy realne gigabajty w `~/Library/Caches` i kasuje wyłącznie przez Kosz. Zero `rm -rf`, zero terminala, zero niespodzianek.
 
@@ -43,13 +43,11 @@ Pasek statusu Dashboardu pokazuje jedną liczbę: `Agenci N`. Kliknięcie otwier
 
 <br>
 
-## Rozmowa, jedna dla wszystkich
+## Rozmowa z Agentem
 
 Karty sesji jak w przeglądarce, zwijany tok myślenia, karty uprawnień jak w terminalu, licznik kontekstu na żywo. Rozwinięcie toku myślenia zatrzymuje przewijanie tylko w tym jednym oknie — druga zakładka scrolluje sobie dalej, niezależnie. Drobiazg, który zauważysz dopiero, kiedy go zabraknie.
 
-Agent i Chat dzielą ten sam silnik rozmowy — różni je tylko to, co siedzi po drugiej stronie: gateway agentowy albo bezpośrednio Claude/Ollama.
-
-**Historia przeżywa wszystko.** Każda sesja — Agent i Chat — zapisuje się na dysk jako pełny zapis rozmowy, nie skrót. Zamknięcie karty nie kasuje niczego: wpis czeka w menu `🕘 HISTORIA`, posortowany od najnowszego. Klik wraca do pełnej rozmowy i można pisać dalej, dokładnie tam gdzie się skończyło — nawet po restarcie aplikacji.
+**Historia przeżywa wszystko.** Każda sesja zapisuje się na dysk jako pełny zapis rozmowy, nie skrót. Zamknięcie karty nie kasuje niczego: wpis czeka w menu `🕘 HISTORIA`, posortowany od najnowszego. Klik wraca do pełnej rozmowy i można pisać dalej, dokładnie tam gdzie się skończyło — nawet po restarcie aplikacji.
 
 <br>
 
@@ -57,7 +55,6 @@ Agent i Chat dzielą ten sam silnik rozmowy — różni je tylko to, co siedzi p
 
 - **Prawdziwe dane albo żadne.** Brak odczytu temperatury na Apple Silicon? Pole znika, nie pokazuje zera.
 - **GUI zamiast terminala wszędzie, gdzie się da.** Sprzątanie dysku to pięć zakładek, nie okno z migającym kursorem.
-- **Jeden komponent, dwa zastosowania.** Agent i Chat to ten sam widok rozmowy — różnica leży w tym, co odpowiada, nie jak to wygląda.
 - **Kosz, nigdy `rm`.** Każde kasowanie jest odwracalne, dopóki sam nie opróżnisz Kosza.
 - **Nic nie znika bez pytania.** Zamknięcie karty to nie usunięcie rozmowy — historia trzyma ją, dopóki sam jej nie skasujesz.
 
@@ -74,8 +71,7 @@ make run
 
 Wymagania: macOS 15+, Xcode z toolchainem Swift 6. `make install` kopiuje gotową paczkę do `/Applications`.
 
-**Grok (xAI):** wymaga uruchomionego lokalnego proxy — `hermes proxy start --provider xai`.
-Auth to OAuth SuperGrok podpięty przez `hermes auth` (nie klucz API w appce).
+**Grok (xAI) w Agencie:** auth to OAuth SuperGrok podpięty przez `hermes auth` (nie klucz API w appce) — gateway łączy się providerem `xai-oauth`, bez osobnego lokalnego proxy.
 
 <br>
 
@@ -84,8 +80,8 @@ Auth to OAuth SuperGrok podpięty przez `hermes auth` (nie klucz API w appce).
 ```
 Sources/kiwiMango/
   Dashboard/     hero, pasek sprzętu, tokeny, koszty, procesy, Mole
-  Session/       wspólny widok rozmowy — taby, historia, tok myślenia, uprawnienia, composer
-  Chat/          silniki: gateway, proces claude, Ollama
+  Session/       widok rozmowy agenta — taby, historia, tok myślenia, uprawnienia, composer
+  Chat/          gateway (Hermes) + odczyt kont Ollama dla Dashboardu
   Database/      SQLite przez GRDB — jedna baza, cała historia
 ```
 

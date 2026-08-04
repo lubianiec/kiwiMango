@@ -10,15 +10,12 @@ struct SessionSnapshot: Codable {
     var id: UUID
     var title: String
     var model: String
-    var kind: String // "chat" | "agent"
+    var kind: String // legacy field — always "agent" now, kept so old chat entries on disk still decode
     var updatedAt: Date
     var gatewaySessionID: String?
     var reasoningEffort: String?
-    var claudeResumeSessionID: String?
     var contextUsed: Int?
     var contextMax: Int?
-    var totalTokens: Int
-    var totalCostUSD: Double
     var items: [ItemSnapshot]
 
     struct ItemSnapshot: Codable {
@@ -31,19 +28,16 @@ struct SessionSnapshot: Codable {
         var seconds: Double?
     }
 
-    init(from session: ConversationSession, kind: ConversationKind) {
+    init(from session: ConversationSession) {
         id = session.id
         title = session.title
         model = session.model
-        self.kind = kind == .agent ? "agent" : "chat"
+        kind = "agent"
         updatedAt = Date()
         gatewaySessionID = session.gatewaySessionID
         reasoningEffort = session.reasoningEffort
-        claudeResumeSessionID = session.claudeResumeSessionID
         contextUsed = session.contextUsed
         contextMax = session.contextMax
-        totalTokens = session.totalTokens
-        totalCostUSD = session.totalCostUSD
         // ponytail: `.permission` skipped — its `onDecide` closure is dead after
         // a restart anyway, nothing to resume it into.
         items = session.items.compactMap { item -> ItemSnapshot? in
@@ -78,11 +72,8 @@ struct SessionSnapshot: Codable {
         let session = ConversationSession(id: id, title: title, model: model, items: restoredItems)
         session.gatewaySessionID = gatewaySessionID
         session.reasoningEffort = reasoningEffort
-        session.claudeResumeSessionID = claudeResumeSessionID
         session.contextUsed = contextUsed
         session.contextMax = contextMax
-        session.totalTokens = totalTokens
-        session.totalCostUSD = totalCostUSD
         return session
     }
 }

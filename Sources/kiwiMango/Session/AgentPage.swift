@@ -25,7 +25,6 @@ struct AgentPage: View {
                let controller = store.agentController(for: session.id) {
                 ConversationView(
                     session: session,
-                    kind: .agent,
                     modelOptions: AgentSessionController.availableModels,
                     onSend: controller.send
                 )
