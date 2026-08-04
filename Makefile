@@ -29,6 +29,12 @@ all: build
 build:
 	@echo "=== Building $(APP_NAME) $(VERSION) for $(ARCH) ==="
 	swift build -c release --arch $(ARCH)
+	@echo "=== Building web UI ==="
+	@if [ -f "web/package.json" ]; then \
+		cd web && npm install && npm run build; \
+	else \
+		echo "    (no web/package.json — skipping)"; \
+	fi
 	@echo "=== Assembling .app bundle ==="
 	rm -rf "$(APP_BUNDLE)"
 	mkdir -p "$(APP_BUNDLE)/Contents/MacOS"
@@ -54,6 +60,14 @@ build:
 		echo "    Copied $(RESOURCE_BUNDLE)"; \
 	else \
 		echo "    (no resource bundle — nothing to copy)"; \
+	fi
+	@echo "=== Copying web UI (Vite build) ==="
+	@if [ -d "web/dist" ]; then \
+		mkdir -p "$(APP_BUNDLE)/Contents/Resources/WebUI"; \
+		ditto "web/dist" "$(APP_BUNDLE)/Contents/Resources/WebUI"; \
+		echo "    Copied web/dist -> Resources/WebUI"; \
+	else \
+		echo "    (no web/dist — nothing to copy)"; \
 	fi
 	@echo "=== Copying AppIcon.icns ==="
 	@if [ -f "AppIcon.icns" ]; then \

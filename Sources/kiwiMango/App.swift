@@ -77,8 +77,13 @@ struct ContentView: View {
 /// Ensures kiwiMango's own gateway child process dies with the app instead of
 /// becoming a zombie (carried over from v1 — `HermesGatewayProcessBox` still exists).
 final class KiwiMangoAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        StaticWebServer.shared.start()
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         HermesGatewayProcessBox.shared.terminate()
+        StaticWebServer.shared.stop()
         return .terminateNow
     }
 }

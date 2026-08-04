@@ -189,13 +189,17 @@ actor HermesGatewayClient {
             throw ClientError.binaryNotFound
         }
 
-        let generatedToken = "kiwimango-\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
-        token = generatedToken
+        let persistedToken = Self.loadOrCreatePersistedToken()
+        token = persistedToken
 
-        let resolvedPort = try await Self.spawnServer(hermesPath: hermesPath, token: generatedToken)
+        // Fala remote-webui: stały port (nie `--port 0`) tak, żeby remote
+        // webUI (i przyszła appka iOS) mogły się dobić do zawsze tego samego
+        // adresu przez tunel, zamiast gonić za nowym portem po każdym
+        // restarcie. 9219 obok Hermes Desktop (9119), żeby nie kolidować.
+        let resolvedPort = try await Self.spawnServer(hermesPath: hermesPath, token: persistedToken, port: RemoteWebUIConfig.gatewayPort)
         port = resolvedPort
 
-        guard let url = URL(string: "ws://127.0.0.1:\(resolvedPort)/api/ws?token=\(generatedToken)") else {
+        guard let url = URL(string: "ws://127.0.0.1:\(resolvedPort)/api/ws?token=\(persistedToken)") else {
             throw ClientError.connectFailed("zły URL")
         }
 
@@ -211,11 +215,11 @@ actor HermesGatewayClient {
 
     /// Starts the process and blocks (off the actor) until it prints
     /// `HERMES_BACKEND_READY port=<N>` on stdout, or fails/times out.
-    private static func spawnServer(hermesPath: String, token: String) async throws -> Int {
+    private static func spawnServer(hermesPath: String, token: String, port: Int) async throws -> Int {
         try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: hermesPath)
-            process.arguments = ["serve", "--port", "0", "--skip-build"]
+            process.arguments = ["serve", "--port", String(port), "--skip-build"]
             var env = ProcessInfo.processInfo.environment
             env["HERMES_DASHBOARD_SESSION_TOKEN"] = token
             process.environment = env

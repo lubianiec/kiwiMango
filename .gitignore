@@ -4,3 +4,5 @@
 .DS_Store
 PLAN*.md
 reference/
+web/node_modules/
+web/dist/
