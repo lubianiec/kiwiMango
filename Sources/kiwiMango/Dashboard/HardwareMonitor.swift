@@ -82,6 +82,9 @@ final class HardwareMonitor {
         let bundleID: String?
     }
     private(set) var topProcesses: [TopProcess] = []
+    /// Ten sam skan co `topProcesses`, tylko uszeregowany po zajętej pamięci —
+    /// czyta go panel RAM (drugi klik w komórkę RAM).
+    private(set) var topProcessesByRAM: [TopProcess] = []
 
     // MARK: History (HardwareStrip sparklines + detail panels — §7.2, 60 samples = 2 min at 2s tick)
 
@@ -558,6 +561,11 @@ final class HardwareMonitor {
         lastProcSampleTime = now
         // ponytail: 8 not 5 — 720×900 window (was 560×700) has room for more rows.
         topProcesses = Array(results.sorted { $0.cpuPercent > $1.cpuPercent }.prefix(8))
+        // ponytail: osobny ranking po pamięci z TEGO SAMEGO skanu (zero
+        // dodatkowego kosztu). Bez niego panel RAM sortowałby po pamięci
+        // tylko w obrębie top-8-po-CPU, więc proces żrący gigabajty przy 0%
+        // CPU nigdy by się nie pokazał — nagłówek „top RAM" by kłamał.
+        topProcessesByRAM = Array(results.sorted { $0.ramBytes > $1.ramBytes }.prefix(8))
     }
 }
 

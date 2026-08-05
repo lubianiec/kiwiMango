@@ -19,14 +19,17 @@ struct ProcessSection: View {
     @State private var pendingAction: PendingProcessAction?
 
     private var iconSize: CGFloat { compact ? 16 : 22 }
+    /// W trybie compact ta lista siedzi w panelu RAM, więc czyta osobny
+    /// ranking po pamięci z monitora — nie przesortowaną listę top-CPU
+    /// (ta pomijałaby proces żrący gigabajty przy zerowym CPU).
     private var rows: [HardwareMonitor.TopProcess] {
-        compact ? Array(hardware.topProcesses.prefix(4)) : hardware.topProcesses
+        compact ? Array(hardware.topProcessesByRAM.prefix(4)) : hardware.topProcesses
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if compact {
-                DetailSectionLabel(text: "Procesy — top CPU")
+                DetailSectionLabel(text: "Procesy — top RAM")
             } else {
                 SectionHead("03", "Procesy") {
                     Text("top \(hardware.topProcesses.count) · CPU").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.55))
