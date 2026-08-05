@@ -5,8 +5,9 @@ import SwiftUI
 // 5 cells (CPU/GPU/RAM/SSD/SIEĆ) reading HardwareMonitor. Exactly one detail
 // panel is always shown below the strip, in a fixed-height container so
 // switching panels never reflows the layout (default: RAM, per mockup).
-// SSD is special: a second click while it's already open swaps its stats
-// panel for the Mole game (`moleOpen`).
+// SSD and RAM are special: a second click while one of them is already open
+// swaps its stats panel for an alt view (`altViewOpen`) — SSD → Mole game,
+// RAM → process list. CPU/GPU/SIEĆ have no alt view.
 
 struct HardwareStrip: View {
     let monitor: HardwareMonitor
@@ -17,7 +18,7 @@ struct HardwareStrip: View {
     // doesn't have. Fixed-height container below absorbs any size delta
     // between panels instead.
     @State private var open: Cell = .ram
-    @State private var moleOpen = false
+    @State private var altViewOpen = false
     @State private var moleEngine = MoleEngine()
 
     var body: some View {
@@ -61,15 +62,21 @@ struct HardwareStrip: View {
     }
 
     private func select(_ cell: Cell) {
-        // ponytail: second click on an already-open SSD reveals the mole
-        // game instead of the stats panel; picking any other cell always
-        // resets moleOpen so the game never lingers behind another panel.
-        if cell == .ssd, open == .ssd {
-            moleOpen = true
+        // ponytail: second click on an already-open cell that has an alt
+        // view reveals it (SSD → mole game, RAM → process list) instead of
+        // the stats panel; picking any other cell always resets
+        // altViewOpen so no alt view lingers behind another panel. CPU/GPU/
+        // SIEĆ have no alt view, so a second click on them is a no-op.
+        if cell == open, hasAltView(cell) {
+            altViewOpen = true
         } else {
-            moleOpen = false
+            altViewOpen = false
             open = cell
         }
+    }
+
+    private func hasAltView(_ cell: Cell) -> Bool {
+        cell == .ssd || cell == .ram
     }
 
     // MARK: - Cells
@@ -149,11 +156,16 @@ struct HardwareStrip: View {
         switch cell {
         case .cpu: CPUDetailPanel(monitor: monitor)
         case .gpu: GPUDetailPanel(monitor: monitor)
-        case .ram: RAMDetailPanel(monitor: monitor)
+        case .ram:
+            if altViewOpen {
+                ProcessSection(hardware: monitor, compact: true)
+            } else {
+                RAMDetailPanel(monitor: monitor)
+            }
         case .net: NetDetailPanel(monitor: monitor)
         case .ssd:
-            if moleOpen {
-                MoleView(engine: moleEngine, monitor: monitor) { moleOpen = false }
+            if altViewOpen {
+                MoleView(engine: moleEngine, monitor: monitor) { altViewOpen = false }
             } else {
                 SSDDetailPanel(monitor: monitor)
             }
@@ -405,33 +417,41 @@ private struct CPUDetailPanel: View {
     let monitor: HardwareMonitor
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Spacer()
-                DetailRing(value: (monitor.cpuTempCelsius ?? 0) / 100, color: Color.accent,
-                           bigLabel: monitor.cpuTempCelsius.map { "\(Int($0.rounded()))°C" } ?? "—", smallLabel: "temp")
-                Spacer()
-                DetailRing(value: (monitor.cpuPercent ?? 0) / 100, color: Color.accent,
-                           bigLabel: monitor.cpuPercent.map { "\(Int($0.rounded()))%" } ?? "—", smallLabel: "użycie")
-                Spacer()
-            }
-            .padding(.bottom, 6)
-
-            DetailSectionLabel(text: "Rdzenie — \(monitor.eCoreCount)E + \(monitor.pCoreCount)P")
-            CoreBars(percents: monitor.perCorePercents, pCoreCount: monitor.pCoreCount)
+        // ponytail: mockup layout is horizontal — [ring temp] [ring użycie]
+        // [flex column: rdzenie + load]. The old vertical stack spaced the
+        // rings out with Spacers across the full width and stretched the
+        // core bars into horizontal stripes; this HStack fixes both.
+        HStack(alignment: .center, spacing: 20) {
+            DetailRing(value: (monitor.cpuTempCelsius ?? 0) / 100, color: Color.accent,
+                       bigLabel: monitor.cpuTempCelsius.map { "\(Int($0.rounded()))°C" } ?? "—", smallLabel: "temp")
+            DetailRing(value: (monitor.cpuPercent ?? 0) / 100, color: Color.accent,
+                       bigLabel: monitor.cpuPercent.map { "\(Int($0.rounded()))%" } ?? "—", smallLabel: "użycie")
 
             // ponytail: mockup CPU panel = 2 pierścienie + słupki rdzeni +
             // jedna linia "Load 1 min · uptime". Trzeci pierścień (load) i
             // osobne wiersze user/system/idle wycięte — przy stałych 160pt
             // (fixed-height panel container) nie mieściły się wszystkie
             // dawne wiersze naraz; surowe dane zostają w monitorze.
-            if let load = monitor.loadAvg, let uptime = monitor.uptime {
-                Text("Load 1 min: \(plNumber(load.0, 2)) · \(formatUptime(uptime))")
-                    .font(.system(size: 11 + FontScale.bump))
-                    .foregroundStyle(Color.ink.opacity(0.55))
-                    .padding(.top, 6)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("RDZENIE — \(monitor.eCoreCount)E + \(monitor.pCoreCount)P")
+                    .font(.system(size: 8 + FontScale.bump, weight: .semibold))
+                    .tracking(1.1)
+                    .foregroundStyle(Color.ink.opacity(0.3))
+                    .padding(.bottom, 5)
+
+                CoreBars(percents: monitor.perCorePercents, pCoreCount: monitor.pCoreCount)
+
+                if let load = monitor.loadAvg, let uptime = monitor.uptime {
+                    (Text("Load 1 min: ").foregroundStyle(Color.ink.opacity(0.55))
+                        + Text(plNumber(load.0, 2)).foregroundStyle(Color.txt)
+                        + Text(" · \(formatUptime(uptime))").foregroundStyle(Color.ink.opacity(0.55)))
+                        .font(.system(size: 10 + FontScale.bump))
+                        .padding(.top, 6)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private func formatUptime(_ seconds: TimeInterval) -> String {
@@ -447,16 +467,15 @@ private struct CoreBars: View {
     let pCoreCount: Int
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 4) {
+        HStack(alignment: .bottom, spacing: 3) {
             ForEach(Array(percents.enumerated()), id: \.offset) { index, percent in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(index < pCoreCount ? Color.coreP : Color.teal)
-                    .frame(height: max(2, 36 * CGFloat(percent) / 100))
+                    .frame(width: 8, height: max(2, 22 * CGFloat(percent) / 100))
                     .animation(.easeInOut(duration: 0.7), value: percent)
             }
         }
-        .frame(height: 36, alignment: .bottom)
-        .padding(.vertical, 4)
+        .frame(height: 22, alignment: .bottom)
     }
 }
 
@@ -466,25 +485,30 @@ private struct GPUDetailPanel: View {
     let monitor: HardwareMonitor
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Spacer()
-                DetailRing(value: (monitor.gpuTempCelsius ?? 0) / 100, color: Color.blue,
-                           bigLabel: monitor.gpuTempCelsius.map { "\(Int($0.rounded()))°C" } ?? "—", smallLabel: "temp")
-                Spacer()
-                DetailRing(value: (monitor.gpuDevicePercent ?? 0) / 100, color: Color.blue,
-                           bigLabel: monitor.gpuDevicePercent.map { "\(Int($0.rounded()))%" } ?? "—", smallLabel: "użycie")
-                Spacer()
-            }
-            .padding(.bottom, 6)
+        // ponytail: same horizontal skeleton as CPUDetailPanel — [ring
+        // użycie] [ring temp] [flex column: historia].
+        HStack(alignment: .center, spacing: 20) {
+            DetailRing(value: (monitor.gpuDevicePercent ?? 0) / 100, color: Color.blue,
+                       bigLabel: monitor.gpuDevicePercent.map { "\(Int($0.rounded()))%" } ?? "—", smallLabel: "użycie")
+            DetailRing(value: (monitor.gpuTempCelsius ?? 0) / 100, color: Color.blue,
+                       bigLabel: monitor.gpuTempCelsius.map { "\(Int($0.rounded()))°C" } ?? "—", smallLabel: "temp")
 
             // ponytail: mockup GPU panel = 2 pierścienie + historia.
             // Renderer/tiler pierścienie i osobny wiersz "Szczegóły" wycięte
             // — nie mieszczą się w stałych 160pt razem z historią; te dwie
             // wartości nadal czytane w HardwareMonitor gdyby miały wrócić.
-            DetailSectionLabel(text: "Historia użycia")
-            Sparkline(data: monitor.gpuHistory, color: Color.blue, unit: "%", height: 44)
+            VStack(alignment: .leading, spacing: 0) {
+                Text("HISTORIA UŻYCIA")
+                    .font(.system(size: 8 + FontScale.bump, weight: .semibold))
+                    .tracking(1.1)
+                    .foregroundStyle(Color.ink.opacity(0.3))
+                    .padding(.bottom, 5)
+
+                Sparkline(data: monitor.gpuHistory, color: Color.blue, unit: "%", height: 44)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 }
 

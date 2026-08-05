@@ -6,39 +6,54 @@ import SwiftUI
 //
 // Reads `HardwareMonitor.topProcesses` (already computed by Fala 1). `hardware`
 // is passed in so both views share one 2s-timer/one process snapshot.
+//
+// `compact`: used as the RAM cell's second-click alt view inside the fixed
+// 160pt HardwareStrip panel (§ZADANIE 2) — drops SectionHead + column header,
+// shrinks icons, caps rows at 4. Default false keeps any other call site
+// (none exist today) rendering the full section unchanged.
 struct ProcessSection: View {
     let hardware: HardwareMonitor
+    var compact: Bool = false
 
     @State private var openPopoverPID: pid_t?
     @State private var pendingAction: PendingProcessAction?
 
+    private var iconSize: CGFloat { compact ? 16 : 22 }
+    private var rows: [HardwareMonitor.TopProcess] {
+        compact ? Array(hardware.topProcesses.prefix(4)) : hardware.topProcesses
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SectionHead("03", "Procesy") {
-                Text("top \(hardware.topProcesses.count) · CPU").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.55))
+            if compact {
+                DetailSectionLabel(text: "Procesy — top CPU")
+            } else {
+                SectionHead("03", "Procesy") {
+                    Text("top \(hardware.topProcesses.count) · CPU").font(KiwiMangoFont.sans(10)).foregroundStyle(Color.ink.opacity(0.55))
+                }
+
+                HStack(spacing: 10) {
+                    Spacer().frame(width: 22)
+                    Text("Nazwa").frame(maxWidth: .infinity, alignment: .leading)
+                    Text("PID").frame(width: 52, alignment: .trailing)
+                    Text("CPU").frame(width: 56, alignment: .trailing)
+                    Text("RAM").frame(width: 62, alignment: .trailing)
+                    Spacer().frame(width: 46)
+                }
+                .font(KiwiMangoFont.sans(9, weight: .semibold)).tracking(1).textCase(.uppercase)
+                .foregroundStyle(Color.ink.opacity(0.3))
+                .padding(.bottom, 8)
             }
 
-            HStack(spacing: 10) {
-                Spacer().frame(width: 22)
-                Text("Nazwa").frame(maxWidth: .infinity, alignment: .leading)
-                Text("PID").frame(width: 52, alignment: .trailing)
-                Text("CPU").frame(width: 56, alignment: .trailing)
-                Text("RAM").frame(width: 62, alignment: .trailing)
-                Spacer().frame(width: 46)
-            }
-            .font(KiwiMangoFont.sans(9, weight: .semibold)).tracking(1).textCase(.uppercase)
-            .foregroundStyle(Color.ink.opacity(0.3))
-            .padding(.bottom, 8)
-
-            if hardware.topProcesses.isEmpty {
+            if rows.isEmpty {
                 Text("brak danych").font(KiwiMangoFont.sans(11)).foregroundStyle(Color.ink.opacity(0.45))
             } else {
                 VStack(spacing: 2) {
-                    ForEach(hardware.topProcesses) { process in
+                    ForEach(rows) { process in
                         processRow(process)
                     }
                 }
-                .padding(6)
+                .padding(compact ? 4 : 6)
                 .background(Color.ink.opacity(0.03))
                 .clipShape(RoundedRectangle(cornerRadius: 6))
             }
@@ -55,9 +70,9 @@ struct ProcessSection: View {
     }
 
     private func processRow(_ process: HardwareMonitor.TopProcess) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: compact ? 6 : 10) {
             processIcon(process)
-                .frame(width: 22, height: 22)
+                .frame(width: iconSize, height: iconSize)
             Text(process.name)
                 .font(KiwiMangoFont.sans(12.5))
                 .lineLimit(1)
@@ -75,10 +90,12 @@ struct ProcessSection: View {
                 .font(KiwiMangoFont.mono(11))
                 .foregroundStyle(Color.ink.opacity(0.6))
                 .frame(width: 62, alignment: .trailing)
-            Rectangle().fill(Color.ink.opacity(0.1)).frame(width: 46, height: 1)
+            if !compact {
+                Rectangle().fill(Color.ink.opacity(0.1)).frame(width: 46, height: 1)
+            }
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 8)
+        .padding(.vertical, compact ? 3 : 6)
+        .padding(.horizontal, compact ? 6 : 8)
         .contentShape(Rectangle())
         .background(Color.ink.opacity(openPopoverPID == process.id ? 0.06 : 0))
         .clipShape(RoundedRectangle(cornerRadius: 4))
@@ -106,9 +123,9 @@ struct ProcessSection: View {
                 Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
             } else {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 12 + FontScale.bump))
+                    .font(.system(size: (compact ? 9 : 12) + FontScale.bump))
                     .foregroundStyle(Color.ink.opacity(0.6))
-                    .frame(width: 22, height: 22)
+                    .frame(width: iconSize, height: iconSize)
                     .background(Color.ink.opacity(0.08))
                     .clipShape(RoundedRectangle(cornerRadius: 5))
             }
