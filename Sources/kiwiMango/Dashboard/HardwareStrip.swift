@@ -2,16 +2,22 @@ import SwiftUI
 
 // MARK: - HardwareStrip (PLAN-V2 §7.2 pkt 2)
 //
-// 5 cells (CPU/GPU/RAM/SSD/SIEĆ) reading HardwareMonitor. Click expands one
-// detail panel below the strip (only one open at a time — pułapka handled by
-// `open` being a single optional, not five booleans). SSD's panel is a
-// placeholder — Mole itself is Fala 3/C2.
+// 5 cells (CPU/GPU/RAM/SSD/SIEĆ) reading HardwareMonitor. Exactly one detail
+// panel is always shown below the strip, in a fixed-height container so
+// switching panels never reflows the layout (default: RAM, per mockup).
+// SSD is special: a second click while it's already open swaps its stats
+// panel for the Mole game (`moleOpen`).
 
 struct HardwareStrip: View {
     let monitor: HardwareMonitor
 
     enum Cell: String { case cpu, gpu, ram, ssd, net }
-    @State private var open: Cell?
+    // ponytail: always one panel open (default RAM per mockup) — a nil
+    // state made the whole strip layout jump on close, which Paweł's mockup
+    // doesn't have. Fixed-height container below absorbs any size delta
+    // between panels instead.
+    @State private var open: Cell = .ram
+    @State private var moleOpen = false
     @State private var moleEngine = MoleEngine()
 
     var body: some View {
@@ -28,15 +34,24 @@ struct HardwareStrip: View {
                 netCell
             }
             .padding(.vertical, 9)
+            // ponytail: the divider Rectangles below only set a width, so
+            // they're happy to stretch to whatever height a parent proposes
+            // (that's what turned this row into a tall empty strip once —
+            // see DashboardView.swift). fixedSize pins the row to its own
+            // content height no matter what the parent offers.
+            .fixedSize(horizontal: false, vertical: true)
             .overlay(alignment: .top) { Rectangle().fill(Color.ink.opacity(0.08)).frame(height: 1) }
             .overlay(alignment: .bottom) { Rectangle().fill(Color.ink.opacity(0.08)).frame(height: 1) }
 
-            if let open {
+            // 160 not the mockup's 148 — global FontScale.bump = 2 makes
+            // every line in the panels a touch taller.
+            VStack(alignment: .leading, spacing: 0) {
                 detailPanel(for: open)
-                    .padding(.vertical, 16)
-                    .overlay(alignment: .bottom) { Rectangle().fill(Color.ink.opacity(0.08)).frame(height: 1) }
-                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .frame(height: 160)
+            .clipped()
+            .overlay(alignment: .bottom) { Rectangle().fill(Color.ink.opacity(0.08)).frame(height: 1) }
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: open)
     }
@@ -45,8 +60,16 @@ struct HardwareStrip: View {
         Rectangle().fill(Color.ink.opacity(0.08)).frame(width: 1)
     }
 
-    private func toggle(_ cell: Cell) {
-        open = (open == cell) ? nil : cell
+    private func select(_ cell: Cell) {
+        // ponytail: second click on an already-open SSD reveals the mole
+        // game instead of the stats panel; picking any other cell always
+        // resets moleOpen so the game never lingers behind another panel.
+        if cell == .ssd, open == .ssd {
+            moleOpen = true
+        } else {
+            moleOpen = false
+            open = cell
+        }
     }
 
     // MARK: - Cells
@@ -56,9 +79,9 @@ struct HardwareStrip: View {
             label: "CPU", tempCelsius: monitor.cpuTempCelsius,
             valueText: monitor.cpuPercent.map { plNumber($0, 0) }, unitText: "%",
             valueColor: cpuLoadColor(monitor.cpuPercent),
-            history: monitor.cpuHistory, sparklineColor: Color.accent,
+            history: monitor.cpuHistory, sparkColor: cpuLoadColor(monitor.cpuPercent),
             isOpen: open == .cpu
-        ) { toggle(.cpu) }
+        ) { select(.cpu) }
     }
 
     private var gpuCell: some View {
@@ -66,22 +89,21 @@ struct HardwareStrip: View {
             label: "GPU", tempCelsius: monitor.gpuTempCelsius,
             valueText: monitor.gpuDevicePercent.map { plNumber($0, 0) }, unitText: "%",
             valueColor: Color.blue,
-            history: monitor.gpuHistory, sparklineColor: Color.blue,
+            history: monitor.gpuHistory, sparkColor: Color.blue,
             isOpen: open == .gpu
-        ) { toggle(.gpu) }
+        ) { select(.gpu) }
     }
 
     private var ramCell: some View {
         let used = ramUsedBytes(monitor)
-        let fraction = used.map { Double($0) / Double(max(monitor.ramTotalBytes, 1)) }
         return HWCell(
             label: "RAM", tempCelsius: nil,
             valueText: used.map { plNumber(Double($0) / 1e9, 1) },
             unitText: "/\(Int((Double(monitor.ramTotalBytes) / 1e9).rounded()))G",
             valueColor: Color.green,
-            hairlineFraction: fraction, hairlineColor: Color.green,
+            history: monitor.ramHistory, sparkColor: Color.green,
             isOpen: open == .ram
-        ) { toggle(.ram) }
+        ) { select(.ram) }
     }
 
     private var ssdCell: some View {
@@ -90,9 +112,9 @@ struct HardwareStrip: View {
             valueText: monitor.ssdAvailableBytes.map { plNumber(Double($0) / 1e9, 0) },
             unitText: "G wolne",
             valueColor: Color.txt,
-            hairlineFraction: ssdUsedFraction(monitor), hairlineColor: Color.ink.opacity(0.5),
+            history: monitor.ssdHistory, sparkColor: Color.teal,
             isOpen: open == .ssd
-        ) { toggle(.ssd) }
+        ) { select(.ssd) }
     }
 
     private var netCell: some View {
@@ -100,10 +122,10 @@ struct HardwareStrip: View {
             label: "SIEĆ", tempCelsius: nil,
             valueText: nil, unitText: "M/s",
             valueColor: Color.txt,
-            history: monitor.netDownHistory, sparklineColor: Color.teal, sparklineUnit: "MB/s",
+            history: monitor.netDownHistory, sparkColor: Color.teal,
             netDown: monitor.netDownBytesPerSec, netUp: monitor.netUpBytesPerSec,
             isOpen: open == .net
-        ) { toggle(.net) }
+        ) { select(.net) }
     }
 
     // MARK: - Derived (RAM/SSD)
@@ -111,11 +133,6 @@ struct HardwareStrip: View {
     private func ramUsedBytes(_ m: HardwareMonitor) -> UInt64? {
         guard let app = m.ramAppBytes, let wired = m.ramWiredBytes, let compressed = m.ramCompressedBytes else { return nil }
         return app + wired + compressed
-    }
-
-    private func ssdUsedFraction(_ m: HardwareMonitor) -> Double? {
-        guard let available = m.ssdAvailableBytes, let total = m.ssdTotalBytes, total > 0 else { return nil }
-        return Double(total - available) / Double(total)
     }
 
     private func cpuLoadColor(_ percent: Double?) -> Color {
@@ -135,24 +152,29 @@ struct HardwareStrip: View {
         case .ram: RAMDetailPanel(monitor: monitor)
         case .net: NetDetailPanel(monitor: monitor)
         case .ssd:
-            MoleView(engine: moleEngine, monitor: monitor) { open = nil }
+            if moleOpen {
+                MoleView(engine: moleEngine, monitor: monitor) { moleOpen = false }
+            } else {
+                SSDDetailPanel(monitor: monitor)
+            }
         }
     }
 }
 
 // MARK: - HWCell (one of the 5 strip cells)
 
+// ponytail: unified 2026-08-05 — every cell renders the exact same three
+// rows — label(+temp) → value+unit → a mini area-chart sparkline (CellSpark,
+// below) plotting that cell's own history — so the strip reads as one
+// instrument, not five different widgets.
 private struct HWCell: View {
     let label: String
     var tempCelsius: Double? = nil
     var valueText: String? = nil
     var unitText: String = ""
     var valueColor: Color = .txt
-    var history: [Double]? = nil
-    var sparklineColor: Color = .accent
-    var sparklineUnit: String = "%"
-    var hairlineFraction: Double? = nil
-    var hairlineColor: Color = .accent
+    var history: [Double] = []
+    var sparkColor: Color = .accent
     var netDown: Double? = nil
     var netUp: Double? = nil
     let isOpen: Bool
@@ -162,7 +184,7 @@ private struct HWCell: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 3) {
                     Text(label)
                         .font(.system(size: 8.5 + FontScale.bump, weight: .semibold))
@@ -203,14 +225,9 @@ private struct HWCell: View {
                         .foregroundStyle(Color.ink.opacity(0.35))
                 }
 
-                if let history {
-                    Sparkline(data: history, color: sparklineColor, unit: sparklineUnit, height: 22)
-                } else if let hairlineFraction {
-                    HairlineBar(fraction: hairlineFraction, color: hairlineColor)
-                        .frame(width: 85 * 0.01 * 100) // 85% of cell width, matches mockup
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.trailing, 15)
-                }
+                CellSpark(data: history, color: sparkColor)
+                    .frame(height: 20)
+                    .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 6)
@@ -286,19 +303,34 @@ private struct Sparkline: View {
     }
 }
 
-private struct HairlineBar: View {
-    let fraction: Double
+// ponytail: mini area chart for the strip cells — no min/max/current labels
+// (Paweł already had us strip those once from the panel Sparkline; this one
+// never had them). Scale = data max, floor = 0, stretched to the cell width
+// (no aspect-ratio preservation, matching the mockup's `preserveAspectRatio:
+// none`).
+private struct CellSpark: View {
+    let data: [Double]
     let color: Color
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.ink.opacity(0.15))
-                Capsule().fill(color).frame(width: geo.size.width * max(0, min(fraction, 1)))
+        Canvas { context, size in
+            guard data.count > 1 else { return }
+            let maxV = max(data.max() ?? 0, 0.1)
+
+            var line = Path()
+            for (i, v) in data.enumerated() {
+                let x = size.width * CGFloat(i) / CGFloat(data.count - 1)
+                let y = size.height - CGFloat(v / maxV) * size.height
+                if i == 0 { line.move(to: CGPoint(x: x, y: y)) } else { line.addLine(to: CGPoint(x: x, y: y)) }
             }
+            context.stroke(line, with: .color(color), lineWidth: 1.4)
+
+            var fill = line
+            fill.addLine(to: CGPoint(x: size.width, y: size.height))
+            fill.addLine(to: CGPoint(x: 0, y: size.height))
+            fill.closeSubpath()
+            context.fill(fill, with: .color(color.opacity(0.16)))
         }
-        .frame(height: 2)
-        .padding(.top, 6)
     }
 }
 
@@ -382,24 +414,22 @@ private struct CPUDetailPanel: View {
                 DetailRing(value: (monitor.cpuPercent ?? 0) / 100, color: Color.accent,
                            bigLabel: monitor.cpuPercent.map { "\(Int($0.rounded()))%" } ?? "—", smallLabel: "użycie")
                 Spacer()
-                DetailRing(value: (monitor.loadAvg?.0 ?? 0) / 8, color: Color.accent,
-                           bigLabel: monitor.loadAvg.map { plNumber($0.0, 1) } ?? "—", smallLabel: "load")
-                Spacer()
             }
             .padding(.bottom, 6)
 
             DetailSectionLabel(text: "Rdzenie — \(monitor.eCoreCount)E + \(monitor.pCoreCount)P")
             CoreBars(percents: monitor.perCorePercents, pCoreCount: monitor.pCoreCount)
 
-            DetailSectionLabel(text: "Szczegóły")
-            if let user = monitor.cpuUserPercent, let system = monitor.cpuSystemPercent, let idle = monitor.cpuIdlePercent {
-                DetailRow(key: "System / Użytkownik / Bezczynny", value: "\(Int(system))% · \(Int(user))% · \(Int(idle))%")
-            }
-            if let load = monitor.loadAvg {
-                DetailRow(key: "Średnie obciążenie (1/5/15 min)", value: "\(plNumber(load.0, 2)) · \(plNumber(load.1, 2)) · \(plNumber(load.2, 2))")
-            }
-            if let uptime = monitor.uptime {
-                DetailRow(key: "Czas pracy", value: formatUptime(uptime))
+            // ponytail: mockup CPU panel = 2 pierścienie + słupki rdzeni +
+            // jedna linia "Load 1 min · uptime". Trzeci pierścień (load) i
+            // osobne wiersze user/system/idle wycięte — przy stałych 160pt
+            // (fixed-height panel container) nie mieściły się wszystkie
+            // dawne wiersze naraz; surowe dane zostają w monitorze.
+            if let load = monitor.loadAvg, let uptime = monitor.uptime {
+                Text("Load 1 min: \(plNumber(load.0, 2)) · \(formatUptime(uptime))")
+                    .font(.system(size: 11 + FontScale.bump))
+                    .foregroundStyle(Color.ink.opacity(0.55))
+                    .padding(.top, 6)
             }
         }
     }
@@ -439,25 +469,21 @@ private struct GPUDetailPanel: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Spacer()
+                DetailRing(value: (monitor.gpuTempCelsius ?? 0) / 100, color: Color.blue,
+                           bigLabel: monitor.gpuTempCelsius.map { "\(Int($0.rounded()))°C" } ?? "—", smallLabel: "temp")
+                Spacer()
                 DetailRing(value: (monitor.gpuDevicePercent ?? 0) / 100, color: Color.blue,
                            bigLabel: monitor.gpuDevicePercent.map { "\(Int($0.rounded()))%" } ?? "—", smallLabel: "użycie")
-                Spacer()
-                DetailRing(value: (monitor.gpuRendererPercent ?? 0) / 100, color: Color.blue,
-                           bigLabel: monitor.gpuRendererPercent.map { "\(Int($0.rounded()))%" } ?? "—", smallLabel: "render")
-                Spacer()
-                DetailRing(value: (monitor.gpuTilerPercent ?? 0) / 100, color: Color.blue,
-                           bigLabel: monitor.gpuTilerPercent.map { "\(Int($0.rounded()))%" } ?? "—", smallLabel: "tiler")
                 Spacer()
             }
             .padding(.bottom, 6)
 
+            // ponytail: mockup GPU panel = 2 pierścienie + historia.
+            // Renderer/tiler pierścienie i osobny wiersz "Szczegóły" wycięte
+            // — nie mieszczą się w stałych 160pt razem z historią; te dwie
+            // wartości nadal czytane w HardwareMonitor gdyby miały wrócić.
             DetailSectionLabel(text: "Historia użycia")
             Sparkline(data: monitor.gpuHistory, color: Color.blue, unit: "%", height: 44)
-
-            DetailSectionLabel(text: "Szczegóły")
-            if let temp = monitor.gpuTempCelsius {
-                DetailRow(key: "Temperatura", value: "\(Int(temp.rounded()))°C")
-            }
         }
     }
 }
@@ -480,17 +506,26 @@ private struct RAMDetailPanel: View {
                     (Double(compressed) / total, Color.rose),
                     (free / total, Color.ink.opacity(0.12)),
                 ])
-                DetailRow(key: "Aplikacje", chip: Color.accent, value: "\(plNumber(Double(app) / 1e9, 2)) GB")
-                DetailRow(key: "Układowa (wired)", chip: Color.coreP, value: "\(plNumber(Double(wired) / 1e9, 2)) GB")
-                DetailRow(key: "Skompresowana", chip: Color.rose, value: "\(plNumber(Double(compressed) / 1e9, 2)) GB")
-                DetailRow(key: "Wolna", chip: Color.ink.opacity(0.25), value: "\(plNumber(free / 1e9, 2)) GB")
+                // ponytail: mockup pairs the 4 legend items into 2 rows of 2
+                // (Aplikacje+Układowa, Skompresowana+Wolna) — RAMLegendItem
+                // below is the "krótszy" of the two options the task offered.
+                HStack(spacing: 14) {
+                    RAMLegendItem(color: Color.accent, name: "Aplikacje", value: "\(plNumber(Double(app) / 1e9, 2)) GB")
+                    RAMLegendItem(color: Color.coreP, name: "Układowa", value: "\(plNumber(Double(wired) / 1e9, 2)) GB")
+                    Spacer()
+                }
+                HStack(spacing: 14) {
+                    RAMLegendItem(color: Color.rose, name: "Skompresowana", value: "\(plNumber(Double(compressed) / 1e9, 2)) GB")
+                    RAMLegendItem(color: Color.ink.opacity(0.25), name: "Wolna", value: "\(plNumber(free / 1e9, 2)) GB")
+                    Spacer()
+                }
             }
             if let swapUsed = monitor.swapUsedBytes {
-                DetailRow(key: "Pamięć wymiany (swap)", value: "\(plNumber(Double(swapUsed) / 1e9, 2)) GB")
+                Text("Pamięć wymiany (swap): \(plNumber(Double(swapUsed) / 1e9, 2)) GB")
+                    .font(.system(size: 11 + FontScale.bump))
+                    .foregroundStyle(Color.ink.opacity(0.55))
+                    .padding(.top, 6)
             }
-
-            ProcessSection(hardware: monitor)
-                .padding(.top, 4)
         }
     }
 
@@ -500,6 +535,60 @@ private struct RAMDetailPanel: View {
         case .some(let l) where l > 1: return "Pamięć — presja krytyczna"
         case .some: return "Pamięć — presja normalna"
         case .none: return "Pamięć"
+        }
+    }
+}
+
+/// One "chip · name · value" legend entry, two of which sit side by side in
+/// the RAM panel (§4 of the mockup pass — replaces the old one-per-row DetailRow).
+private struct RAMLegendItem: View {
+    let color: Color
+    let name: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 7, height: 7)
+            Text(name).foregroundStyle(Color.ink.opacity(0.55))
+            Text(value).foregroundStyle(Color.txt).monospacedDigit().contentTransition(.numericText())
+        }
+        .font(.system(size: 11 + FontScale.bump))
+        .padding(.vertical, 2)
+    }
+}
+
+// MARK: - SSD detail panel
+
+/// Disk stats — shown while `open == .ssd` and the mole game hasn't been
+/// summoned by a second click (see `HardwareStrip.select`).
+private struct SSDDetailPanel: View {
+    let monitor: HardwareMonitor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            DetailSectionLabel(text: "Dysk")
+
+            if let available = monitor.ssdAvailableBytes, let total = monitor.ssdTotalBytes, total > 0 {
+                let used = Double(total) - Double(available)
+                SplitBar(segments: [
+                    (used / Double(total), Color.ink.opacity(0.3)),
+                    (Double(available) / Double(total), Color.teal),
+                ])
+                HStack {
+                    Text("Zajęte \(plNumber(used / 1e9, 0)) G").foregroundStyle(Color.ink.opacity(0.55))
+                    Spacer()
+                    Text("Wolne \(plNumber(Double(available) / 1e9, 0)) G").foregroundStyle(Color.teal)
+                    Spacer()
+                    Text("Całość \(plNumber(Double(total) / 1e9, 0)) G").foregroundStyle(Color.ink.opacity(0.55))
+                }
+                .font(.system(size: 11 + FontScale.bump))
+                .monospacedDigit()
+                .padding(.top, 8)
+            } else {
+                Text("brak danych")
+                    .font(.system(size: 10 + FontScale.bump))
+                    .foregroundStyle(Color.ink.opacity(0.35))
+            }
         }
     }
 }
@@ -536,22 +625,33 @@ private struct NetDetailPanel: View {
             }
             .frame(height: 44)
 
-            DetailSectionLabel(text: "Interfejs")
-            DetailRow(key: "Interfejs", value: interfaceLine)
-            if let localIP = monitor.localIP { DetailRow(key: "Lokalny IP", value: localIP) }
-            if let publicIP = monitor.publicIP { DetailRow(key: "Publiczny IP", value: publicIP) }
-            if let latency = monitor.latencyMs { DetailRow(key: "Opóźnienie", value: "\(Int(latency.rounded())) ms") }
+            // ponytail: mockup SIEĆ = historia + jedna linia interfejs/ping +
+            // jedna linia suma od uruchomienia. Osobne wiersze lokalny/
+            // publiczny IP wycięte — nie mieszczą się w 160pt obok historii;
+            // monitor.localIP/publicIP wciąż czytane, gdyby wróciły do UI.
+            Text(interfaceAndPingLine)
+                .font(.system(size: 11 + FontScale.bump))
+                .foregroundStyle(Color.ink.opacity(0.55))
+                .monospacedDigit()
+                .padding(.top, 10)
 
-            DetailSectionLabel(text: "Od uruchomienia")
-            DetailRow(key: "Pobrano", chip: Color.teal, value: "\(plNumber(Double(monitor.netTotalDownBytes) / 1e9, 1)) GB")
-            DetailRow(key: "Wysłano", chip: Color.rose, value: "\(plNumber(Double(monitor.netTotalUpBytes) / 1e9, 1)) GB")
+            Text("Od uruchomienia — ↓ \(plNumber(Double(monitor.netTotalDownBytes) / 1e9, 1)) GB · ↑ \(plNumber(Double(monitor.netTotalUpBytes) / 1e9, 1)) GB")
+                .font(.system(size: 11 + FontScale.bump))
+                .foregroundStyle(Color.ink.opacity(0.55))
+                .monospacedDigit()
+                .padding(.top, 4)
         }
     }
 
-    private var interfaceLine: String {
-        guard let name = monitor.netInterfaceName else { return "brak danych" }
-        if let ssid = monitor.wifiSSID { return "Wi-Fi (\(name)) · \(ssid)" }
-        return "Wi-Fi (\(name))"
+    private var interfaceAndPingLine: String {
+        let base: String
+        if let name = monitor.netInterfaceName {
+            base = monitor.wifiSSID.map { "Wi-Fi (\(name)) · \($0)" } ?? "Wi-Fi (\(name))"
+        } else {
+            base = "brak danych"
+        }
+        guard let latency = monitor.latencyMs else { return base }
+        return "\(base) · \(Int(latency.rounded())) ms"
     }
 }
 

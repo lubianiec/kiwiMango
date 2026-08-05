@@ -89,6 +89,8 @@ final class HardwareMonitor {
     private(set) var gpuHistory: [Double] = []
     private(set) var netDownHistory: [Double] = []
     private(set) var netUpHistory: [Double] = []
+    private(set) var ramHistory: [Double] = []
+    private(set) var ssdHistory: [Double] = []
     private static let historyLimit = 60
 
     private func pushHistory(_ value: Double?, into array: inout [Double]) {
@@ -146,6 +148,17 @@ final class HardwareMonitor {
         // normalizes against its own max) reads sensibly; MB/s rarely exceeds ~100.
         pushHistory(netDownBytesPerSec.map { $0 / 1_000_000 }, into: &netDownHistory)
         pushHistory(netUpBytesPerSec.map { $0 / 1_000_000 }, into: &netUpHistory)
+
+        if let app = ramAppBytes, let wired = ramWiredBytes, let compressed = ramCompressedBytes, ramTotalBytes > 0 {
+            pushHistory(Double(app + wired + compressed) / Double(ramTotalBytes) * 100, into: &ramHistory)
+        } else {
+            pushHistory(nil, into: &ramHistory)
+        }
+        if let available = ssdAvailableBytes, let total = ssdTotalBytes, total > 0 {
+            pushHistory(Double(total - available) / Double(total) * 100, into: &ssdHistory)
+        } else {
+            pushHistory(nil, into: &ssdHistory)
+        }
     }
 
     // MARK: - CPU

@@ -34,12 +34,18 @@ final class DashboardStore {
     // (today tile + trend vs wczoraj, 7-day tile + sparkline, 30-day chart,
     // this month + previous month for the trend) — sliced in Swift below.
     private(set) var dailyTokens: [HermesStateReader.DayTokens] = []
+    private(set) var modelTokensToday: [HermesStateReader.ModelTokens] = []
     private(set) var modelTokens7d: [HermesStateReader.ModelTokens] = []
     /// Previous 7-day window (days 8–14 ago) — per-model trend in the table.
     private(set) var modelTokensPrev7d: [HermesStateReader.ModelTokens] = []
+    private(set) var modelTokensMonth: [HermesStateReader.ModelTokens] = []
     /// ponytail: "od początku" approximated with a 10-year window, which in
-    /// practice covers everything actually in `state.db`.
-    private(set) var allTimeTotal = 0
+    /// practice covers everything actually in `state.db`. Kept as a full
+    /// per-model array (not just the summed total) so the "udział modeli"
+    /// panel can show a breakdown for the "OD POCZĄTKU" period too — zero
+    /// extra queries, this one was already being fetched.
+    private(set) var modelTokensAllTime: [HermesStateReader.ModelTokens] = []
+    var allTimeTotal: Int { modelTokensAllTime.reduce(0) { $0 + $1.total } }
     /// kiwiMango's own chat usage (GRDB `token_usage`, Fala 2).
     private(set) var kiwiTokenUsage7d: [DatabaseManager.TokenUsageTotal] = []
     /// "odświeżono X temu" in the status bar.
@@ -85,14 +91,19 @@ final class DashboardStore {
     }
 
     func refreshStateDB() async {
+        let daysThisMonth = Calendar.current.component(.day, from: Date())
         async let daily = (try? HermesStateReader.dailyTokenTotals(days: 62)) ?? []
+        async let byModelToday = (try? HermesStateReader.modelTokenTotals(days: 1)) ?? []
         async let byModel = (try? HermesStateReader.modelTokenTotals(days: 7)) ?? []
         async let byModelPrev = (try? HermesStateReader.modelTokenTotals(days: 7, offsetDays: 7)) ?? []
+        async let byModelMonth = (try? HermesStateReader.modelTokenTotals(days: daysThisMonth)) ?? []
         async let allTime = (try? HermesStateReader.modelTokenTotals(days: 3650)) ?? []
         dailyTokens = await daily
+        modelTokensToday = await byModelToday
         modelTokens7d = await byModel
         modelTokensPrev7d = await byModelPrev
-        allTimeTotal = await allTime.reduce(0) { $0 + $1.total }
+        modelTokensMonth = await byModelMonth
+        modelTokensAllTime = await allTime
         kiwiTokenUsage7d = (try? DatabaseManager.shared.fetchTokenUsageTotals(days: 7)) ?? []
         lastStateRefresh = Date()
     }

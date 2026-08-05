@@ -1,12 +1,12 @@
 import SwiftUI
 
-// MARK: - DashboardView (PLAN-V2 §7.2)
+// MARK: - DashboardView (PLAN-V2 §7.2, reorder 2026-08-05 per Claude Design mockup)
 //
-// Vertical order: Hero → HardwareStrip → 01 AGENCI / 02 TOKENY / 03 PROCESY
-// (those three sections are B2's — plain placeholders here so this file
-// builds standalone and B2 can drop their views in without touching this
-// file's structure). Only Dashboard scrolls (§7.1) — HardwareMonitor's timer
-// starts/stops with this view (pułapka #5).
+// Vertical order: HardwareStrip → QuoteBlock → CostsBlock → StatusLine.
+// StatusLine (Agenci/Ollama/Flow/version) moved to the bottom as a quiet
+// footer — Paweł flagged it as clutter up top; it's still the only entry
+// point to the Agents window and to launching Flow. Only Dashboard scrolls
+// (§7.1) — HardwareMonitor's timer starts/stops with this view (pułapka #5).
 
 struct DashboardView: View {
     @State private var monitor = HardwareMonitor()
@@ -15,16 +15,30 @@ struct DashboardView: View {
     @State private var agents = AgentsMonitor()
 
     var body: some View {
+        // ponytail: an earlier pass forced this VStack to the viewport's
+        // minHeight and sprinkled flexible Spacers to kill the dead zone at
+        // the bottom — but HardwareStrip's 1pt-wide divider Rectangles have
+        // no height of their own, so they greedily filled whatever extra
+        // height the forced minHeight pushed down, stretching the whole
+        // strip into empty space (Paweł caught it on screenshot). Natural,
+        // unforced sizing — the fill instead comes from deliberately larger
+        // fixed heights in CostsBlock's chart/model rows (see CostsBlock.swift).
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                HeroSection(store: store, services: services, agents: agents)
-
                 HardwareStrip(monitor: monitor)
-                    .padding(.top, 12)
+                    .padding(.top, 18)
+
+                QuoteBlock()
+                    .padding(.top, 8)
 
                 CostsBlock(store: store)
+                    .padding(.top, 8)
                 // Procesy przeniesione do panelu detali RAM (klik w RAM na
                 // stripie) — decyzja Pawła 2026-08-05: psuły kompozycję.
+
+                StatusLine(store: store, services: services, agents: agents)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 18)
             }
             // ponytail: ContentView already pads horizontal/top/bottom around
             // every page (nav clearance) — Dashboard doesn't re-pad on top of that.
@@ -52,60 +66,54 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Hero (§7.2 pkt 1)
+// MARK: - QuoteBlock (mockup §2 — centered, own breathing room)
 
-private struct HeroSection: View {
-    let store: DashboardStore
-    let services: ServiceStatus
-    let agents: AgentsMonitor
-
+private struct QuoteBlock: View {
     @State private var quote: Quote?
     @State private var appeared = false
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 8) {
-                if let quote {
-                    Text("„\(quote.text)”")
-                        .font(.system(size: 18 + FontScale.bump, weight: .regular, design: .serif))
-                        .italic()
-                        .foregroundStyle(Color.txt.opacity(0.78))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("— \(quote.author)")
-                        .font(.system(size: 12 + FontScale.bump))
-                        .foregroundStyle(Color.ink.opacity(0.5))
-                }
+        VStack(spacing: 6) {
+            if let quote {
+                Text("„\(quote.text)”")
+                    .font(.system(size: 17.5 + FontScale.bump, weight: .regular, design: .serif))
+                    .italic()
+                    .foregroundStyle(Color.txt.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(6.3) // line-height 1.36 @ 17.5pt
+                    .fixedSize(horizontal: false, vertical: true)
 
-                StatusLine(store: store, services: services, agents: agents)
+                Text("— \(quote.author)")
+                    .font(.system(size: 12 + FontScale.bump))
+                    .foregroundStyle(Color.ink.opacity(0.5))
+                    .multilineTextAlignment(.center)
             }
-            .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 6)
-            .task {
-                quote = await QuoteProvider.shared.nextQuote()
-                withAnimation(.easeOut(duration: 0.35)) { appeared = true }
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("TOKENY 7 DNI").kiwiSectionLabel()
-                Text(formatCompactTokens(store.sevenDayTotal))
-                    .font(.system(size: 24 + FontScale.bump, weight: .light))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                Text(appVersionLabel)
-                    .font(.system(size: 8.5 + FontScale.bump))
-                    .foregroundStyle(Color.ink.opacity(0.3))
-            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 10)
+        .padding(.top, 18)
+        .padding(.bottom, 8)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 6)
+        .task {
+            quote = await QuoteProvider.shared.nextQuote()
+            withAnimation(.easeOut(duration: 0.35)) { appeared = true }
         }
     }
 }
 
 /// Git-derived build identifier stamped by Makefile — one glance tells you
 /// exactly which commit is installed, no more guessing vs GitHub/disk.
+/// `git describe --tags --always --dirty` can append `-N-gHASH-dirty`; UI
+/// only wants the tag itself, so we cut at the first `-` (ponytail: string
+/// slice over touching the Makefile, which the plan explicitly forbids).
 private var appVersionLabel: String {
-    Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+    let raw = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+    return raw.split(separator: "-", maxSplits: 1).first.map(String.init) ?? raw
 }
 
-/// One nowrap 9.5pt status line: service dots + model + quick actions.
+/// One nowrap 9.5pt status line: service dots + model + quick actions +
+/// version, quietest element last (opacity 0.25, same 9pt as the rest).
 private struct StatusLine: View {
     let store: DashboardStore
     let services: ServiceStatus
@@ -134,6 +142,9 @@ private struct StatusLine: View {
             }
 
             QuickAction(title: "Agenci \(agents.activeCount)") { openWindow(id: "agents") }
+
+            Text("· \(appVersionLabel)")
+                .foregroundStyle(Color.ink.opacity(0.25))
         }
         .font(.system(size: 9 + FontScale.bump))
         .foregroundStyle(Color.ink.opacity(0.45))
