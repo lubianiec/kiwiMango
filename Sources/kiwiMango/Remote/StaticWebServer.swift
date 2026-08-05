@@ -26,10 +26,10 @@ final class StaticWebServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "kiwiMango.StaticWebServer")
 
     // ponytail: kept alive for the server's whole lifetime (not tied to a
-    // SwiftUI view's onAppear/onDisappear like the native Dashboard's own
-    // instances) so CPU/network deltas and NBP's 24h cache have something to
-    // diff against between polls. Same classes the native UI already uses —
-    // just a second long-lived instance for the web surface.
+    // SwiftUI view's onAppear/onDisappear) so CPU/network deltas and NBP's
+    // 24h cache have something to diff against between polls. The native
+    // Dashboard's own hardware strip was removed 2026-08-05 (Stats.app
+    // duplicate) — this is now the only place that starts a HardwareMonitor.
     @MainActor private var hardwareMonitor: HardwareMonitor?
     @MainActor private var nbpClient: NBPClient?
 
@@ -114,9 +114,8 @@ final class StaticWebServer: @unchecked Sendable {
     // MARK: - /api/status (web Dashboard tile — reuses existing readers, no new parsing)
 
     /// ponytail: no shared HTTP client/timeout helper exists yet for a bare
-    /// GET-with-timeout — `ServiceStatus.ping` in DashboardView.swift does the
-    /// same thing but is `private` to that type, so this is a 4-line
-    /// duplicate rather than a new shared utility for one caller.
+    /// GET-with-timeout, so this is a 4-line duplicate rather than a new
+    /// shared utility for one caller.
     private static func pingAlive(_ urlString: String) async -> Bool {
         guard let url = URL(string: urlString) else { return false }
         var request = URLRequest(url: url)
@@ -124,11 +123,12 @@ final class StaticWebServer: @unchecked Sendable {
         return (try? await URLSession.shared.data(for: request)) != nil
     }
 
-    /// Full "Zużycie" dashboard payload for the web UI — reuses the exact same
-    /// readers/derivations the native `DashboardStore`/`CostsBlock`/
-    /// `HardwareMonitor`/`ProcessSection` views already call. See class docs
-    /// above for why hardware/NBP state is kept in two long-lived ivars
-    /// rather than re-created per request.
+    /// Full "Zużycie" dashboard payload for the web UI — reuses the same
+    /// `HermesFilesReader`/`HermesStateReader`/`HardwareMonitor` readers the
+    /// native dashboard used to call before it (and `DashboardStore`,
+    /// `TokensBlock`) were deleted 2026-08-05 — those derivations now live
+    /// only here. See class docs above for why hardware/NBP state is kept in
+    /// two long-lived ivars rather than re-created per request.
     private func serveStatus(_ connection: NWConnection) {
         Task { [weak self] in
             guard let self else { return }
@@ -179,8 +179,9 @@ final class StaticWebServer: @unchecked Sendable {
         }
     }
 
-    /// Mirrors `DashboardStore`'s today/7d/month/all-time derivations exactly
-    /// (including "nil when there's no prior window" — no invented 0%/trend).
+    /// Mirrors the today/7d/month/all-time derivations the deleted native
+    /// dashboard's `DashboardStore` used to compute, exactly (including "nil
+    /// when there's no prior window" — no invented 0%/trend).
     private static func tokenStats(
         daily: [HermesStateReader.DayTokens], monthTotal7dModels: [HermesStateReader.ModelTokens], allTimeTotal: Int
     ) -> [String: Any] {
@@ -223,7 +224,7 @@ final class StaticWebServer: @unchecked Sendable {
         ]
     }
 
-    /// Mirrors `CostsBlock.costsColumn`'s exact formula (same buggy-or-not
+    /// Native dashboard dropped its costs column 2026-08-05 — this is now the ONLY place costs are computed. Formula (same buggy-or-not
     /// numbers as the native app — not this wave's job to "fix" them).
     private static func costStats(
         modelTokens7d: [HermesStateReader.ModelTokens], usdRate: Double?, eurRate: Double?
@@ -237,9 +238,9 @@ final class StaticWebServer: @unchecked Sendable {
         guard let usdRate, let eurRate, apiValueUSD > 0 else {
             return ["nbpUsdRate": NSNull(), "nbpEurRate": NSNull(), "paidZl": NSNull(), "apiValueZl": NSNull(), "apiValueEur": NSNull(), "savingsPercent": NSNull()]
         }
-        // ponytail: same literal as DashboardStore.ollamaProMonthlyCost — that
-        // property is @MainActor-isolated (part of an @Observable class), not
-        // worth a MainActor hop just to read a constant that never changes.
+        // ponytail: same $20/mo literal the deleted native DashboardStore
+        // used (`ollamaProMonthlyCost`) — that class was @MainActor-isolated,
+        // not worth reviving just to read a constant that never changes.
         let ollamaProMonthlyCost = 20.0
         let paidZl = Int(ollamaProMonthlyCost * usdRate)
         let apiValueZl = Int(apiValueUSD * usdRate)
@@ -258,10 +259,10 @@ final class StaticWebServer: @unchecked Sendable {
         return await MainActor.run { (client.usdRate, client.eurRate) }
     }
 
-    /// ponytail: no sparkline history in v1 — `HardwareMonitor.cpuHistory`
-    /// etc. exist but wiring 60-sample arrays through JSON for a value the
-    /// mockup treats as decorative wasn't worth it this wave. Add by exposing
-    /// `monitor.cpuHistory` (already public-ish `private(set)`) the same way.
+    /// ponytail: no sparkline history — `HardwareMonitor` was trimmed
+    /// 2026-08-05 to exactly the fields this snapshot reads (its native
+    /// HardwareStrip UI was removed as a Stats.app duplicate). Add history
+    /// arrays back to `HardwareMonitor` first if this ever needs one.
     private func hardwareSnapshot() async -> [String: Any] {
         await MainActor.run {
             let m = self.ensureHardwareMonitor()

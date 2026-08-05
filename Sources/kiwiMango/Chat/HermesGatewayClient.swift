@@ -196,7 +196,20 @@ actor HermesGatewayClient {
         // webUI (i przyszła appka iOS) mogły się dobić do zawsze tego samego
         // adresu przez tunel, zamiast gonić za nowym portem po każdym
         // restarcie. 9219 obok Hermes Desktop (9119), żeby nie kolidować.
-        let resolvedPort = try await Self.spawnServer(hermesPath: hermesPath, token: persistedToken, port: RemoteWebUIConfig.gatewayPort)
+        // ponytail: przyczyna, nie objaw. Gateway przeżywa twarde ubicie
+        // appki (SIGKILL omija `applicationShouldTerminate`, więc
+        // `HermesGatewayProcessBox.terminate()` się nie wykonuje) i zostaje
+        // sierotą na porcie 9219. Przy następnym starcie appka spawnowała
+        // DRUGI serwer na tym samym porcie, ten padał z kodem 1, a użytkownik
+        // dostawał „nie udało się uruchomić serwera Hermes" — mimo że
+        // działający serwer stał tuż obok. Token jest trwały (ten sam plik),
+        // więc do sieroty można się po prostu podłączyć.
+        let resolvedPort: Int
+        if await Self.isGatewayListening(port: RemoteWebUIConfig.gatewayPort) {
+            resolvedPort = RemoteWebUIConfig.gatewayPort
+        } else {
+            resolvedPort = try await Self.spawnServer(hermesPath: hermesPath, token: persistedToken, port: RemoteWebUIConfig.gatewayPort)
+        }
         port = resolvedPort
 
         guard let url = URL(string: "ws://127.0.0.1:\(resolvedPort)/api/ws?token=\(persistedToken)") else {
@@ -211,6 +224,17 @@ actor HermesGatewayClient {
         isConnected = true
 
         startReceiveLoop(on: task)
+    }
+
+    /// Czy na porcie stoi już żywy `hermes serve`. Zwykły GET wystarcza —
+    /// serwer odpowiada 404 na `/`, ale ODPOWIADA, a to jedyne, co nas tu
+    /// interesuje. Krótki timeout, żeby start appki nie wisiał, gdy port
+    /// trzyma coś, co nie gada po HTTP.
+    private static func isGatewayListening(port: Int) async -> Bool {
+        guard let url = URL(string: "http://127.0.0.1:\(port)/") else { return false }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 1.5
+        return (try? await URLSession.shared.data(for: request)) != nil
     }
 
     /// Starts the process and blocks (off the actor) until it prints

@@ -4,6 +4,12 @@ import SwiftUI
 //
 // Fix: sessions + controllers now live in ConversationStore (hoisted to
 // ContentView), so switching pages no longer destroys agent history.
+//
+// Since the dashboard was deleted 2026-08-05, this is now the app's only
+// page. The side panel and status footer were removed 2026-08-05 — the
+// footer's live status now lives in ConversationView's title bar, and its
+// two entry points (Agents window, launch Flow) moved to the app menu
+// (see App.swift's `.commands`).
 
 struct AgentPage: View {
     @Bindable var store: ConversationStore
@@ -28,6 +34,7 @@ struct AgentPage: View {
                     modelOptions: AgentSessionController.availableModels,
                     onSend: controller.send
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .onAppear {

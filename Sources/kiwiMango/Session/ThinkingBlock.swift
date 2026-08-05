@@ -2,12 +2,20 @@ import SwiftUI
 
 // MARK: - ThinkingBlockView (PLAN-V2 §7.3)
 
-/// Collapsed = pill "✦ Tok myślenia · N s ▼". Expanded = panel2 block with a
-/// 2pt accent left edge, italic text. Toggling drives the caller's autoscroll
-/// pause (see `ConversationView`) — this view only renders + reports taps.
+/// Collapsed = pill "✦ tok myślenia · N s ▾" in violet mono (terminal-stream
+/// restyle, kiwimango-warsztat-terminal.html "Anatomia rozróżnienia"). Expanded
+/// = panel2 block with a 2pt violet left edge, italic text. Toggling drives
+/// the caller's autoscroll pause (see `ConversationView`) — this view only
+/// renders + reports taps.
 struct ThinkingBlockView: View {
     @Bindable var model: ThinkingBlockModel
     var onToggle: () -> Void
+
+    // ponytail: local constant, not a DesignSystem.swift addition — this
+    // task's file scope is Session/*.swift only, and violet is used nowhere
+    // else yet. Promote to `Color.coreP` in DesignSystem.swift if a second
+    // call site shows up.
+    private var violet: Color { Color(hex: "8B7EC9") }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -21,30 +29,39 @@ struct ThinkingBlockView: View {
 
             if model.isExpanded {
                 Text(model.text)
-                    .font(KiwiMangoFont.sans(10.5))
+                    .font(KiwiMangoFont.sans(11.5))
                     .italic()
                     .foregroundStyle(Color.ink.opacity(0.55))
                     .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: 340, alignment: .leading)
                     .background(Color.panel2)
-                    .overlay(Rectangle().fill(Color.accent.opacity(0.35)).frame(width: 2), alignment: .leading)
-                    .clipShape(RoundedCorners(radii: [0, 8, 8, 0]))
+                    .overlay(Rectangle().fill(violet.opacity(0.4)).frame(width: 2), alignment: .leading)
+                    .clipShape(RoundedCorners(radii: [0, 6, 6, 0]))
             }
         }
-        .frame(maxWidth: 340, alignment: .leading)
+        .padding(.top, 4)
+        .padding(.trailing, 20)
+        .padding(.bottom, 8)
+        .padding(.leading, 40)
+        .overlay(alignment: .leading) {
+            // Rynna spine — same x=19 line the tool-call rows and agent
+            // replies draw, so a thinking block reads as part of the same turn.
+            Rectangle().fill(Color.ink.opacity(0.14)).frame(width: 1).offset(x: 19)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var header: some View {
-        HoverBorderCapsule(activeColor: .accent, isActive: model.isExpanded) {
+        HoverBorderCapsule(activeColor: violet, isActive: model.isExpanded) {
             HStack(spacing: 7) {
                 Text("✦")
-                Text("Tok myślenia · \(String(format: "%.1f", model.seconds)) s")
-                Text("▼")
+                Text("tok myślenia · \(String(format: "%.1f", model.seconds)) s")
+                Text("▾")
                     .font(.system(size: 7 + FontScale.bump))
                     .rotationEffect(.degrees(model.isExpanded ? 180 : 0))
             }
-            .font(KiwiMangoFont.sans(9.5))
-            .foregroundStyle(model.isExpanded ? Color.accent : Color.ink.opacity(0.45))
+            .font(KiwiMangoFont.mono(10.5))
+            .foregroundStyle(violet)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
         }

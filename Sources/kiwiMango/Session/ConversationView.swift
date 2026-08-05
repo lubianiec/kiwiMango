@@ -4,8 +4,12 @@ import UniformTypeIdentifiers
 // MARK: - ConversationView (PLAN-V2 §5, §7.3)
 //
 // THE single conversation surface — Agent and Chat both render through this
-// exact view. Terminal-styled transcript: dark panel, monospace text, syntax
-// highlighting, clickable links, markdown tables, and a clear code block chrome.
+// exact view. Terminal-stream restyle (kiwimango-okno-rozmowy-final.html
+// `.left`/`.stream`, "Anatomia rozróżnienia" in kiwimango-warsztat-terminal.html):
+// the ty/agent distinction now carries three signals at once — a leading `❯`
+// glyph only ty gets, SF Mono for ty + all machinery vs. SF Pro prose for the
+// agent, and an amber-tinted row vs. no background at all (just a hairline
+// spine in the gutter tying an agent reply to its tool calls).
 
 struct ConversationView: View {
     @Bindable var session: ConversationSession
@@ -14,37 +18,37 @@ struct ConversationView: View {
 
     @State private var isDropTargeted = false
 
+    // MARK: Title bar activity indicator (moved from the deleted AgentPanel's
+    // "TERAZ" section 2026-08-05 — the side panel and status footer are gone,
+    // this is now the sole live "what's happening" surface, folded into the
+    // terminal title bar instead of its own chrome.
+    @State private var currentActionStartedAt: Date?
+    @State private var clockNow = Date()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Terminal title bar: traffic dots + title + model picker
+            // Terminal title bar: traffic dots + title + activity + model picker
             terminalTitleBar
                 .padding(.bottom, 8)
 
-            // Terminal window frame around transcript
-            VStack(alignment: .leading, spacing: 0) {
-                transcript
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .background(Color.panel2)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Color.ink.opacity(0.12), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.accent.opacity(isDropTargeted ? 0.08 : 0))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color.accent.opacity(isDropTargeted ? 0.5 : 0), lineWidth: 1.5)
-                    )
-                    .allowsHitTesting(false)
-            )
-            .onDrop(of: [.fileURL, .image], isTargeted: $isDropTargeted) { providers in
-                handleDrop(providers)
-                return true
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            transcript
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.bg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.accent.opacity(isDropTargeted ? 0.08 : 0))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Color.accent.opacity(isDropTargeted ? 0.5 : 0), lineWidth: 1.5)
+                        )
+                        .allowsHitTesting(false)
+                )
+                .onDrop(of: [.fileURL, .image], isTargeted: $isDropTargeted) { providers in
+                    handleDrop(providers)
+                    return true
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Composer(
                 draft: $session.draft,
@@ -58,9 +62,79 @@ struct ConversationView: View {
                     onSend(text)
                 }
             )
-            .padding(.top, 10)
         }
         .padding(.top, 2)
+        .onChange(of: runningToolCall?.id) { _, newID in
+            currentActionStartedAt = newID != nil ? Date() : nil
+        }
+        .task { await activityClockLoop() }
+    }
+
+    // MARK: Title bar activity — running tool / streaming reply / quiet idle dot
+
+    private var runningToolCall: ToolCall? {
+        for item in session.items.reversed() {
+            if case .toolCall(let call) = item, call.isRunning { return call }
+        }
+        return nil
+    }
+
+    private var isStreamingReply: Bool {
+        session.items.contains { if case .aiMessage(_, _, _, let streaming) = $0 { return streaming }; return false }
+    }
+
+    /// Same "while !cancelled / sleep 1s" polling idiom used elsewhere in the
+    /// app (was `ServiceStatus`/`AgentPanel`'s clock loop) — ticks the elapsed
+    /// label without pulling in Combine/`Timer.publish` for something this simple.
+    @MainActor
+    private func activityClockLoop() async {
+        while !Task.isCancelled {
+            clockNow = Date()
+            try? await Task.sleep(for: .seconds(1))
+        }
+    }
+
+    private func elapsedLabel(since start: Date?) -> String {
+        guard let start else { return "0,0 s" }
+        let seconds = max(0, clockNow.timeIntervalSince(start))
+        return String(format: "%.1f s", seconds).replacingOccurrences(of: ".", with: ",")
+    }
+
+    @ViewBuilder
+    private var activityIndicator: some View {
+        if let call = runningToolCall {
+            HStack(spacing: 6) {
+                activitySpinner
+                Text(call.name)
+                    .font(KiwiMangoFont.mono(10.5))
+                    .foregroundStyle(Color.teal)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(elapsedLabel(since: currentActionStartedAt))
+                    .font(KiwiMangoFont.mono(9.5))
+                    .foregroundStyle(Color.ink.opacity(0.28))
+            }
+        } else if isStreamingReply {
+            HStack(spacing: 6) {
+                activitySpinner
+                Text("pisze…")
+                    .font(KiwiMangoFont.mono(10.5))
+                    .foregroundStyle(Color.teal)
+            }
+        } else {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 6, height: 6)
+        }
+    }
+
+    @ViewBuilder
+    private var activitySpinner: some View {
+        if reduceMotion {
+            Circle().fill(Color.teal).frame(width: 6, height: 6)
+        } else {
+            TitleBarSpinner()
+        }
     }
 
     // MARK: Drag & drop images
@@ -140,13 +214,12 @@ struct ConversationView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            // Status dot + model picker
-            Circle()
-                .fill(session.isWorking ? Color.accent : Color.green)
-                .frame(width: 6, height: 6)
-                .neonGlow(session.isWorking ? Color.accent : Color.green, intensity: session.isWorking ? 1.5 : 0.5)
+            // Live "what's happening" indicator — lowest layout priority so a
+            // long tool name compresses before the fixed-width pickers ever move.
+            activityIndicator
+                .layoutPriority(-1)
 
             Picker("", selection: $session.model) {
                 ForEach(modelOptions, id: \.self) { model in
@@ -155,6 +228,7 @@ struct ConversationView: View {
             }
             .labelsHidden()
             .frame(maxWidth: 160)
+            .layoutPriority(1)
 
             Picker("", selection: reasoningEffortBinding) {
                 ForEach(Self.reasoningEffortOptions, id: \.value) { option in
@@ -164,6 +238,7 @@ struct ConversationView: View {
             .labelsHidden()
             .frame(maxWidth: 120)
             .help("Poziom myślenia agenta")
+            .layoutPriority(1)
         }
     }
 
@@ -180,10 +255,6 @@ struct ConversationView: View {
             get: { session.reasoningEffort ?? "" },
             set: { session.reasoningEffort = $0.isEmpty ? nil : $0 }
         )
-    }
-
-    private var emptyText: String {
-        "Nowa sesja agenta — opisz zadanie, Hermes rusza"
     }
 
     private var counterText: String {
@@ -233,10 +304,14 @@ struct ConversationView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 if session.items.isEmpty {
-                    EmptySessionView(text: emptyText)
-                        .frame(maxWidth: .infinity, minHeight: 180)
+                    EmptySessionQuoteView()
+                        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
                 } else {
-                    LazyVStack(alignment: .leading, spacing: 14) {
+                    // spacing: 0 — each row supplies its own margin (only the
+                    // user-message row gets one, per the mockup); tool/thinking/
+                    // agent blocks sit flush so their gutter spines read as one
+                    // continuous line down the turn.
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(renderGroups(session.items)) { group in
                             switch group {
                             case .single(let item):
@@ -246,7 +321,8 @@ struct ConversationView: View {
                             }
                         }
                     }
-                    .padding(.all, 12)
+                    .padding(.top, 6)
+                    .padding(.bottom, 10)
                 }
             }
             .scrollIndicators(.hidden)
@@ -313,48 +389,122 @@ struct ConversationView: View {
         }
     }
 
-    // MARK: User prompt — terminal prompt style
+    // MARK: User row — looks like a typed command (mockup `.u`)
+    //
+    // No timestamp line: the mockup shows one under the text (mono 9.5,
+    // ink 28%), but ConversationItem.userMessage carries no per-message
+    // timestamp today — ConversationModels.swift is out of this task's file
+    // scope, so this is left out rather than fabricated. Same for the
+    // attachment pill in a *sent* message: nothing records which attachments
+    // rode along with a past message (they're cleared from
+    // session.pendingAttachments right after send), so it can't be rendered
+    // here either. Add a `sentAt`/`attachments` field to `ConversationItem`
+    // to unlock both.
 
     private func userMessage(_ text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text("❯")
-                .font(KiwiMangoFont.mono(13, weight: .bold))
+                .font(KiwiMangoFont.mono(13))
                 .foregroundStyle(Color.accent)
-            TerminalMarkdown(content: text)
+                .frame(width: 21, alignment: .leading)
+            TerminalMarkdown(content: text, textColor: Color.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color.bubble.opacity(0.45))
+        .padding(.top, 9)
+        .padding(.trailing, 16)
+        .padding(.bottom, 9)
+        .padding(.leading, 14)
+        .background(Color.accent.opacity(0.07))
+        .overlay(Rectangle().fill(Color.accent).frame(width: 2), alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 10)
+        .padding(.bottom, 4)
     }
 
-    // MARK: AI reply — terminal panel style
+    // MARK: Agent row — no prompt glyph, indented, SF Pro prose (mockup `.a`)
 
     private func aiMessage(label: String, text: String, isStreaming: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+                Text("AGENT")
+                    .font(KiwiMangoFont.sans(8.5, weight: .semibold))
+                    .tracking(1.2)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Color.ink.opacity(0.42))
                 Text(label)
-                    .font(KiwiMangoFont.mono(9, weight: .semibold))
-                    .tracking(0.8)
-                    .foregroundStyle(Color.accent.opacity(0.8))
-                Spacer()
+                    .font(KiwiMangoFont.mono(9.5))
+                    .foregroundStyle(Color.ink.opacity(0.28))
+                Spacer(minLength: 8)
                 if isStreaming { StreamingCursor() }
             }
-            TerminalMarkdown(content: text, textColor: Color.accent.opacity(0.75))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            AgentProseText(text: text)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.top, 9)
+        .padding(.trailing, 18)
+        .padding(.bottom, 15)
+        .padding(.leading, 40)
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(Color.ink.opacity(0.14))
+                .frame(width: 1)
+                .padding(.top, 9)
+                .padding(.bottom, 14)
+                .offset(x: 19)
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // ponytail: whisper-light tint, not a full card — enough to separate
-        // an AI turn from the user prompt row without a boxed/bordered look.
-        .background(Color.ink.opacity(0.035))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+// MARK: - Agent prose (mockup: SF Pro 15pt/1.72, the strongest text in the
+// window — deliberately NOT Chat/TerminalMarkdown.swift, which hardcodes SF
+// Mono for every block. That's exactly the "wall of monospace" look this
+// redesign moves the agent's own words away from; mono stays for ty + all
+// machinery around it.
+//
+// ponytail: handles paragraphs (split on blank lines) + inline `code` spans
+// only — no headings/fenced code/tables, since the mockup's own content is
+// plain prose with one inline code term. If agent replies start needing
+// those inside this specific renderer, extend here rather than reusing
+// TerminalMarkdown (its paragraph font isn't parameterized today).
+
+private struct AgentProseText: View {
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
+                Text(attributed(paragraph))
+                    .lineSpacing(11)
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
+    private var paragraphs: [String] {
+        let parts = text.components(separatedBy: "\n\n").filter { !$0.isEmpty }
+        return parts.isEmpty ? [text] : parts
+    }
+
+    private func attributed(_ paragraph: String) -> AttributedString {
+        var result = AttributedString()
+        for (index, chunk) in paragraph.components(separatedBy: "`").enumerated() {
+            var run = AttributedString(chunk)
+            if index % 2 == 1 {
+                run.font = KiwiMangoFont.mono(12.5)
+                run.foregroundColor = Color.teal
+                run.backgroundColor = Color.black.opacity(0.28)
+            } else {
+                run.font = KiwiMangoFont.sans(15)
+                run.foregroundColor = Color.txt.opacity(0.97)
+            }
+            result.append(run)
+        }
+        return result
     }
 }
 
 // MARK: - Streaming cursor (PLAN-V2 §7.3: 7×13pt accent blinking 0.9s)
+// "Kursor streamingu — zostaje jak jest" — untouched by the restyle.
 
 private struct StreamingCursor: View {
     @State private var visible = true
@@ -372,6 +522,44 @@ private struct StreamingCursor: View {
     }
 }
 
+// MARK: - Title bar spinner (moved from the deleted AgentPanel's "TERAZ"
+// section 2026-08-05 — 11pt ring, teal arc, 1.1s rotation. Reduce-motion
+// handling lives one level up in `activitySpinner`, which swaps this out
+// for a static teal dot instead of rendering a frozen ring.
+
+private struct TitleBarSpinner: View {
+    @State private var rotating = false
+
+    var body: some View {
+        Circle()
+            .strokeBorder(Color.ink.opacity(0.14), lineWidth: 1.5)
+            .overlay(
+                Circle()
+                    .trim(from: 0, to: 0.28)
+                    .stroke(Color.teal, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            )
+            .rotationEffect(.degrees(rotating ? 360 : 0))
+            .frame(width: 11, height: 11)
+            .onAppear {
+                withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) { rotating = true }
+            }
+    }
+}
+
+// MARK: - Machinery spine (shared rynna line for tool rows + fold toggle)
+
+private extension View {
+    /// The włoskowata pionowa line at x=19 in the mockup's `.m::before` — each
+    /// row draws its own full-height segment; stacked with zero spacing
+    /// between them (see `transcript`'s LazyVStack) they read as one
+    /// continuous line down the group.
+    func machineSpine() -> some View {
+        overlay(alignment: .leading) {
+            Rectangle().fill(Color.ink.opacity(0.14)).frame(width: 1).offset(x: 19)
+        }
+    }
+}
+
 // MARK: - Tool call group (terminal log style — ciasna lista, zwijana >3 akcji)
 
 private struct ToolCallGroupView: View {
@@ -379,15 +567,12 @@ private struct ToolCallGroupView: View {
     @State private var isExpanded = false
 
     var body: some View {
-        if calls.count <= 3 {
-            VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 0) {
+            if calls.count <= 3 {
                 ForEach(calls) { call in
                     ToolCallRowView(call: call)
                 }
-            }
-            .padding(.horizontal, 12)
-        } else {
-            VStack(alignment: .leading, spacing: 3) {
+            } else {
                 Button {
                     isExpanded.toggle()
                 } label: {
@@ -395,10 +580,14 @@ private struct ToolCallGroupView: View {
                         Text(isExpanded ? "▾" : "▸")
                         Text("Wykonano \(calls.count) akcji")
                     }
-                    .font(KiwiMangoFont.mono(10))
+                    .font(KiwiMangoFont.mono(10.5))
                     .foregroundStyle(Color.ink.opacity(0.45))
                 }
                 .buttonStyle(.plain)
+                .padding(.leading, 40)
+                .padding(.trailing, 18)
+                .padding(.vertical, 2)
+                .machineSpine()
 
                 if isExpanded {
                     ForEach(calls) { call in
@@ -406,57 +595,134 @@ private struct ToolCallGroupView: View {
                     }
                 }
             }
-            .padding(.horizontal, 12)
         }
     }
 }
 
-// MARK: - Tool call row — single terminal line, no box (PLAN-V2 §7.3)
+// MARK: - Tool call row — single stdout line: ⎿ name argument time (mockup `.m-line`)
 
 private struct ToolCallRowView: View {
     @Bindable var call: ToolCall
 
+    // ponytail: ToolCall (ConversationModels.swift, out of this task's file
+    // scope) has no isError/isSuccess flag — this reads the rendered strings
+    // instead. Good enough for the two states the mockup calls out (red tool
+    // name on error, green "Build complete"); promote to a real field on
+    // ToolCall next time that file is touched if this heuristic misfires.
+    private var isErrorOutput: Bool {
+        call.output.localizedCaseInsensitiveContains("error")
+    }
+
+    private var nameColor: Color {
+        isErrorOutput ? Color.danger : Color.teal
+    }
+
+    private var outputColor: Color {
+        guard !isErrorOutput else { return Color.ink.opacity(0.42) }
+        if call.name.localizedCaseInsensitiveContains("build") { return Color.green }
+        return Color.ink.opacity(0.42)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             Button {
                 if !call.output.isEmpty { call.isExpanded.toggle() }
             } label: {
                 HStack(spacing: 8) {
-                    Circle()
-                        .fill(call.isRunning ? Color.accent : Color.green)
-                        .frame(width: 5, height: 5)
-                    Text("\(call.name) · \(call.argument)")
+                    Text("⎿").foregroundStyle(Color.ink.opacity(0.28))
+                    Text(call.name).foregroundStyle(nameColor)
+                    Text(call.argument)
+                        .foregroundStyle(Color.ink.opacity(0.55))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     Spacer(minLength: 8)
                     if let seconds = call.seconds {
                         Text(String(format: "%.1f s", seconds))
-                            .foregroundStyle(Color.ink.opacity(0.35))
+                            .foregroundStyle(Color.ink.opacity(0.28))
                     }
                     if !call.output.isEmpty {
                         Text(call.isExpanded ? "▾" : "▸")
-                            .font(.system(size: 8 + FontScale.bump))
-                            .foregroundStyle(Color.ink.opacity(0.3))
+                            .foregroundStyle(Color.ink.opacity(0.28))
                     }
                 }
-                .font(KiwiMangoFont.mono(10))
-                .foregroundStyle(Color.ink.opacity(0.6))
-                .padding(.vertical, 2)
+                .font(KiwiMangoFont.mono(10.5))
             }
             .buttonStyle(.plain)
 
             if call.isExpanded && !call.output.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     Text(call.output)
-                        .font(KiwiMangoFont.mono(9.5))
-                        .foregroundStyle(Color.ink.opacity(0.65))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 9)
+                        .font(KiwiMangoFont.mono(10.5))
+                        .foregroundStyle(outputColor)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .textSelection(.enabled)
                 }
-                .background(Color.panel2)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .frame(maxWidth: .infinity)
+                .padding(.leading, 20)
             }
         }
+        .padding(.leading, 40)
+        .padding(.trailing, 18)
+        .padding(.vertical, 2)
+        .machineSpine()
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Empty session quote (moved from Dashboard/DashboardView.swift's
+// QuoteBlock 2026-08-05 — the dashboard page was deleted, but this exact
+// typographic composition is too good to lose: a session with no messages
+// yet now shows a quote instead of a blank panel with placeholder copy.
+
+private struct EmptySessionQuoteView: View {
+    @State private var quote: Quote?
+    @State private var appeared = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let quote {
+                // ponytail: był tu `Text("„")` 74pt w ramce o wysokości 30 —
+                // glif polskiego cudzysłowu siedzi nisko w swoim boksie, więc
+                // wystawał poza ramkę (frame nie przycina) i lądował wprost na
+                // pierwszej linii cytatu jak plama brudu. SF Symbol ma
+                // przewidywalny bounding box i nie da się tak rozjechać.
+                Image(systemName: "quote.opening")
+                    .font(.system(size: 26, weight: .regular))
+                    .foregroundStyle(Color.accent.opacity(0.42))
+                    .padding(.bottom, 24)
+                    .allowsHitTesting(false)
+
+                Text(quote.text)
+                    .font(.system(size: 25 + FontScale.bump, weight: .regular, design: .serif))
+                    .italic()
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.txt.opacity(0.97), Color.txt.opacity(0.64)],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(9)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 440)
+
+                HStack(spacing: 10) {
+                    Rectangle().fill(Color.accent.opacity(0.45)).frame(width: 22, height: 1)
+                    Text(quote.author)
+                        .font(.system(size: 10 + FontScale.bump, weight: .semibold))
+                        .tracking(1.8)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color.ink.opacity(0.42))
+                }
+                .padding(.top, 20)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 10)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 6)
+        .task {
+            quote = await QuoteProvider.shared.nextQuote()
+            withAnimation(.easeOut(duration: 0.45)) { appeared = true }
+        }
     }
 }

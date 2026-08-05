@@ -139,15 +139,4 @@ final class ConversationSession: Identifiable {
         self.model = model
         self.items = items
     }
-
-    /// True while any item is a still-streaming AI message or running tool call —
-    /// drives the header status dot.
-    var isWorking: Bool {
-        items.contains { item in
-            if case .aiMessage(_, _, _, let streaming) = item, streaming { return true }
-            if case .toolCall(let call) = item, call.isRunning { return true }
-            return false
-        }
-    }
-
 }

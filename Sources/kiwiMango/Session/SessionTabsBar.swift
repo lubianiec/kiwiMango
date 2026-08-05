@@ -126,17 +126,7 @@ private struct TabAddButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Empty session state (new tab, no messages yet)
-
-struct EmptySessionView: View {
-    var text: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Text("✦").font(.system(size: 22 + FontScale.bump)).opacity(0.5)
-            Text(text).font(KiwiMangoFont.sans(11))
-        }
-        .foregroundStyle(Color.ink.opacity(0.35))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
+// ponytail: EmptySessionView (plain "✦ + placeholder text" empty state)
+// deleted 2026-08-05 — ConversationView's empty transcript now shows
+// EmptySessionQuoteView instead (moved from the deleted dashboard's
+// QuoteBlock). No other caller left.

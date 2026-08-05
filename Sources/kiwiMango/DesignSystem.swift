@@ -61,7 +61,6 @@ extension Color {
     static var panel2: Color { isDark ? Color(hex: "272729") : Color(hex: "D0D0D4") }
     static var popbg: Color { isDark ? Color(hex: "38383B") : Color(hex: "E1E1E5") }
     static var compbg: Color { isDark ? Color(hex: "323235") : Color(hex: "DDDDE1") }
-    static var bubble: Color { isDark ? Color(hex: "3A3A3D") : Color(hex: "C5C5CB") }
     static var txt: Color { isDark ? Color(hex: "F2F2F7") : Color(hex: "2E2E34") }
     static var accent: Color { isDark ? Color(hex: "F2994A") : Color(hex: "C97620") }
     static var green: Color { isDark ? Color(hex: "7FB77E") : Color(hex: "4F8B4E") }
@@ -70,8 +69,6 @@ extension Color {
     static var rose: Color { isDark ? Color(hex: "C98A9E") : Color(hex: "A55E77") }
     static var danger: Color { isDark ? Color(hex: "FF6A5C") : Color(hex: "C74836") }
 
-    /// P-core bars in the CPU hardware panel — one fixed hex, not themed (PLAN-V2 §2/§7.4).
-    static let coreP = Color(hex: "8B7EC9")
     /// Inline code color — one fixed hex, not themed (PLAN-V2 §2/§7.4).
     static let code = Color(hex: "FCA311")
 
@@ -187,8 +184,9 @@ struct HoverGlow: View {
 
 // MARK: - Compact number formatting (PLAN-V2 §7.2 — "48,2M" / "142k" style)
 
-/// Polish-locale compact token/count formatter shared by AgentsSection,
-/// CostsBlock — matches the reference mockup's `48,2M` / `142k` look.
+/// Polish-locale compact token/count formatter shared by AgentsWindow (native)
+/// and the deleted native dashboard's TokensBlock (now only in the web UI) —
+/// matches the reference mockup's `48,2M` / `142k` look.
 func formatCompactTokens(_ n: Int) -> String {
     let value = Double(abs(n))
     let sign = n < 0 ? "-" : ""
@@ -202,70 +200,3 @@ func formatCompactTokens(_ n: Int) -> String {
     }
 }
 
-// MARK: - Chat bubble shapes (reused by ConversationView, fala 2/3)
-
-/// Generalized chamfered-corner panel shape — pick which corners get cut and by how much.
-struct CutCornerShape: Shape {
-    struct Corners: OptionSet {
-        let rawValue: Int
-        static let topLeft = Corners(rawValue: 1 << 0)
-        static let topRight = Corners(rawValue: 1 << 1)
-        static let bottomRight = Corners(rawValue: 1 << 2)
-        static let bottomLeft = Corners(rawValue: 1 << 3)
-    }
-
-    var corners: Corners
-    var size: CGFloat = 10
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let tl = corners.contains(.topLeft) ? size : 0
-        let tr = corners.contains(.topRight) ? size : 0
-        let br = corners.contains(.bottomRight) ? size : 0
-        let bl = corners.contains(.bottomLeft) ? size : 0
-
-        path.move(to: CGPoint(x: rect.minX + tl, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX - tr, y: rect.minY))
-        if tr > 0 { path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + tr)) }
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - br))
-        if br > 0 { path.addLine(to: CGPoint(x: rect.maxX - br, y: rect.maxY)) }
-        path.addLine(to: CGPoint(x: rect.minX + bl, y: rect.maxY))
-        if bl > 0 { path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - bl)) }
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tl))
-        if tl > 0 { path.addLine(to: CGPoint(x: rect.minX + tl, y: rect.minY)) }
-        path.closeSubpath()
-        return path
-    }
-}
-
-/// User bubble: tail notch cut into the bottom-right corner.
-struct UserBubbleShape: Shape {
-    var tail: CGFloat = 14
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX + tail, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - tail))
-        path.closeSubpath()
-        return path
-    }
-}
-
-/// Assistant bubble: tail notch cut into the top-left corner.
-struct AssistantBubbleShape: Shape {
-    var tail: CGFloat = 14
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX + tail, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + tail))
-        path.closeSubpath()
-        return path
-    }
-}

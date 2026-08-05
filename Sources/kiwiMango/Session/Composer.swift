@@ -1,6 +1,14 @@
 import SwiftUI
 
-// MARK: - Composer (PLAN-V2 §7.3)
+// MARK: - Composer (PLAN-V2 §7.3 → terminal-stream restyle)
+//
+// Was a boxed textarea: rounded panel, full border, filled circular send
+// button. The mockup (kiwimango-okno-rozmowy-final.html `.composer`) drops
+// the box entirely — just a flat prompt row continuing the stream's own
+// idiom: `❯` then typed text, top hairline instead of a frame. Functionality
+// is unchanged: send (Return or clicking the "⌘↵" hint), drag&drop
+// attachments (handled by ConversationView's onDrop; this view only lists
+// pendingAttachments), and the context counter — only the chrome moved.
 
 struct Composer: View {
     @Binding var draft: String
@@ -18,10 +26,10 @@ struct Composer: View {
                 HStack(spacing: 6) {
                     ForEach(pendingAttachments) { attachment in
                         HStack(spacing: 4) {
-                            Text("\(attachment.kind == .image ? "🖼" : attachment.kind == .pdf ? "📄" : "📎") \(attachment.filename)")
+                            Text("⇪ \(attachment.filename)")
                                 .lineLimit(1)
                                 .truncationMode(.middle)
-                                .frame(maxWidth: 100)
+                                .frame(maxWidth: 140)
                             Button {
                                 pendingAttachments.removeAll { $0.id == attachment.id }
                             } label: {
@@ -29,48 +37,57 @@ struct Composer: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        .font(KiwiMangoFont.mono(9))
-                        .foregroundStyle(Color.ink.opacity(0.55))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .overlay(Capsule().strokeBorder(Color.ink.opacity(0.14), lineWidth: 1))
+                        .font(KiwiMangoFont.mono(9.5))
+                        .foregroundStyle(Color.ink.opacity(0.42))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.ink.opacity(0.14), lineWidth: 1))
                     }
                 }
             }
 
-            TextField(placeholder, text: $draft, axis: .vertical)
+            HStack(spacing: 11) {
+                Text("❯")
+                    .font(KiwiMangoFont.mono(14))
+                    .foregroundStyle(Color.accent)
+
+                TextField(
+                    "",
+                    text: $draft,
+                    prompt: Text(placeholder)
+                        .font(KiwiMangoFont.mono(12.5))
+                        .foregroundStyle(Color.ink.opacity(0.28)),
+                    axis: .vertical
+                )
                 .textFieldStyle(.plain)
-                .font(KiwiMangoFont.sans(12))
+                .font(KiwiMangoFont.mono(12.5))
+                .foregroundStyle(Color.ink)
                 .lineLimit(1...4)
                 .onSubmit(onSend)
 
-            HStack(spacing: 10) {
                 counterLabel
-                    .frame(maxWidth: .infinity, alignment: .trailing)
 
                 Button(action: onSend) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 11 + FontScale.bump, weight: .semibold))
-                        .foregroundStyle(Color.bg)
-                        .frame(width: 24, height: 24)
-                        .background(Circle().fill(Color.accent))
+                    Text("⌘↵")
+                        .font(KiwiMangoFont.mono(9.5))
+                        .foregroundStyle(Color.ink.opacity(0.28))
                 }
                 .buttonStyle(.plain)
+                .help("Wyślij")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
-        .background(Color.compbg)
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.ink.opacity(0.1), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 16)
+        .padding(.top, 11)
+        .padding(.bottom, 12)
+        .background(Color.black.opacity(0.12))
+        .overlay(Rectangle().fill(Color.ink.opacity(0.14)).frame(height: 1), alignment: .top)
     }
 
     @ViewBuilder
     private var counterLabel: some View {
         let text = Text(counterText)
-            .font(KiwiMangoFont.sans(9))
-            .foregroundStyle(Color.ink.opacity(0.4))
+            .font(KiwiMangoFont.mono(9.5))
+            .foregroundStyle(Color.ink.opacity(0.28))
             .monospacedDigit()
         if let onTapCounter {
             Button(action: onTapCounter) { text }
