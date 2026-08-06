@@ -190,7 +190,7 @@ struct TerminalMarkdown: View {
     /// terminal look (user messages, default) and the agent prose look
     /// (SF Pro paragraphs, capsule headings) without a second renderer.
     struct Style {
-        var paragraphFont: Font = KiwiMangoFont.mono(12)
+        var paragraphFont: Font = KiwiMangoFont.mono(13)
         var paragraphLineSpacing: CGFloat = 2
         var headingFont: (Int) -> Font = { level in
             switch level {
@@ -206,11 +206,13 @@ struct TerminalMarkdown: View {
         /// per-level mono heading.
         var showHeadingRule: Bool = false
 
-        /// Agent replies: SF Pro prose (mockup direction D), the strongest
-        /// text in the window.
+        /// Odpowiedzi agenta: ten sam mono co listy, kod i tokeny stanu w tym
+        /// samym bloku. Wcześniej akapity szły SF Pro (kierunek D z mockupu),
+        /// przez co jedna odpowiedź mieszała dwa kroje. Powrót do prozy SF Pro
+        /// = `paragraphFont: KiwiMangoFont.sans(15)` + `lineSpacing 11`.
         static let agentProse = Style(
-            paragraphFont: KiwiMangoFont.sans(15),
-            paragraphLineSpacing: 11,
+            paragraphFont: KiwiMangoFont.mono(13.5),
+            paragraphLineSpacing: 8,
             showHeadingRule: true
         )
     }
