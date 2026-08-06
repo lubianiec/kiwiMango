@@ -449,15 +449,11 @@ struct ConversationView: View {
         .padding(.top, 9)
         .padding(.trailing, 18)
         .padding(.bottom, 15)
-        .padding(.leading, 40)
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(Color.ink.opacity(0.14))
-                .frame(width: 1)
-                .padding(.top, 9)
-                .padding(.bottom, 14)
-                .offset(x: 19)
-        }
+        // F3 (PLAN-OKNO): jedna oś dla obu mówców — było .padding(.leading, 40)
+        // + pionowa kreska w .overlay (offset x: 19); teraz agent startuje z
+        // tego samego lewego marginesu co użytkownik (14 pt), tło+belka po
+        // stronie usera to jedyny wyróżnik mówcy.
+        .padding(.leading, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
