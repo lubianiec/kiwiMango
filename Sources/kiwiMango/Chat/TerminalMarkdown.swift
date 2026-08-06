@@ -110,11 +110,35 @@ private enum TerminalMarkdownParser {
 // MARK: - Public view
 
 struct TerminalMarkdown: View {
+    /// Style knobs so the same block parser can render both the plain
+    /// terminal look (user messages, default) and the agent prose look
+    /// (SF Pro paragraphs, capsule headings) without a second renderer.
+    struct Style {
+        var paragraphFont: Font = KiwiMangoFont.mono(12)
+        var paragraphLineSpacing: CGFloat = 2
+        var headingFont: (Int) -> Font = { level in
+            switch level {
+            case 1: return KiwiMangoFont.mono(15, weight: .bold)
+            case 2: return KiwiMangoFont.mono(13, weight: .bold)
+            default: return KiwiMangoFont.mono(12, weight: .bold)
+            }
+        }
+
+        /// Agent replies: SF Pro prose (mockup direction D), the strongest
+        /// text in the window. Headings/lists stay mono — only the paragraph
+        /// font changes here in F1.
+        static let agentProse = Style(
+            paragraphFont: KiwiMangoFont.sans(15),
+            paragraphLineSpacing: 11
+        )
+    }
+
     let content: String
     /// Plain-text color for headings/paragraphs only — code blocks and tables
     /// keep their own syntax colors regardless (a pasted code snippet in a
     /// user prompt shouldn't turn amber). Defaults to the shared body color.
     var textColor: Color = Color.txt
+    var style: Style = Style()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -130,13 +154,13 @@ struct TerminalMarkdown: View {
         switch block {
         case .heading(let level, let text):
             Text(inlineAttributed(text))
-                .font(headingFont(level))
+                .font(style.headingFont(level))
                 .foregroundStyle(textColor)
         case .paragraph(let text):
             Text(inlineAttributed(text))
-                .font(KiwiMangoFont.mono(12))
+                .font(style.paragraphFont)
                 .foregroundStyle(textColor)
-                .lineSpacing(2)
+                .lineSpacing(style.paragraphLineSpacing)
         case .code(let language, let codeContent):
             CodeBlockView(language: language, content: codeContent)
         case .table(let headers, let rows):
@@ -144,16 +168,10 @@ struct TerminalMarkdown: View {
         }
     }
 
-    private func headingFont(_ level: Int) -> Font {
-        switch level {
-        case 1: KiwiMangoFont.mono(15, weight: .bold)
-        case 2: KiwiMangoFont.mono(13, weight: .bold)
-        default: KiwiMangoFont.mono(12, weight: .bold)
-        }
-    }
-
     /// Renders **bold**, *italic*, `inline code`, and links; falls back to a
-    /// plain string if the fragment isn't valid inline markdown.
+    /// plain string if the fragment isn't valid inline markdown. Must survive
+    /// unclosed markdown mid-stream (e.g. "**Backup err") without throwing —
+    /// keep the `try?` fallback.
     private func inlineAttributed(_ text: String) -> AttributedString {
         (try? AttributedString(
             markdown: text,

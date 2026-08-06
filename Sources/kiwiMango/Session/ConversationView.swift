@@ -437,7 +437,7 @@ struct ConversationView: View {
                 Spacer(minLength: 8)
                 if isStreaming { StreamingCursor() }
             }
-            AgentProseText(text: text)
+            TerminalMarkdown(content: text, textColor: Color.txt.opacity(0.97), style: .agentProse)
         }
         .padding(.top, 9)
         .padding(.trailing, 18)
@@ -452,54 +452,6 @@ struct ConversationView: View {
                 .offset(x: 19)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-// MARK: - Agent prose (mockup: SF Pro 15pt/1.72, the strongest text in the
-// window — deliberately NOT Chat/TerminalMarkdown.swift, which hardcodes SF
-// Mono for every block. That's exactly the "wall of monospace" look this
-// redesign moves the agent's own words away from; mono stays for ty + all
-// machinery around it.
-//
-// ponytail: handles paragraphs (split on blank lines) + inline `code` spans
-// only — no headings/fenced code/tables, since the mockup's own content is
-// plain prose with one inline code term. If agent replies start needing
-// those inside this specific renderer, extend here rather than reusing
-// TerminalMarkdown (its paragraph font isn't parameterized today).
-
-private struct AgentProseText: View {
-    let text: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            ForEach(Array(paragraphs.enumerated()), id: \.offset) { _, paragraph in
-                Text(attributed(paragraph))
-                    .lineSpacing(11)
-                    .textSelection(.enabled)
-            }
-        }
-    }
-
-    private var paragraphs: [String] {
-        let parts = text.components(separatedBy: "\n\n").filter { !$0.isEmpty }
-        return parts.isEmpty ? [text] : parts
-    }
-
-    private func attributed(_ paragraph: String) -> AttributedString {
-        var result = AttributedString()
-        for (index, chunk) in paragraph.components(separatedBy: "`").enumerated() {
-            var run = AttributedString(chunk)
-            if index % 2 == 1 {
-                run.font = KiwiMangoFont.mono(12.5)
-                run.foregroundColor = Color.teal
-                run.backgroundColor = Color.black.opacity(0.28)
-            } else {
-                run.font = KiwiMangoFont.sans(15)
-                run.foregroundColor = Color.txt.opacity(0.97)
-            }
-            result.append(run)
-        }
-        return result
     }
 }
 
