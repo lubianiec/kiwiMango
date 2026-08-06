@@ -19,14 +19,6 @@ struct ConversationView: View {
 
     @State private var isDropTargeted = false
 
-    // MARK: Title bar activity indicator (moved from the deleted AgentPanel's
-    // "TERAZ" section 2026-08-05 — the side panel and status footer are gone,
-    // this is now the sole live "what's happening" surface, folded into the
-    // terminal title bar instead of its own chrome.
-    @State private var currentActionStartedAt: Date?
-    @State private var clockNow = Date()
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Terminal title bar: traffic dots + title + activity + model picker
@@ -75,73 +67,6 @@ struct ConversationView: View {
             .padding(.bottom, 12)
         }
         .padding(.top, 2)
-        .onChange(of: runningToolCall?.id) { _, newID in
-            currentActionStartedAt = newID != nil ? Date() : nil
-        }
-        .task { await activityClockLoop() }
-    }
-
-    // MARK: Title bar activity — running tool / streaming reply / quiet idle dot
-
-    private var runningToolCall: ToolCall? {
-        for item in session.items.reversed() {
-            if case .toolCall(let call) = item, call.isRunning { return call }
-        }
-        return nil
-    }
-
-    private var isStreamingReply: Bool {
-        session.items.contains { if case .aiMessage(_, _, _, let streaming) = $0 { return streaming }; return false }
-    }
-
-    /// Same "while !cancelled / sleep 1s" polling idiom used elsewhere in the
-    /// app (was `ServiceStatus`/`AgentPanel`'s clock loop) — ticks the elapsed
-    /// label without pulling in Combine/`Timer.publish` for something this simple.
-    @MainActor
-    private func activityClockLoop() async {
-        while !Task.isCancelled {
-            clockNow = Date()
-            try? await Task.sleep(for: .seconds(1))
-        }
-    }
-
-    private func elapsedLabel(since start: Date?) -> String {
-        guard let start else { return "0,0 s" }
-        let seconds = max(0, clockNow.timeIntervalSince(start))
-        return String(format: "%.1f s", seconds).replacingOccurrences(of: ".", with: ",")
-    }
-
-    @ViewBuilder
-    private var activityIndicator: some View {
-        if let call = runningToolCall {
-            HStack(spacing: 6) {
-                activitySpinner
-                Text(call.name)
-                    .font(KiwiMangoFont.mono(10.5))
-                    .foregroundStyle(Color.teal)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(elapsedLabel(since: currentActionStartedAt))
-                    .font(KiwiMangoFont.mono(9.5))
-                    .foregroundStyle(Color.ink.opacity(0.28))
-            }
-        } else if isStreamingReply {
-            HStack(spacing: 6) {
-                activitySpinner
-                Text("pisze…")
-                    .font(KiwiMangoFont.mono(10.5))
-                    .foregroundStyle(Color.teal)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var activitySpinner: some View {
-        if reduceMotion {
-            Circle().fill(Color.teal).frame(width: 6, height: 6)
-        } else {
-            TitleBarSpinner()
-        }
     }
 
     // MARK: Drag & drop images
@@ -441,11 +366,8 @@ struct ConversationView: View {
                 Text(label)
                     .font(KiwiMangoFont.mono(9.5))
                     .foregroundStyle(Color.ink.opacity(0.28))
-                if isStreaming {
-                    activityIndicator
-                        .lineLimit(1)
-                        .layoutPriority(-1)
-                }
+                // Wskaźnik „co się teraz dzieje" usunięty — wiersze narzędzi
+                // mówią to samo, dokładniej i po polsku. Zostaje sam kursor.
                 Spacer(minLength: 8)
                 if isStreaming { StreamingCursor() }
             }
@@ -486,25 +408,6 @@ private struct StreamingCursor: View {
 // section 2026-08-05 — 11pt ring, teal arc, 1.1s rotation. Reduce-motion
 // handling lives one level up in `activitySpinner`, which swaps this out
 // for a static teal dot instead of rendering a frozen ring.
-
-private struct TitleBarSpinner: View {
-    @State private var rotating = false
-
-    var body: some View {
-        Circle()
-            .strokeBorder(Color.ink.opacity(0.14), lineWidth: 1.5)
-            .overlay(
-                Circle()
-                    .trim(from: 0, to: 0.28)
-                    .stroke(Color.teal, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
-            )
-            .rotationEffect(.degrees(rotating ? 360 : 0))
-            .frame(width: 11, height: 11)
-            .onAppear {
-                withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) { rotating = true }
-            }
-    }
-}
 
 // MARK: - Nazwy narzędzi po polsku
 //
