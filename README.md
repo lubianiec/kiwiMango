@@ -31,13 +31,15 @@ Wcześniejsze wersje miały drugą stronę z paskiem sprzętu i kosztami. **Zost
 
 Strumień, nie czat. Nie ma dymków, nie ma awatarów, nie ma naprzemiennych kolorów tła.
 
-**Twoje wiadomości** dostają prompt `❯` i mono, jak wpisane w powłokę. **Odpowiedzi agenta** są wcięte, bez prefiksu, z włoskowatą pionową linią w rynnie — i są najmocniejszym tekstem w oknie (SF Pro 15pt, interlinia 1,72). Tekst modelu ma być czytany, logi mają być przeglądane; typografia mówi to wprost.
+**Wszystko stoi na jednej osi.** Twoje wiadomości dostają prompt `❯` i tło z bursztynową belką — to jedyne, co je wyróżnia. Odpowiedzi agenta zaczynają się z tego samego marginesu, bez wcięcia i bez rynny, pod nagłówkiem `AGENT · model`. Treść nie skacze w poziomie przy zmianie mówcy.
+
+**Jeden krój na całą odpowiedź.** PT Mono wszędzie — akapity, listy, kod, tokeny stanu. Wcześniej akapity szły SF Pro, a wszystko inne mono; jedna odpowiedź mieszała dwa kroje i było to widać.
 
 **Wywołania narzędzi** pokazują wynik z hakiem `⎿`, dokładnie jak w terminalu. **Tok myślenia** zwija się i rozwija; rozwinięcie zatrzymuje autoprzewijanie tylko w tej jednej karcie — druga scrolluje sobie dalej. **Karty uprawnień** wyglądają jak w terminalu i tak samo działają.
 
-Na pasku tytułowym widać, co się dzieje: spinner, nazwa narzędzia, czas. Gdy agent nic nie robi — sama zielona kropka, bez napisu.
+**Co się dzieje, widać tam, gdzie się czyta.** Spinner, nazwa narzędzia i czas siedzą w wierszu `AGENT`, zaraz przy nazwie modelu — nie w pasku okna, gdzie oko i tak nie patrzy w trakcie odpowiedzi. W pasku została sama zielona kropka statusu sesji.
 
-**Composer to prompt, nie pudełko.** Pusta nowa sesja wita cytatem zamiast pustki.
+**Wszystko, co dotyczy wysyłanej wiadomości, jest przy polu tekstowym.** Composer to wyodrębniony, pływający obszar, a pod nim jeden rząd: załącznik, wybór modelu, poziom myślenia, licznik kontekstu, wysyłka. Żadnego ustawiania na górze okna tego, co wpisujesz na dole. Pusta nowa sesja wita cytatem zamiast pustki.
 
 <br>
 
