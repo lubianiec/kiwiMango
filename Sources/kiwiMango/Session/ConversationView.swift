@@ -121,10 +121,6 @@ struct ConversationView: View {
                     .font(KiwiMangoFont.mono(10.5))
                     .foregroundStyle(Color.teal)
             }
-        } else {
-            Circle()
-                .fill(Color.green)
-                .frame(width: 6, height: 6)
         }
     }
 
@@ -216,10 +212,10 @@ struct ConversationView: View {
 
             Spacer(minLength: 8)
 
-            // Live "what's happening" indicator — lowest layout priority so a
-            // long tool name compresses before the fixed-width pickers ever move.
-            activityIndicator
-                .layoutPriority(-1)
+            // Sam status sesji — „co się teraz dzieje" siedzi w wierszu AGENT.
+            Circle()
+                .fill(Color.green)
+                .frame(width: 6, height: 6)
 
             Picker("", selection: $session.model) {
                 ForEach(modelOptions, id: \.self) { model in
@@ -434,6 +430,11 @@ struct ConversationView: View {
                 Text(label)
                     .font(KiwiMangoFont.mono(9.5))
                     .foregroundStyle(Color.ink.opacity(0.28))
+                if isStreaming {
+                    activityIndicator
+                        .lineLimit(1)
+                        .layoutPriority(-1)
+                }
                 Spacer(minLength: 8)
                 if isStreaming { StreamingCursor() }
             }
