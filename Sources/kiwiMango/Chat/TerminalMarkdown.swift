@@ -201,13 +201,17 @@ struct TerminalMarkdown: View {
         }
         /// Color for the "no status" list-item dot (`·`) and its token column.
         var mutedColor: Color = Color.txt.opacity(0.35)
+        /// F3: heading renders as a small-caps eyebrow (`kiwiSectionLabel()`)
+        /// with a hairline stretching to the right edge, instead of a big
+        /// per-level mono heading.
+        var showHeadingRule: Bool = false
 
         /// Agent replies: SF Pro prose (mockup direction D), the strongest
-        /// text in the window. Headings/lists stay mono — only the paragraph
-        /// font changes here in F1.
+        /// text in the window.
         static let agentProse = Style(
             paragraphFont: KiwiMangoFont.sans(15),
-            paragraphLineSpacing: 11
+            paragraphLineSpacing: 11,
+            showHeadingRule: true
         )
     }
 
@@ -231,9 +235,21 @@ struct TerminalMarkdown: View {
     private func blockView(_ block: TerminalBlock) -> some View {
         switch block {
         case .heading(let level, let text):
-            Text(inlineAttributed(text))
-                .font(style.headingFont(level))
-                .foregroundStyle(textColor)
+            if style.showHeadingRule {
+                HStack(spacing: 8) {
+                    Text(inlineAttributed(text))
+                        .kiwiSectionLabel()
+                    Rectangle()
+                        .fill(Color.txt.opacity(0.10))
+                        .frame(height: 1)
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(inlineAttributed(text))
+                    .font(style.headingFont(level))
+                    .foregroundStyle(textColor)
+            }
         case .paragraph(let text):
             Text(inlineAttributed(text))
                 .font(style.paragraphFont)
