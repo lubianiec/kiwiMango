@@ -506,17 +506,44 @@ private struct TitleBarSpinner: View {
     }
 }
 
-// MARK: - Machinery spine (shared rynna line for tool rows + fold toggle)
+// MARK: - Nazwy narzędzi po polsku
+//
+// Wiersz ma mówić CO SIĘ DZIEJE, a nie jak nazywa się funkcja w gatewayu.
+// Lista pochodzi z realnych zapisów sesji (`~/Library/Application Support/
+// KiwiMango/sessions`), nie ze zgadywania. Nieznane narzędzie pokazuje swoją
+// surową nazwę — lepiej to niż zmyślony opis.
 
-private extension View {
-    /// The włoskowata pionowa line at x=19 in the mockup's `.m::before` — each
-    /// row draws its own full-height segment; stacked with zero spacing
-    /// between them (see `transcript`'s LazyVStack) they read as one
-    /// continuous line down the group.
-    func machineSpine() -> some View {
-        overlay(alignment: .leading) {
-            Rectangle().fill(Color.ink.opacity(0.14)).frame(width: 1).offset(x: 19)
-        }
+enum ToolLabel {
+    private static let map: [String: String] = [
+        "terminal": "Wykonuję polecenie",
+        "image_generate": "Generuję obraz",
+        "read_file": "Czytam plik",
+        "skill_view": "Czytam umiejętność",
+        "memory": "Sięgam do pamięci",
+        "browser_navigate": "Otwieram stronę",
+        "session_search": "Przeszukuję sesje",
+        "search_files": "Szukam w plikach",
+        "vision_analyze": "Analizuję obraz",
+        "browser_console": "Czytam konsolę strony",
+        "cronjob": "Ustawiam automat",
+        "patch": "Poprawiam plik",
+        "write_file": "Zapisuję plik",
+        "x_search": "Szukam na X",
+        "web_search": "Szukam w sieci",
+        "todo": "Prowadzę listę zadań",
+        "process": "Zarządzam procesem",
+        "execute_code": "Uruchamiam kod",
+        "browser_snapshot": "Robię zrzut strony",
+        "video_generate": "Generuję wideo",
+        "project_list": "Wypisuję projekty",
+        "web_extract": "Wyciągam treść ze strony",
+        "computer_use": "Steruję komputerem",
+        "xai_video_extend": "Przedłużam wideo",
+        "browser_vision": "Oglądam stronę",
+    ]
+
+    static func polish(_ rawName: String) -> String {
+        map[rawName] ?? rawName
     }
 }
 
@@ -544,10 +571,9 @@ private struct ToolCallGroupView: View {
                     .foregroundStyle(Color.ink.opacity(0.45))
                 }
                 .buttonStyle(.plain)
-                .padding(.leading, 40)
+                .padding(.leading, 14)
                 .padding(.trailing, 18)
-                .padding(.vertical, 2)
-                .machineSpine()
+                .padding(.vertical, 3)
 
                 if isExpanded {
                     ForEach(calls) { call in
@@ -563,6 +589,8 @@ private struct ToolCallGroupView: View {
 
 private struct ToolCallRowView: View {
     @Bindable var call: ToolCall
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dimmed = false
 
     // ponytail: ToolCall (ConversationModels.swift, out of this task's file
     // scope) has no isError/isSuccess flag — this reads the rendered strings
@@ -573,14 +601,29 @@ private struct ToolCallRowView: View {
         call.output.localizedCaseInsensitiveContains("error")
     }
 
-    private var nameColor: Color {
-        isErrorOutput ? Color.danger : Color.teal
-    }
-
     private var outputColor: Color {
         guard !isErrorOutput else { return Color.ink.opacity(0.42) }
         if call.name.localizedCaseInsensitiveContains("build") { return Color.green }
         return Color.ink.opacity(0.42)
+    }
+
+    /// Znacznik stanu zamiast `⎿`: kolor niesie informację, nie ozdobę.
+    /// Bursztyn = trwa, czerwony = błąd, przygaszony = zrobione.
+    private var stateColor: Color {
+        if call.isRunning { return Color.accent }
+        return isErrorOutput ? Color.danger : Color.ink.opacity(0.3)
+    }
+
+    /// Druga linia: czas i szczegół wywołania, rozdzielone kropką.
+    private var metaLine: String {
+        var parts: [String] = []
+        if call.isRunning {
+            parts.append("trwa…")
+        } else if let seconds = call.seconds {
+            parts.append(String(format: "%.1f s", seconds).replacingOccurrences(of: ".", with: ","))
+        }
+        if !call.argument.isEmpty { parts.append(call.argument) }
+        return parts.joined(separator: " · ")
     }
 
     var body: some View {
@@ -588,26 +631,48 @@ private struct ToolCallRowView: View {
             Button {
                 if !call.output.isEmpty { call.isExpanded.toggle() }
             } label: {
-                HStack(spacing: 8) {
-                    Text("⎿").foregroundStyle(Color.ink.opacity(0.28))
-                    Text(call.name).foregroundStyle(nameColor)
-                    Text(call.argument)
-                        .foregroundStyle(Color.ink.opacity(0.55))
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 8)
-                    if let seconds = call.seconds {
-                        Text(String(format: "%.1f s", seconds))
-                            .foregroundStyle(Color.ink.opacity(0.28))
+                VStack(alignment: .leading, spacing: 3) {
+                    // Linia 1 — CO się dzieje, po polsku. Najjaśniejszy tekst wiersza.
+                    HStack(spacing: 6) {
+                        Text(ToolLabel.polish(call.name))
+                            .font(KiwiMangoFont.mono(12))
+                            .foregroundStyle(isErrorOutput ? Color.danger : Color.txt.opacity(0.85))
+                        if !call.output.isEmpty {
+                            Text("›")
+                                .font(KiwiMangoFont.mono(11))
+                                .foregroundStyle(Color.ink.opacity(0.3))
+                                .rotationEffect(.degrees(call.isExpanded ? 90 : 0))
+                        }
                     }
-                    if !call.output.isEmpty {
-                        Text(call.isExpanded ? "▾" : "▸")
-                            .foregroundStyle(Color.ink.opacity(0.28))
+
+                    // Linia 2 — metadane, przygaszone. Gwiazdka niesie stan kolorem
+                    // i (gdy coś trwa) delikatnym pulsem.
+                    HStack(spacing: 7) {
+                        Text("✳")
+                            .foregroundStyle(stateColor)
+                            .opacity(dimmed ? 0.4 : 1)
+                        Text(metaLine)
+                            .foregroundStyle(Color.ink.opacity(0.35))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .monospacedDigit()
                     }
+                    .font(KiwiMangoFont.mono(10))
                 }
-                .font(KiwiMangoFont.mono(10.5))
             }
             .buttonStyle(.plain)
+            .onAppear {
+                guard call.isRunning, !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                    dimmed = true
+                }
+            }
+            .onChange(of: call.isRunning) { _, running in
+                // ponytail: repeatForever musi zostać zdjęte jawnie — bez tego
+                // skończone wywołanie pulsuje w nieskończoność.
+                guard !running else { return }
+                withAnimation(.easeOut(duration: 0.25)) { dimmed = false }
+            }
 
             if call.isExpanded && !call.output.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -620,10 +685,10 @@ private struct ToolCallRowView: View {
                 .padding(.leading, 20)
             }
         }
-        .padding(.leading, 40)
+        // Ta sama oś 14 pt co wiadomości — koniec z wcięciem i rynną.
+        .padding(.leading, 14)
         .padding(.trailing, 18)
-        .padding(.vertical, 2)
-        .machineSpine()
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

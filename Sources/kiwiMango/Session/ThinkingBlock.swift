@@ -42,12 +42,9 @@ struct ThinkingBlockView: View {
         .padding(.top, 4)
         .padding(.trailing, 20)
         .padding(.bottom, 8)
-        .padding(.leading, 40)
-        .overlay(alignment: .leading) {
-            // Rynna spine — same x=19 line the tool-call rows and agent
-            // replies draw, so a thinking block reads as part of the same turn.
-            Rectangle().fill(Color.ink.opacity(0.14)).frame(width: 1).offset(x: 19)
-        }
+        // Ta sama oś 14 pt co wiadomości i wiersze narzędzi — rynna usunięta
+        // razem z wcięciem, nic już nie skacze w poziomie w obrębie tury.
+        .padding(.leading, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

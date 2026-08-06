@@ -161,6 +161,7 @@ final class AgentSessionController {
         case .thinkingDelta(_, let text):
             if let block = currentThinking {
                 block.text += text
+                block.seconds = Date().timeIntervalSince(block.startedAt)
             } else {
                 let block = ThinkingBlockModel(text: text, seconds: 0)
                 currentThinking = block
@@ -175,6 +176,7 @@ final class AgentSessionController {
         case .toolComplete(_, let toolID, _, let output, _, let errorText, _):
             guard let call = toolCalls[toolID] else { return }
             call.output = errorText ?? output
+            call.seconds = Date().timeIntervalSince(call.startedAt)
             call.isRunning = false
 
         case .messageDelta(_, let text):

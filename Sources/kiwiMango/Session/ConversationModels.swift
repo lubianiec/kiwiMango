@@ -19,6 +19,9 @@ final class ToolCall: Identifiable {
     var seconds: Double?
     var isRunning: Bool
     var isExpanded = false
+    /// Moment startu — bez niego `seconds` nigdy nie było czym wypełnić i czas
+    /// wywołania nie pokazywał się w ogóle.
+    let startedAt = Date()
 
     init(name: String, argument: String, output: String, seconds: Double?, isRunning: Bool) {
         self.name = name
@@ -36,6 +39,9 @@ final class ThinkingBlockModel: Identifiable {
     var text: String
     var seconds: Double
     var isExpanded = false
+    /// Jak w `ToolCall` — `seconds` przychodziło zerem i nikt go nie liczył,
+    /// więc nagłówek zawsze pokazywał „0,0 s".
+    let startedAt = Date()
 
     init(text: String, seconds: Double) {
         self.text = text
