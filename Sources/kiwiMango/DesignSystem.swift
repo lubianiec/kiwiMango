@@ -61,7 +61,7 @@ extension Color {
     static var panel2: Color { isDark ? Color(hex: "272729") : Color(hex: "D0D0D4") }
     static var popbg: Color { isDark ? Color(hex: "38383B") : Color(hex: "E1E1E5") }
     static var compbg: Color { isDark ? Color(hex: "323235") : Color(hex: "DDDDE1") }
-    static var txt: Color { isDark ? Color(hex: "F2F2F7") : Color(hex: "2E2E34") }
+    static var txt: Color { isDark ? Color(hex: "CFCFD6") : Color(hex: "2E2E34") }
     static var accent: Color { isDark ? Color(hex: "F2994A") : Color(hex: "C97620") }
     static var green: Color { isDark ? Color(hex: "7FB77E") : Color(hex: "4F8B4E") }
     static var blue: Color { isDark ? Color(hex: "7EA6C9") : Color(hex: "4E7BA0") }
@@ -120,8 +120,11 @@ enum FontScale {
 // MARK: - Fonts
 
 enum KiwiMangoFont {
+    /// PT Mono — systemowy font macOS, kanciasty/techniczny („digital"), bez
+    /// instalacji. Zamiana na inny charakter = jedna linia: "Menlo" (miękki
+    /// terminal) albo "Monaco" (retro). SF Mono wraca przez `.system(…, design: .monospaced)`.
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size + FontScale.bump, weight: weight, design: .monospaced)
+        .custom("PT Mono", size: size + FontScale.bump).weight(weight)
     }
 
     /// SF Pro (system default) — body font per PLAN-V2 §1. Kept as a separate
