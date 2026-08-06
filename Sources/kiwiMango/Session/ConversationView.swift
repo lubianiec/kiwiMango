@@ -223,13 +223,9 @@ struct ConversationView: View {
 
     private var terminalTitleBar: some View {
         HStack(spacing: 8) {
-            // Traffic light dots in app palette colors
-            HStack(spacing: 6) {
-                Circle().fill(Color.danger).frame(width: 10, height: 10)
-                Circle().fill(Color.accent).frame(width: 10, height: 10)
-                Circle().fill(Color.green).frame(width: 10, height: 10)
-            }
-
+            // F2 (PLAN-OKNO): trzy fałszywe kropki okna (czerwona/bursztynowa/
+            // zielona) usunięte — duplikowały prawdziwe przyciski okna macOS
+            // tuż nad nimi i czytały się jak błąd renderowania.
             Text(session.title)
                 .font(KiwiMangoFont.mono(11, weight: .medium))
                 .foregroundStyle(Color.ink.opacity(0.55))
