@@ -68,6 +68,11 @@ struct ConversationView: View {
                 reasoningOptions: Self.reasoningEffortOptions,
                 reasoningEffort: reasoningEffortBinding
             )
+            // F4 (PLAN-OKNO): margines od krawędzi okna, żeby composer "pływał"
+            // jako wyodrębniony obszar zamiast przyklejać się do ramki.
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
         }
         .padding(.top, 2)
         .onChange(of: runningToolCall?.id) { _, newID in

@@ -81,8 +81,12 @@ struct Composer: View {
         .padding(.horizontal, 16)
         .padding(.top, 11)
         .padding(.bottom, 12)
-        .background(Color.black.opacity(0.12))
-        .overlay(Rectangle().fill(Color.ink.opacity(0.14)).frame(height: 1), alignment: .top)
+        // F4 (PLAN-OKNO): composer jako wyodrębniony, "pływający" obszar zamiast
+        // płaskiego paska z hairline u góry — Color.compbg istniał w DesignSystem
+        // jako gotowy, nieużywany token (dokładnie "composer background") od
+        // czasu redesignu, zanim composer w ogóle miał własne tło.
+        .background(Color.compbg, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.ink.opacity(0.14), lineWidth: 1))
     }
 
     // MARK: Controls row (F1) — attachments left, model/effort/context/send right.
