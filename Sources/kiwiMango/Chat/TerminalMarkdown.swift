@@ -11,6 +11,44 @@ private enum TerminalBlock {
     case paragraph(String)
     case code(language: String?, content: String)
     case table(headers: [String], rows: [[String]])
+    case list(items: [ListItem])
+}
+
+// MARK: - List items + status tokens
+//
+// A leading status emoji (✅⚠️❌ℹ️ and friends) becomes a `[OK]`/`[!]`/`[X]`/`[i]`
+// token in the app's own palette instead of an emoji glyph (style D: zero
+// emoji in the window). Only recognized when the emoji is the FIRST character
+// of the item — an emoji mid-sentence is the author's, not a status, and stays
+// untouched.
+
+private enum ListMarker {
+    case ok, warn, error, info, plain
+
+    var token: String {
+        switch self {
+        case .ok: return "[OK]"
+        case .warn: return "[!]"
+        case .error: return "[X]"
+        case .info: return "[i]"
+        case .plain: return "·"
+        }
+    }
+
+    func color(mutedColor: Color) -> Color {
+        switch self {
+        case .ok: return Color.green
+        case .warn: return Color.accent
+        case .error: return Color.danger
+        case .info: return Color.txt.opacity(0.45)
+        case .plain: return mutedColor
+        }
+    }
+}
+
+private struct ListItem {
+    let marker: ListMarker
+    let text: String
 }
 
 private enum TerminalMarkdownParser {
@@ -65,6 +103,19 @@ private enum TerminalMarkdownParser {
                 continue
             }
 
+            // List (-, *, + after leading indentation)
+            if let itemText = listItemPrefix(line) {
+                flushParagraph()
+                var items: [ListItem] = [parseListItem(itemText)]
+                index += 1
+                while index < lines.count, let next = listItemPrefix(lines[index]) {
+                    items.append(parseListItem(next))
+                    index += 1
+                }
+                blocks.append(.list(items: items))
+                continue
+            }
+
             // Heading
             if let heading = headingPrefix(line) {
                 flushParagraph()
@@ -79,6 +130,31 @@ private enum TerminalMarkdownParser {
 
         flushParagraph()
         return blocks
+    }
+
+    private static func listItemPrefix(_ line: String) -> String? {
+        let indented = line.drop(while: { $0 == " " || $0 == "\t" })
+        for marker in ["- ", "* ", "+ "] {
+            if indented.hasPrefix(marker) {
+                return String(indented.dropFirst(marker.count))
+            }
+        }
+        return nil
+    }
+
+    private static let emojiMarkers: [(String, ListMarker)] = [
+        ("✅", .ok), ("✓", .ok), ("🟢", .ok),
+        ("⚠️", .warn), ("⚠", .warn), ("🟡", .warn),
+        ("❌", .error), ("🔴", .error),
+        ("ℹ️", .info),
+    ]
+
+    private static func parseListItem(_ raw: String) -> ListItem {
+        for (emoji, marker) in emojiMarkers where raw.hasPrefix(emoji) {
+            let rest = String(raw.dropFirst(emoji.count)).trimmingCharacters(in: .whitespaces)
+            return ListItem(marker: marker, text: rest)
+        }
+        return ListItem(marker: .plain, text: raw)
     }
 
     private static func headingPrefix(_ line: String) -> (level: Int, text: String)? {
@@ -123,6 +199,8 @@ struct TerminalMarkdown: View {
             default: return KiwiMangoFont.mono(12, weight: .bold)
             }
         }
+        /// Color for the "no status" list-item dot (`·`) and its token column.
+        var mutedColor: Color = Color.txt.opacity(0.35)
 
         /// Agent replies: SF Pro prose (mockup direction D), the strongest
         /// text in the window. Headings/lists stay mono — only the paragraph
@@ -165,6 +243,8 @@ struct TerminalMarkdown: View {
             CodeBlockView(language: language, content: codeContent)
         case .table(let headers, let rows):
             MarkdownTable(headers: headers, rows: rows)
+        case .list(let items):
+            MarkdownList(items: items, textColor: textColor, mutedColor: style.mutedColor, inlineAttributed: inlineAttributed)
         }
     }
 
@@ -177,6 +257,31 @@ struct TerminalMarkdown: View {
             markdown: text,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(text)
+    }
+}
+
+// MARK: - Markdown list (two-column grid: status token + content)
+
+private struct MarkdownList: View {
+    let items: [ListItem]
+    let textColor: Color
+    let mutedColor: Color
+    let inlineAttributed: (String) -> AttributedString
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(item.marker.token)
+                        .font(KiwiMangoFont.mono(11.5, weight: .semibold))
+                        .foregroundStyle(item.marker.color(mutedColor: mutedColor))
+                        .frame(width: 28, alignment: .leading)
+                    Text(inlineAttributed(item.text))
+                        .font(KiwiMangoFont.mono(13))
+                        .foregroundStyle(textColor)
+                }
+            }
+        }
     }
 }
 
