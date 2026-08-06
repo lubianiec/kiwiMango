@@ -20,6 +20,16 @@ struct Composer: View {
     /// When set, counterText renders as a button (context-usage popover trigger).
     var onTapCounter: (() -> Void)? = nil
 
+    // MARK: F1 (PLAN-OKNO) — controls row, moved here from ConversationView's
+    // title bar so everything about the outgoing message (model, thinking
+    // level, attachments, context, send) sits in one place under the field
+    // you're typing into, matching Claude Code desktop's composer.
+    var onAttach: (() -> Void)? = nil
+    var modelOptions: [String] = []
+    var model: Binding<String>? = nil
+    var reasoningOptions: [(label: String, value: String)] = []
+    var reasoningEffort: Binding<String>? = nil
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !pendingAttachments.isEmpty {
@@ -64,23 +74,67 @@ struct Composer: View {
                 .foregroundStyle(Color.ink)
                 .lineLimit(1...4)
                 .onSubmit(onSend)
-
-                counterLabel
-
-                Button(action: onSend) {
-                    Text("⌘↵")
-                        .font(KiwiMangoFont.mono(9.5))
-                        .foregroundStyle(Color.ink.opacity(0.28))
-                }
-                .buttonStyle(.plain)
-                .help("Wyślij")
             }
+
+            controlsRow
         }
         .padding(.horizontal, 16)
         .padding(.top, 11)
         .padding(.bottom, 12)
         .background(Color.black.opacity(0.12))
         .overlay(Rectangle().fill(Color.ink.opacity(0.14)).frame(height: 1), alignment: .top)
+    }
+
+    // MARK: Controls row (F1) — attachments left, model/effort/context/send right.
+    // Pułapka z planu: Pickery mają stałą szerokość (frame+layoutPriority), żeby
+    // długa nazwa modelu nie rozepchnęła rzędu kosztem reszty kontrolek.
+    private var controlsRow: some View {
+        HStack(spacing: 11) {
+            if let onAttach {
+                Button(action: onAttach) {
+                    Text("+")
+                        .font(KiwiMangoFont.mono(13))
+                        .foregroundStyle(Color.ink.opacity(0.42))
+                }
+                .buttonStyle(.plain)
+                .help("Załącz plik")
+            }
+
+            Spacer(minLength: 8)
+
+            if let model {
+                Picker("", selection: model) {
+                    ForEach(modelOptions, id: \.self) { option in
+                        Text(option).tag(option)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 160)
+                .layoutPriority(1)
+            }
+
+            if let reasoningEffort {
+                Picker("", selection: reasoningEffort) {
+                    ForEach(reasoningOptions, id: \.value) { option in
+                        Text(option.label).tag(option.value)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 120)
+                .help("Poziom myślenia agenta")
+                .layoutPriority(1)
+            }
+
+            counterLabel
+
+            Button(action: onSend) {
+                Text("⌘↵")
+                    .font(KiwiMangoFont.mono(9.5))
+                    .foregroundStyle(Color.ink.opacity(0.28))
+            }
+            .buttonStyle(.plain)
+            .help("Wyślij")
+        }
     }
 
     @ViewBuilder

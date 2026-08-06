@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AppKit
 
 // MARK: - ConversationView (PLAN-V2 §5, §7.3)
 //
@@ -60,7 +61,12 @@ struct ConversationView: View {
                     guard !text.isEmpty else { return }
                     session.draft = ""
                     onSend(text)
-                }
+                },
+                onAttach: presentAttachmentPicker,
+                modelOptions: modelOptions,
+                model: $session.model,
+                reasoningOptions: Self.reasoningEffortOptions,
+                reasoningEffort: reasoningEffortBinding
             )
         }
         .padding(.top, 2)
@@ -135,25 +141,45 @@ struct ConversationView: View {
 
     // MARK: Drag & drop images
 
+    /// Shared by drag&drop and the composer's "+" file picker (F1, PLAN-OKNO) —
+    /// same attachment pipeline, two entry points.
+    private func addAttachment(fromFileAt url: URL) {
+        guard let fileData = try? Data(contentsOf: url) else { return }
+        let ext = url.pathExtension.lowercased()
+        let kind: PendingAttachment.Kind = ["png", "jpg", "jpeg", "gif", "heic", "webp"].contains(ext)
+            ? .image
+            : ext == "pdf" ? .pdf : .file
+        session.pendingAttachments.append(PendingAttachment(
+            kind: kind,
+            filename: url.lastPathComponent,
+            base64: fileData.base64EncodedString(),
+            mimeType: Self.mimeType(forFilename: url.lastPathComponent)
+        ))
+    }
+
+    /// "+" button in the composer's controls row (F1, PLAN-OKNO) — a native
+    /// file panel as a second, discoverable way in alongside drag&drop.
+    private func presentAttachmentPicker() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Załącz"
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            addAttachment(fromFileAt: url)
+        }
+    }
+
     private func handleDrop(_ providers: [NSItemProvider]) {
         for provider in providers {
             if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
                     guard let data = item as? Data,
-                          let url = URL(dataRepresentation: data, relativeTo: nil),
-                          let fileData = try? Data(contentsOf: url)
+                          let url = URL(dataRepresentation: data, relativeTo: nil)
                     else { return }
                     Task { @MainActor in
-                        let ext = url.pathExtension.lowercased()
-                        let kind: PendingAttachment.Kind = ["png", "jpg", "jpeg", "gif", "heic", "webp"].contains(ext)
-                            ? .image
-                            : ext == "pdf" ? .pdf : .file
-                        session.pendingAttachments.append(PendingAttachment(
-                            kind: kind,
-                            filename: url.lastPathComponent,
-                            base64: fileData.base64EncodedString(),
-                            mimeType: Self.mimeType(forFilename: url.lastPathComponent)
-                        ))
+                        addAttachment(fromFileAt: url)
                     }
                 }
             } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
@@ -213,28 +239,12 @@ struct ConversationView: View {
             Spacer(minLength: 8)
 
             // Sam status sesji — „co się teraz dzieje" siedzi w wierszu AGENT.
+            // Model/tryb myślenia przeniesione do rzędu kontrolek w Composer (F1,
+            // PLAN-OKNO) — leżą teraz tuż pod polem tekstowym, jednym gestem oka
+            // od miejsca gdzie się pisze, zamiast osobno nad strumieniem.
             Circle()
                 .fill(Color.green)
                 .frame(width: 6, height: 6)
-
-            Picker("", selection: $session.model) {
-                ForEach(modelOptions, id: \.self) { model in
-                    Text(model).tag(model)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: 160)
-            .layoutPriority(1)
-
-            Picker("", selection: reasoningEffortBinding) {
-                ForEach(Self.reasoningEffortOptions, id: \.value) { option in
-                    Text(option.label).tag(option.value)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: 120)
-            .help("Poziom myślenia agenta")
-            .layoutPriority(1)
         }
     }
 
