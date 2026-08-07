@@ -409,44 +409,91 @@ private struct StreamingCursor: View {
 // handling lives one level up in `activitySpinner`, which swaps this out
 // for a static teal dot instead of rendering a frozen ring.
 
-// MARK: - Nazwy narzędzi po polsku
+// MARK: - Nazwy narzędzi (po angielsku — decyzja Pawła 2026-08-08)
 //
 // Wiersz ma mówić CO SIĘ DZIEJE, a nie jak nazywa się funkcja w gatewayu.
 // Lista pochodzi z realnych zapisów sesji (`~/Library/Application Support/
 // KiwiMango/sessions`), nie ze zgadywania. Nieznane narzędzie pokazuje swoją
 // surową nazwę — lepiej to niż zmyślony opis.
+//
+// Forma: gerund („Running command"), jak w terminalowych logach — te wiersze
+// czyta się w locie, imiesłów niesie „trwa" bez dodatkowego słowa.
 
 enum ToolLabel {
     private static let map: [String: String] = [
-        "terminal": "Wykonuję polecenie",
-        "image_generate": "Generuję obraz",
-        "read_file": "Czytam plik",
-        "skill_view": "Czytam umiejętność",
-        "memory": "Sięgam do pamięci",
-        "browser_navigate": "Otwieram stronę",
-        "session_search": "Przeszukuję sesje",
-        "search_files": "Szukam w plikach",
-        "vision_analyze": "Analizuję obraz",
-        "browser_console": "Czytam konsolę strony",
-        "cronjob": "Ustawiam automat",
-        "patch": "Poprawiam plik",
-        "write_file": "Zapisuję plik",
-        "x_search": "Szukam na X",
-        "web_search": "Szukam w sieci",
-        "todo": "Prowadzę listę zadań",
-        "process": "Zarządzam procesem",
-        "execute_code": "Uruchamiam kod",
-        "browser_snapshot": "Robię zrzut strony",
-        "video_generate": "Generuję wideo",
-        "project_list": "Wypisuję projekty",
-        "web_extract": "Wyciągam treść ze strony",
-        "computer_use": "Steruję komputerem",
-        "xai_video_extend": "Przedłużam wideo",
-        "browser_vision": "Oglądam stronę",
+        "terminal": "Running command",
+        "image_generate": "Generating image",
+        "read_file": "Reading file",
+        "skill_view": "Reading skill",
+        "memory": "Recalling memory",
+        "browser_navigate": "Opening page",
+        "session_search": "Searching sessions",
+        "search_files": "Searching files",
+        "vision_analyze": "Analyzing image",
+        "browser_console": "Reading page console",
+        "cronjob": "Scheduling job",
+        "patch": "Editing file",
+        "write_file": "Writing file",
+        "x_search": "Searching X",
+        "web_search": "Searching web",
+        "todo": "Updating task list",
+        "process": "Managing process",
+        "execute_code": "Running code",
+        "browser_snapshot": "Capturing page",
+        "video_generate": "Generating video",
+        "project_list": "Listing projects",
+        "web_extract": "Extracting page content",
+        "computer_use": "Controlling computer",
+        "xai_video_extend": "Extending video",
+        "browser_vision": "Viewing page",
     ]
 
-    static func polish(_ rawName: String) -> String {
+    static func text(_ rawName: String) -> String {
         map[rawName] ?? rawName
+    }
+}
+
+// MARK: - Shimmer — przebieg światła po napisie, gdy narzędzie pracuje
+//
+// ponytail: brak natywnego shimmera na Text w SwiftUI, więc minimum:
+// maska z tego samego napisu + jeden gradient przesuwany w pętli. Bez
+// GeometryReadera nie da się trafić szerokością pasma w długość napisu.
+// Reduce-motion obsługuje wywołanie wyżej (podmienia na zwykły Text).
+
+private struct ShimmerLabel: View {
+    let text: String
+    let font: Font
+    let base: Color
+
+    @State private var phase: CGFloat = 0
+
+    var body: some View {
+        Text(text)
+            .font(font)
+            .foregroundStyle(base)
+            .overlay {
+                GeometryReader { geo in
+                    let w = geo.size.width
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: Color.accent, location: 0.5),
+                            .init(color: .clear, location: 1),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: max(w * 0.5, 34))
+                    .offset(x: -w * 0.6 + phase * w * 1.7)
+                }
+                .mask { Text(text).font(font) }
+                .allowsHitTesting(false)
+            }
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    phase = 1
+                }
+            }
     }
 }
 
@@ -468,7 +515,7 @@ private struct ToolCallGroupView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(isExpanded ? "▾" : "▸")
-                        Text("Wykonano \(calls.count) akcji")
+                        Text("\(calls.count) actions")
                     }
                     .font(KiwiMangoFont.mono(10.5))
                     .foregroundStyle(Color.ink.opacity(0.45))
@@ -521,9 +568,10 @@ private struct ToolCallRowView: View {
     private var metaLine: String {
         var parts: [String] = []
         if call.isRunning {
-            parts.append("trwa…")
+            parts.append("running…")
         } else if let seconds = call.seconds {
-            parts.append(String(format: "%.1f s", seconds).replacingOccurrences(of: ".", with: ","))
+            // Kropka dziesiętna, nie przecinek — wiersz jest po angielsku.
+            parts.append(String(format: "%.1f s", seconds))
         }
         if !call.argument.isEmpty { parts.append(call.argument) }
         return parts.joined(separator: " · ")
@@ -537,9 +585,17 @@ private struct ToolCallRowView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     // Linia 1 — CO się dzieje, po polsku. Najjaśniejszy tekst wiersza.
                     HStack(spacing: 6) {
-                        Text(ToolLabel.polish(call.name))
-                            .font(KiwiMangoFont.mono(12))
-                            .foregroundStyle(isErrorOutput ? Color.danger : Color.txt.opacity(0.85))
+                        if call.isRunning && !reduceMotion {
+                            ShimmerLabel(
+                                text: ToolLabel.text(call.name),
+                                font: KiwiMangoFont.mono(12),
+                                base: Color.txt.opacity(0.6)
+                            )
+                        } else {
+                            Text(ToolLabel.text(call.name))
+                                .font(KiwiMangoFont.mono(12))
+                                .foregroundStyle(isErrorOutput ? Color.danger : Color.txt.opacity(0.85))
+                        }
                         if !call.output.isEmpty {
                             Text("›")
                                 .font(KiwiMangoFont.mono(11))
