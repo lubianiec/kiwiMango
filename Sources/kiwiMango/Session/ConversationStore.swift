@@ -25,14 +25,16 @@ final class ConversationStore {
     // is the shortest fix.
     private let defaults = UserDefaults.standard
     private var lastAgentModel: String {
-        get { defaults.string(forKey: "lastAgentModel") ?? "glm-5.2:cloud" }
+        get { defaults.string(forKey: "lastAgentModel") ?? "deepseek-v4-flash:cloud" }
         set { defaults.set(newValue, forKey: "lastAgentModel") }
     }
     // ponytail: Paweł's own stated default — "nie chce mi się tego ciągle
-    // zmieniać" — glm-5.2:cloud + xhigh reasoning as the standing default,
+    // zmieniać" — deepseek-v4-flash:cloud + max reasoning as the standing
+    // default (2026-08-08: 284B/13B active beats glm-5.2 on SWE-Verified at
+    // lower usage; the model's own top mode is literally "max thinking"),
     // same persistence pattern as lastAgentModel above.
     private var lastAgentReasoningEffort: String {
-        get { defaults.string(forKey: "lastAgentReasoningEffort") ?? "xhigh" }
+        get { defaults.string(forKey: "lastAgentReasoningEffort") ?? "max" }
         set { defaults.set(newValue, forKey: "lastAgentReasoningEffort") }
     }
 

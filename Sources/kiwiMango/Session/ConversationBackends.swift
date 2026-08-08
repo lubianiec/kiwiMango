@@ -72,7 +72,8 @@ final class AgentSessionController {
     /// --provider xai-oauth`) — session.create's provider space for other
     /// values is undocumented, so we don't guess beyond these two.
     static let availableModels = [
-        "grok-4.5", "kimi-k2.7-code:cloud", "glm-5.2:cloud", "qwen3.5:cloud", "minimax-m3:cloud",
+        "deepseek-v4-flash:cloud", "grok-4.5", "kimi-k2.7-code:cloud", "glm-5.2:cloud",
+        "qwen3.5:cloud", "minimax-m3:cloud",
     ]
 
     private var lastModelUsed: String?
@@ -162,6 +163,10 @@ final class AgentSessionController {
             if let block = currentThinking {
                 block.text += text
                 block.seconds = Date().timeIntervalSince(block.startedAt)
+                // ThinkingBlockModel to klasa — tablica `items` się nie zmienia,
+                // więc jej didSet nie odpali i transkrypt stałby w miejscu przez
+                // cały tok myślenia. Puls ręcznie.
+                session.scrollPulse += 1
             } else {
                 let block = ThinkingBlockModel(text: text, seconds: 0)
                 currentThinking = block
@@ -178,6 +183,9 @@ final class AgentSessionController {
             call.output = errorText ?? output
             call.seconds = Date().timeIntervalSince(call.startedAt)
             call.isRunning = false
+            // ToolCall też jest klasą — bez tego wiersz rośnie o wynik, a widok
+            // zostaje tam, gdzie był.
+            session.scrollPulse += 1
 
         case .messageDelta(_, let text):
             guard let id = currentAIMessageID,
