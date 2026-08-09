@@ -163,6 +163,7 @@ final class AgentSessionController {
             if let block = currentThinking {
                 block.text += text
                 block.seconds = Date().timeIntervalSince(block.startedAt)
+                block.tokens = TokenEstimate.count(block.text)
                 // ThinkingBlockModel to klasa — tablica `items` się nie zmienia,
                 // więc jej didSet nie odpali i transkrypt stałby w miejscu przez
                 // cały tok myślenia. Puls ręcznie.
@@ -182,6 +183,9 @@ final class AgentSessionController {
             guard let call = toolCalls[toolID] else { return }
             call.output = errorText ?? output
             call.seconds = Date().timeIntervalSince(call.startedAt)
+            // Koszt kontekstowy kroku — nie oszacowanie zużycia modelu, tylko
+            // ile ten krok realnie dołożył do rozmowy (patrz TokenEstimate).
+            call.tokens = TokenEstimate.count(call.output) + TokenEstimate.count(call.argument)
             call.isRunning = false
             // ToolCall też jest klasą — bez tego wiersz rośnie o wynik, a widok
             // zostaje tam, gdzie był.

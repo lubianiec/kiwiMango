@@ -19,6 +19,10 @@ final class ToolCall: Identifiable {
     var seconds: Double?
     var isRunning: Bool
     var isExpanded = false
+    /// Estimated context cost of this step (`output` + `argument`), filled in
+    /// when the call finishes — see `TokenEstimate`. `nil` until then, and for
+    /// sessions saved before this field existed.
+    var tokens: Int?
     /// Moment startu — bez niego `seconds` nigdy nie było czym wypełnić i czas
     /// wywołania nie pokazywał się w ogóle.
     let startedAt = Date()
@@ -39,6 +43,9 @@ final class ThinkingBlockModel: Identifiable {
     var text: String
     var seconds: Double
     var isExpanded = false
+    /// Estimated token count of `text` — see `TokenEstimate`. `nil` until the
+    /// first delta lands, and for sessions saved before this field existed.
+    var tokens: Int?
     /// Jak w `ToolCall` — `seconds` przychodziło zerem i nikt go nie liczył,
     /// więc nagłówek zawsze pokazywał „0,0 s".
     let startedAt = Date()

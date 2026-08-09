@@ -17,6 +17,13 @@ struct ThinkingBlockView: View {
     // call site shows up.
     private var violet: Color { Color(hex: "8B7EC9") }
 
+    /// Tylda z przodu — to szacunek z tekstu, nie odczyt z modelu, i ma tak
+    /// wyglądać. Brak liczby (stara sesja / brak tekstu) → brak członu.
+    private var tokensSuffix: String {
+        guard let tokens = model.tokens, tokens > 0 else { return "" }
+        return " · ~\(TokenEstimate.formatStep(tokens)) tok"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Button {
@@ -52,7 +59,7 @@ struct ThinkingBlockView: View {
         HoverBorderCapsule(activeColor: violet, isActive: model.isExpanded) {
             HStack(spacing: 7) {
                 Text("✦")
-                Text("tok myślenia · \(String(format: "%.1f", model.seconds)) s")
+                Text("tok myślenia · \(String(format: "%.1f", model.seconds)) s\(tokensSuffix)")
                 Text("▾")
                     .font(.system(size: 7 + FontScale.bump))
                     .rotationEffect(.degrees(model.isExpanded ? 180 : 0))

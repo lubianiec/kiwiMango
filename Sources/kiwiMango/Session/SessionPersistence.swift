@@ -26,6 +26,9 @@ struct SessionSnapshot: Codable {
         var toolName: String?
         var toolArgument: String?
         var seconds: Double?
+        /// Optional so old sessions on disk (saved before this field existed)
+        /// still decode — missing key just means "no estimate", not an error.
+        var tokens: Int?
     }
 
     init(from session: ConversationSession) {
@@ -47,9 +50,9 @@ struct SessionSnapshot: Codable {
             case .aiMessage(let id, let label, let text, _):
                 ItemSnapshot(type: "ai", id: id, text: text, senderLabel: label)
             case .thinking(let block):
-                ItemSnapshot(type: "thinking", id: block.id, text: block.text, seconds: block.seconds)
+                ItemSnapshot(type: "thinking", id: block.id, text: block.text, seconds: block.seconds, tokens: block.tokens)
             case .toolCall(let call):
-                ItemSnapshot(type: "tool", id: call.id, text: call.output, toolName: call.name, toolArgument: call.argument, seconds: call.seconds)
+                ItemSnapshot(type: "tool", id: call.id, text: call.output, toolName: call.name, toolArgument: call.argument, seconds: call.seconds, tokens: call.tokens)
             case .permission:
                 nil
             }
@@ -57,16 +60,22 @@ struct SessionSnapshot: Codable {
     }
 
     func toSession() -> ConversationSession {
-        let restoredItems: [ConversationItem] = items.map { item in
+        var restoredItems: [ConversationItem] = []
+        restoredItems.reserveCapacity(items.count)
+        for item in items {
             switch item.type {
             case "ai":
-                .aiMessage(id: item.id, senderLabel: item.senderLabel ?? "", text: item.text, isStreaming: false)
+                restoredItems.append(.aiMessage(id: item.id, senderLabel: item.senderLabel ?? "", text: item.text, isStreaming: false))
             case "thinking":
-                .thinking(ThinkingBlockModel(text: item.text, seconds: item.seconds ?? 0))
+                let block = ThinkingBlockModel(text: item.text, seconds: item.seconds ?? 0)
+                block.tokens = item.tokens
+                restoredItems.append(.thinking(block))
             case "tool":
-                .toolCall(ToolCall(name: item.toolName ?? "", argument: item.toolArgument ?? "", output: item.text, seconds: item.seconds, isRunning: false))
+                let call = ToolCall(name: item.toolName ?? "", argument: item.toolArgument ?? "", output: item.text, seconds: item.seconds, isRunning: false)
+                call.tokens = item.tokens
+                restoredItems.append(.toolCall(call))
             default:
-                .userMessage(id: item.id, text: item.text)
+                restoredItems.append(.userMessage(id: item.id, text: item.text))
             }
         }
         let session = ConversationSession(id: id, title: title, model: model, items: restoredItems)

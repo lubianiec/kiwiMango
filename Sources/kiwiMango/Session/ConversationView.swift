@@ -255,6 +255,14 @@ struct ConversationView: View {
                     }
                     .padding(.top, 6)
                     .padding(.bottom, 10)
+
+                    // Stała kotwica dna. Wcześniej przewijaliśmy do
+                    // `items.last.id` — a wywołania narzędzi są renderowane
+                    // GRUPAMI pod id pierwszego wywołania, więc gdy ostatnim
+                    // itemem było drugie (albo dziesiąte) wywołanie w grupie,
+                    // proxy.scrollTo dostawał id, którego nie ma w hierarchii,
+                    // i po cichu nie robił nic. Kotwica istnieje zawsze.
+                    Color.clear.frame(height: 1).id(Self.bottomAnchor)
                 }
             }
             .scrollIndicators(.hidden)
@@ -278,11 +286,15 @@ struct ConversationView: View {
         }
     }
 
+    private static let bottomAnchor = "kiwi.transcript.bottom"
+
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
-        guard !session.autoscrollPaused, let last = session.items.last else { return }
+        guard !session.autoscrollPaused, !session.items.isEmpty else { return }
         // pułapka #6: give SwiftUI one cycle to lay out the new item before scrolling.
         DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(last.id, anchor: .bottom) }
+            withAnimation(.easeOut(duration: 0.2)) {
+                proxy.scrollTo(Self.bottomAnchor, anchor: .bottom)
+            }
         }
     }
 
@@ -465,34 +477,41 @@ private struct ShimmerLabel: View {
     let font: Font
     let base: Color
 
-    @State private var phase: CGFloat = 0
+    /// Pełny przebieg smugi, w sekundach.
+    private static let period: Double = 1.5
 
     var body: some View {
         Text(text)
             .font(font)
             .foregroundStyle(base)
             .overlay {
-                GeometryReader { geo in
-                    let w = geo.size.width
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: Color.accent, location: 0.5),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: max(w * 0.5, 34))
-                    .offset(x: -w * 0.6 + phase * w * 1.7)
+                // ponytail: faza liczona z zegara, NIE z withAnimation(.repeatForever).
+                // Wiersz narzędzia przebudowuje się przy każdej aktualizacji ToolCall
+                // (dopisany output, czas, koniec pracy) — przy każdej takiej
+                // przebudowie SwiftUI przeliczał offset bez animacji i pętla ginęła
+                // po pierwszym przebiegu. TimelineView jest na to odporny: nie ma
+                // stanu do zgubienia, faza wynika z bieżącego czasu.
+                TimelineView(.animation) { ctx in
+                    let t = ctx.date.timeIntervalSinceReferenceDate
+                    let phase = (t.truncatingRemainder(dividingBy: Self.period)) / Self.period
+
+                    GeometryReader { geo in
+                        let w = geo.size.width
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0),
+                                .init(color: Color.accent, location: 0.5),
+                                .init(color: .clear, location: 1),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: max(w * 0.5, 34))
+                        .offset(x: -w * 0.6 + phase * w * 1.7)
+                    }
                 }
                 .mask { Text(text).font(font) }
                 .allowsHitTesting(false)
-            }
-            .onAppear {
-                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
             }
     }
 }
@@ -572,6 +591,11 @@ private struct ToolCallRowView: View {
         } else if let seconds = call.seconds {
             // Kropka dziesiętna, nie przecinek — wiersz jest po angielsku.
             parts.append(String(format: "%.1f s", seconds))
+        }
+        // Tylda = szacunek z tekstu, nie odczyt z modelu (patrz TokenEstimate).
+        // Brak liczby (stara sesja / pusty krok) → człon w ogóle się nie pojawia.
+        if let tokens = call.tokens, tokens > 0 {
+            parts.append("~\(TokenEstimate.formatStep(tokens)) tok")
         }
         if !call.argument.isEmpty { parts.append(call.argument) }
         return parts.joined(separator: " · ")
