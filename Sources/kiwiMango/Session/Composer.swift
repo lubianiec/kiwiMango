@@ -30,6 +30,12 @@ struct Composer: View {
     var reasoningOptions: [(label: String, value: String)] = []
     var reasoningEffort: Binding<String>? = nil
 
+    // MARK: PLAN-VOICE-V3 — dyktowanie. Mikrofon obok pola tekstowego, tak jak
+    // Paweł chciał od początku: transkrybuje mowę DO pola, nic więcej.
+    var voiceState: VoiceAgentService.State = .idle
+    var voiceLevel: Float = 0
+    var onDictate: (() -> Void)? = nil
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if !pendingAttachments.isEmpty {
@@ -74,6 +80,27 @@ struct Composer: View {
                 .foregroundStyle(Color.ink)
                 .lineLimit(1...4)
                 .onSubmit(onSend)
+
+                if let onDictate {
+                    Button(action: onDictate) {
+                        Group {
+                            if voiceState == .listening {
+                                VoiceWaveform(level: voiceLevel)
+                            } else {
+                                Image(systemName: micIcon)
+                                    .font(.system(size: 12.5, weight: .medium))
+                                    .foregroundStyle(micTint)
+                            }
+                        }
+                        // Bug zgłoszony przez Pawła: klik "nie działał" —
+                        // 3 cienkie paski (16×14) to za mały cel. Cały kwadrat
+                        // klikalny, nie tylko narysowane piksele.
+                        .frame(width: 26, height: 26)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(micHelp)
+                }
             }
 
             controlsRow
@@ -141,6 +168,31 @@ struct Composer: View {
         }
     }
 
+    // MARK: PLAN-VOICE-V3 — kolory z istniejącej palety, zero nowych (feedback_no_ai_slop_ui).
+    private var micTint: Color {
+        switch voiceState {
+        case .idle: Color.ink.opacity(0.35)
+        case .listening: Color.accent
+        case .error: Color.danger
+        }
+    }
+
+    private var micIcon: String {
+        switch voiceState {
+        case .idle: "mic"
+        case .listening: "mic.fill"
+        case .error: "mic.slash"
+        }
+    }
+
+    private var micHelp: String {
+        switch voiceState {
+        case .idle: "Dyktuj — kliknij i mów po polsku"
+        case .listening: "Nasłuchuję — kliknij, żeby wstawić tekst"
+        case .error(let message): message
+        }
+    }
+
     @ViewBuilder
     private var counterLabel: some View {
         let text = Text(counterText)
@@ -153,5 +205,34 @@ struct Composer: View {
         } else {
             text
         }
+    }
+
+}
+
+// MARK: - VoiceWaveform (PLAN-VOICE-V3 §"bajer") — Paweł: "jakiś bajer taki".
+// 4 paski reagujące na `voiceLevel` (RMS mikrofonu z VoiceAgentService, nie
+// animacja na sztywno) — każdy z inną wagą, żeby nie ruszały się jak jeden
+// słupek. `.animation` wygładza skoki między buforami (~90ms), inaczej
+// migałoby klatkowo.
+private struct VoiceWaveform: View {
+    let level: Float
+    private let weights: [CGFloat] = [0.5, 1.0, 0.7, 0.85]
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 2.5) {
+            ForEach(0..<weights.count, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(Color.accent)
+                    .frame(width: 2.5, height: barHeight(weights[i]))
+            }
+        }
+        .frame(width: 16, height: 14)
+        .animation(.easeOut(duration: 0.12), value: level)
+    }
+
+    private func barHeight(_ weight: CGFloat) -> CGFloat {
+        let base: CGFloat = 3
+        let extra = CGFloat(level) * weight * 11
+        return min(14, base + extra)
     }
 }

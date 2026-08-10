@@ -19,6 +19,15 @@ struct ConversationView: View {
 
     @State private var isDropTargeted = false
 
+    // MARK: PLAN-VOICE-V4 — natywny SFSpeechRecognizer (v3 był Grok STT beta,
+    // wymieniony po powtarzających się bugach i braku klucza — patrz VoiceAgentService).
+    // Dyktowanie transkrybuje PROSTO DO POLA TEKSTOWEGO — user czyta/poprawia/wysyła sam.
+    @State private var voiceService = VoiceAgentService()
+    /// Treść pola PRZED kliknięciem mikrofonu — SFSpeechRecognizer zwraca
+    /// zawsze CAŁĄ dotychczasową wypowiedź (nie delty), więc doklejamy do tego
+    /// punktu startowego zamiast append-ować kawałek po kawałku.
+    @State private var dictationBaseDraft = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Terminal title bar: traffic dots + title + activity + model picker
@@ -58,7 +67,10 @@ struct ConversationView: View {
                 modelOptions: modelOptions,
                 model: $session.model,
                 reasoningOptions: Self.reasoningEffortOptions,
-                reasoningEffort: reasoningEffortBinding
+                reasoningEffort: reasoningEffortBinding,
+                voiceState: voiceService.state,
+                voiceLevel: voiceService.audioLevel,
+                onDictate: handleDictateTap
             )
             // F4 (PLAN-OKNO): margines od krawędzi okna, żeby composer "pływał"
             // jako wyodrębniony obszar zamiast przyklejać się do ramki.
@@ -67,6 +79,22 @@ struct ConversationView: View {
             .padding(.bottom, 12)
         }
         .padding(.top, 2)
+        .onAppear {
+            // PLAN-VOICE-V4: SFSpeechRecognizer zwraca CAŁĄ wypowiedź na każdym
+            // update (nie delty) — doklejamy do treści sprzed startu dyktowania.
+            voiceService.onTranscript = { fullUtterance in
+                session.draft = dictationBaseDraft.isEmpty ? fullUtterance : dictationBaseDraft + " " + fullUtterance
+            }
+        }
+    }
+
+    // MARK: PLAN-VOICE-V4 — dyktowanie
+
+    private func handleDictateTap() {
+        if voiceService.state == .idle {
+            dictationBaseDraft = session.draft
+        }
+        voiceService.toggle()
     }
 
     // MARK: Drag & drop images
@@ -272,7 +300,9 @@ struct ConversationView: View {
                 }
             }
             .onAppear { scrollToBottom(proxy) }
-            .onChange(of: session.scrollPulse) { _, _ in scrollToBottom(proxy) }
+            .onChange(of: session.scrollPulse) { _, _ in
+                scrollToBottom(proxy)
+            }
             .onChange(of: session.autoscrollPaused) { wasPaused, isPaused in
                 if wasPaused && !isPaused { scrollToBottom(proxy) }
             }
